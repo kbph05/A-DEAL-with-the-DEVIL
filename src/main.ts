@@ -1,5 +1,21 @@
-// Console-only prototype round. To switch back to Phaser: restore the previous main.ts (git show HEAD:src/main.ts) and the #app container in index.html.
-import { installConsole } from "./game/console";
+// Two flavours (see README): test builds (`npm run dev`, `npm run build:test`, Vite mode "test") add the console, autoplay and
+// the devil lab. The final build tree-shakes all of that out: `import.meta.env.MODE` is replaced at build time, so the
+// dynamic import below (and everything it pulls in) is dead code.
+import { HttpDevil, setDevil } from "./game";
+import { createSession } from "./game/session";
+import { mountUI } from "./ui/ui";
 
-const seed = new URLSearchParams(location.search).get("seed") ?? undefined;
-installConsole(window, seed);
+async function main() {
+  const seed = new URLSearchParams(location.search).get("seed") ?? undefined;
+  const testTools = import.meta.env.MODE === "test";
+  const tools = testTools ? await import("./ui/tools") : null;
+  if (tools) tools.applyStoredDevil(); // before the first game is created: a game keeps the devil it starts with
+  else if (import.meta.env.VITE_DEVIL_URL) setDevil(new HttpDevil(import.meta.env.VITE_DEVIL_URL)); // else: StubDevil
+  const session = createSession(seed);
+  const ui = mountUI(document.getElementById("app")!, session);
+  if (tools) {
+    tools.mountTools(ui.tools, session);
+    (await import("./game/console")).installConsole(window, session); // same Game instance as the UI
+  }
+}
+void main();

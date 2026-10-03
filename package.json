@@ -4,9 +4,12 @@
   "version": "0.0.0",
   "type": "module",
   "scripts": {
-    "dev": "vite",
+    "dev": "vite --mode test",
     "build": "tsc && vite build",
+    "build:test": "tsc && vite build --mode test --outDir dist-test",
     "preview": "vite preview",
+    "preview:test": "vite preview --outDir dist-test",
+    "mock:devil": "tsx scripts/mock-devil-server.ts",
     "test": "tsx --test src/**/*.test.ts"
   },
   "devDependencies": {

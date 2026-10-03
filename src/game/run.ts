@@ -233,7 +233,8 @@ export class Game {
     return this.done([{ type: "bought", item: name, cost, changes }]);
   }
 
-  private context(): DevilContext {
+  /** What the devil is shown besides the player (also used by the UI's devil lab). Pure: does not touch the run. */
+  context(): DevilContext {
     const a = this.act, seen = new Set<string>(), stack = [...this.node.next];
     while (stack.length) {
       const id = stack.pop()!;

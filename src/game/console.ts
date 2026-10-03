@@ -4,7 +4,8 @@
  */
 import { autoplay, simulate, type Policy } from "./autoplay";
 import { describe, type Result } from "./events";
-import { createGame, type Game } from "./run";
+import type { Game } from "./run";
+import { createSession, type Session } from "./session";
 
 type Log = (...args: unknown[]) => void;
 
@@ -23,26 +24,29 @@ const HELP = [
   "(a policy is a function (observation) => {cmd: 'go', n: 1} | {cmd: 'fight'} | ... | null)",
 ].join("\n");
 
-export function installConsole(target: object = window, seed?: string, log: Log = (...a) => console.log(...a)): { game: () => Game } {
-  let game = createGame(seed);
-  const show = (r: Result) => { for (const e of r.events) log(describe(e)); };
+/** Pass a shared `session` to drive the same run as the UI; every command's events are also emitted on it. */
+export function installConsole(target: object = window, session: Session | string = createSession(), log: Log = (...a) => console.log(...a)): { game: () => Game } {
+  if (typeof session === "string") session = createSession(session);
+  const s = session;
+  const game = () => s.game();
+  const show = (r: Result) => { for (const e of r.events) log(describe(e)); s.emit(r.events); };
   const w = target as Record<string, unknown>;
-  const start = () => { log(`A DEAL with the DEVIL (seed "${game.seed}")\nThe road ends at a table. Someone is already sitting there.`); log(HELP); show(game.look()); };
+  const start = () => { log(`A DEAL with the DEVIL (seed "${game().seed}")\nThe road ends at a table. Someone is already sitting there.`); log(HELP); show(game().look()); };
 
   Object.assign(w, {
     help: () => log(HELP),
-    look: () => show(game.look()),
-    go: (n: number | string) => { const r = game.go(n); show(r); if (r.ok && !game.ending) show(game.look()); },
-    fight: () => { const r = game.fight(); show(r); if (r.ok && !game.ending && !game.observe().enemy) show(game.look()); },
-    rest: () => show(game.rest()),
-    buy: (item?: string) => show(game.buy(item)),
-    deal: (text?: string) => { void game.deal(text).then(show); },
-    accept: () => show(game.accept()),
-    refuse: () => show(game.refuse()),
-    map: () => { const m = game.map(); log(m); return m; },
-    newgame: (s?: string | number) => { game = createGame(s); start(); },
-    autoplay: async (s?: string | number, policy?: Policy, maxSteps?: number) => {
-      const r = await autoplay(s, policy, maxSteps);
+    look: () => show(game().look()),
+    go: (n: number | string) => { const r = game().go(n); show(r); if (r.ok && !game().ending) show(game().look()); },
+    fight: () => { const r = game().fight(); show(r); if (r.ok && !game().ending && !game().observe().enemy) show(game().look()); },
+    rest: () => show(game().rest()),
+    buy: (item?: string) => show(game().buy(item)),
+    deal: (text?: string) => { s.emit([]); void game().deal(text).then(show); },
+    accept: () => show(game().accept()),
+    refuse: () => show(game().refuse()),
+    map: () => { const m = game().map(); log(m); return m; },
+    newgame: (seed?: string | number) => { s.newGame(seed); start(); },
+    autoplay: async (seed?: string | number, policy?: Policy, maxSteps?: number) => {
+      const r = await autoplay(seed, policy, maxSteps);
       log(`autoplay "${r.seed}": ${r.outcome} in ${r.steps} steps`);
       return r;
     },
@@ -53,5 +57,5 @@ export function installConsole(target: object = window, seed?: string, log: Log 
     },
   });
   start();
-  return { game: () => game };
+  return { game };
 }
