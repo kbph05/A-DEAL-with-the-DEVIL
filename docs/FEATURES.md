@@ -1,6 +1,6 @@
 # A DEAL with the DEVIL: feature sheet
 
-What is **already in the game**, as the code does it today (snapshot of `master` on 3 Oct 2026, 37 passing tests). Written for gameplay design: every number below was read from source, with the file in brackets. Anything marked **(first guess)** is a placeholder value nobody has balanced yet. Where the code and `requirements.md` disagree, see section 12.
+What is **already in the game**, as the code does it today (snapshot of `master` on 3 Oct 2026, 40 passing tests). Written for gameplay design: every number below was read from source, with the file in brackets. Anything marked **(first guess)** is a placeholder value nobody has balanced yet. Where the code and `requirements.md` disagree, see section 12.
 
 Contents: 1 Overview, 2 Run structure and map, 3 Player, 4 Nodes, 5 Combat, 6 The devil, 7 Curses, 8 Soul and endings, 9 Events, 10 Interfaces, 11 Balance snapshot, 12 Gaps and known issues.
 
@@ -399,15 +399,14 @@ Installed by `installConsole` (`src/game/console.ts`) on `window`, sharing the s
 
 ### 10.4 Test UI and Devil lab (`src/ui/*`)
 
-A deliberately dumb DOM page over the same `Session` (one `Game` plus an event bus):
+A deliberately plain DOM page over the same `Session` (one `Game` plus an event bus), in two regions:
 
-- Header with **seed box** and **New game**.
-- **Stats** (HP/max, gold, attack, soul), **location line** (act, node, kind, seed), **curses line**, **enemy line**.
-- **Buttons derived from `observe()`** (`src/ui/logic.ts`): Fight (when an enemy is present), Rest (unspent campfire), Buy per ware (greyed if you can't afford it), `Go n: kind` per exit, and for deal nodes a "tell the devil what you want" text box with **Ask the devil / Haggle**. Everything locks while the devil is thinking or the run is over. Engine rejection reasons are shown under the buttons ("Engine says: ...").
-- **Offer panel:** the devil's dialogue, "gives", curse and rewrite lines, and **Accept / Refuse**.
-- **Map panel:** the current act, entry at the bottom; boxes show node id and kind, with classes for current, visited and rewritten (star); the final node is shown in act 3.
-- **Log:** newest-first event text (200 max), with colour classes for devil, curse, rewrite, bad and good events. **End banner** with a New game button.
-- **Test tools (test builds only, `src/ui/tools.ts`):**
+- **Game** (the player's view; the only region in the final build):
+  - **Situation:** "Act N · Kind", the node's description, an HP bar, gold, attack and soul, curses as chips, and an enemy card with an HP bar and a Boss tag (`src/ui/situation.ts`).
+  - **Your choices:** big buttons for the legal moves only (from `availableActions(observe())` in `src/ui/logic.ts`): "Go → kind", "Fight the …", "Rest at the campfire", and Buy buttons with a reason when disabled (e.g. "Blade (15g) — need 3 more gold"). Deal nodes add a wish box with **Ask the devil / Haggle**. An offer appears as a card (the dialogue, effect chips, and any curse or rewrite called out) with **Accept / Refuse** (`src/ui/choices.ts`).
+  - **Outcome:** a narration box (`aria-live`) with only the latest move's events, engine rejections included, replaced each move (`src/ui/outcome.ts`).
+  - **History:** the full event log, collapsed, newest first, 200 max. **End banner** with New game (random seed).
+- **Run & dev tools** (test builds only, muted column on the right, or below on narrow screens): seed and New game, the map panel (current act, entry at the bottom; current, visited and rewritten marked), **Raw state** (pretty JSON of `observe()` and `map()`), then:
   - *Autoplay to end:* runs the default bot on the current seed, with the installed devil, in a **separate** game, and prints one summary line (outcome, steps, event count). It does not move the on-screen run.
   - *Devil lab:* a Stub / HTTP-backend toggle with URL (saved to `localStorage` key `devil-lab.config`; "Apply and restart" starts a new run on the same seed with the chosen devil), a text box plus "Send test offer" that POSTs the **current game's real state and context** to the backend, a history of the last 10 exchanges (time, status, latency), and a three-column view: request, raw response (with HTTP status, ms and error), and the **sanitized deal** next to a list of what `sanitizeDeal` dropped, renamed, clamped or truncated (`src/ui/dealDiff.ts`), including a warning when the devil names a node that is not in `rewritable`. Lab requests report `askIndex` as asks so far (one less than a real in-game request).
 
@@ -430,7 +429,7 @@ A deliberately dumb DOM page over the same `Session` (one `Game` plus an event b
 
 In test builds, `VITE_DEVIL_URL` only sets the default URL shown in the Devil lab; the lab starts in Stub mode unless you picked HTTP before. `npm run build` and `build:test` run `tsc` first, so a type error fails the build.
 
-### 10.7 Tests (37, all passing, network-free except the HttpDevil test which starts the mock on a local port)
+### 10.7 Tests (40, all passing, network-free except the HttpDevil test which starts the mock on a local port)
 
 | File | Tests | Covers |
 | --- | --- | --- |

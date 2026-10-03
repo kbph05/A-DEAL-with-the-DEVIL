@@ -1,7 +1,8 @@
-/** Test-only tools: the devil lab (HTTP backend tester) and autoplay. Loaded by dynamic import in test builds only; final builds tree-shake it out. */
+/** Test-only "Run & dev tools" column: seed, map, autoplay, raw state, and the devil lab (HTTP backend tester). Loaded by dynamic import in test builds only; final builds tree-shake it out. */
 import { autoplay, sanitizeDeal, setDevil, HttpDevil, DEFAULT_DEVIL_URL, type Exchange } from "../game";
 import type { Session } from "../game/session";
 import { diffDeal } from "./dealDiff";
+import { renderMap } from "./mapView";
 
 export interface DevilConfig { mode: "stub" | "http"; url: string }
 const KEY = "devil-lab.config";
@@ -28,7 +29,11 @@ const el = <K extends keyof HTMLElementTagNameMap>(tag: K, cls = "", text?: stri
 };
 const pretty = (v: unknown) => JSON.stringify(v, null, 2) ?? "";
 
-export function mountTools(slot: HTMLElement, session: Session): void {
+/** Adds the "Run & dev tools" column to the UI layout (see mountUI). */
+export function mountTools(layout: HTMLElement, session: Session): void {
+  const slot = el("aside", "devtools");
+  slot.setAttribute("aria-label", "Run and dev tools");
+  layout.append(slot); layout.classList.add("with-tools");
   const cfg = loadDevilConfig();
   let sel: Exchange | null = null;
 
@@ -73,7 +78,7 @@ export function mountTools(slot: HTMLElement, session: Session): void {
     if (!x) { out.replaceChildren(el("p", "", "No exchanges yet. Send a test offer, or ask the devil in the game with HTTP mode on.")); return; }
     const clean = sanitizeDeal(x.ok ? x.raw : undefined);
     const changes = x.ok ? diffDeal(x.raw, clean, x.request.context.rewritable) : [{ path: "(request)", note: `${x.error}; the engine falls back to the silent devil` }];
-    const col = (title: string, ...kids: Node[]) => { const d = el("div"); d.append(el("h3", "", title), ...kids); return d; };
+    const col = (title: string, ...kids: Node[]) => { const d = el("div"); d.append(el("h4", "", title), ...kids); return d; };
     const diff = el("ul", "diff"); for (const c of changes) diff.append(el("li", "", `${c.path}: ${c.note}`));
     const pre = (v: string) => el("pre", "", v);
     out.replaceChildren(
@@ -84,14 +89,39 @@ export function mountTools(slot: HTMLElement, session: Session): void {
   }
   listeners.add(() => { sel = null; show(); });
 
+  // ---- run: seed, map, raw state ----
+  const seedNow = el("code"), seedIn = el("input");
+  seedIn.placeholder = "seed (blank = random)"; seedIn.setAttribute("aria-label", "Seed for the next run");
+  const newBtn = el("button", "", "New game");
+  newBtn.onclick = () => session.newGame(seedIn.value.trim() || undefined);
+  const mapTitle = el("h3"), mapEl = el("div", "map");
+  const rawState = el("pre"), rawMap = el("pre");
+
+  const refresh = () => {
+    const g = session.game(), m = g.map();
+    seedNow.textContent = g.seed;
+    mapTitle.textContent = `Map, act ${m.act + 1} (entry at bottom)`;
+    renderMap(mapEl, m);
+    rawState.textContent = pretty(g.observe()); rawMap.textContent = pretty(m);
+  };
+  session.subscribe(refresh);
+
+  const row = (...kids: Node[]) => { const r = el("div", "row"); r.append(...kids); return r; };
+  const det = (title: string, ...kids: Node[]) => { const d = el("details"); d.append(el("summary", "", title), ...kids); return d; };
+  const lab = (...kids: Node[]) => { const d = el("div", "lab"); d.append(...kids); return d; };
+  const radios = (() => { const a = el("label", "", "Stub "), b = el("label", "", "HTTP backend "); a.prepend(stubR); b.prepend(httpR); return [a, b]; })();
+  text.setAttribute("aria-label", "Player text for a test offer");
+  url.setAttribute("aria-label", "Devil backend URL");
+
   slot.replaceChildren(
-    el("h2", "", "Test tools"),
-    el("div", "row", "Autoplay:"), (() => { const r = el("div", "row"); r.append(apBtn); return r; })(), apOut,
-    el("h2", "", "Devil lab"),
-    (() => { const r = el("div", "row"), a = el("label", "", "Stub "), b = el("label", "", "HTTP backend "); a.prepend(stubR); b.prepend(httpR); r.append(a, b, url, apply); return r; })(),
-    status,
-    (() => { const r = el("div", "row"); r.append(text, send); return r; })(),
-    hist, out,
+    el("h2", "", "Run & dev tools"),
+    row(el("span", "", "Seed:"), seedNow, seedIn, newBtn),
+    el("h3", "", "Autoplay"), row(apBtn), apOut,
+    mapTitle, mapEl,
+    det("Raw state", el("h3", "", "observe()"), rawState, el("h3", "", "map()"), rawMap),
+    el("h3", "", "Devil lab"),
+    lab(row(...radios, url, apply), status, row(text, send), hist, out),
   );
+  refresh();
   show();
 }

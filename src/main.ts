@@ -14,7 +14,7 @@ async function main() {
   const session = createSession(seed);
   const ui = mountUI(document.getElementById("app")!, session);
   if (tools) {
-    tools.mountTools(ui.tools, session);
+    tools.mountTools(ui.layout, session);
     (await import("./game/console")).installConsole(window, session); // same Game instance as the UI
   }
 }

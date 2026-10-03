@@ -19,7 +19,7 @@ npm install              # install dependencies (first time, or after package.js
 
 To share a build, upload the contents of `dist/` to itch.io (HTML game) or GitHub Pages.
 
-**Test UI.** `src/ui/` is a deliberately dumb DOM front end over the headless engine (stats, map, event log, buttons for each action, the devil's offer with accept/refuse). It calls exactly the same engine functions as the console (`go`, `fight`, `deal`, ...) through one shared `Session`, so it doubles as a check that the engine API is enough for the real UI. In test builds the **Devil lab** sends the current game's real state and context to the backend URL and shows request, raw response, latency and the sanitized deal side by side.
+**Test UI.** `src/ui/` is a plain DOM front end over the headless engine: a **Game** column (situation, your choices as big buttons, the devil's offer card, the outcome of the last move, collapsed history) and, in test builds, a separate **Run & dev tools** column (seed, map, raw state, autoplay, Devil lab). It calls exactly the same engine functions as the console (`go`, `fight`, `deal`, ...) through one shared `Session`, so it doubles as a check that the engine API is enough for the real UI. In test builds the **Devil lab** sends the current game's real state and context to the backend URL and shows request, raw response, latency and the sanitized deal side by side.
 
 Phaser 3 + Vite + TypeScript. **Current prototype round has no canvas**: `src/main.ts` boots the plain-DOM test UI (`src/ui/`); test builds also install the console layer.
 Console (F12, test builds; same run as the page): `help()`, `look()`, `go(1)`, `fight()`, `rest()`, `buy("heal")`, `deal("text")`, `accept()`, `refuse()`, `map()`, `newgame("abc")`. `?seed=abc` fixes the run.
