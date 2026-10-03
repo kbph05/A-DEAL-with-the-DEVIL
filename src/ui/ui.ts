@@ -4,7 +4,7 @@ import { describe, execute, type Command, type GameEvent } from "../game";
 import type { Session } from "../game/session";
 import { mountChoices } from "./choices";
 import { h, region } from "./dom";
-import { availableActions, blurbOf, outcomeEvents } from "./logic";
+import { availableActions, blurbOf, dealEnd, outcomeEvents } from "./logic";
 import { createHistory, renderOutcome } from "./outcome";
 import { renderSituation } from "./situation";
 
@@ -67,7 +67,7 @@ export function mountUI(root: HTMLElement, session: Session): { layout: HTMLElem
       banner.append(h("b", { text: END[o.ending][0] }), " ", END[o.ending][1], " ", again);
     }
     renderSituation(sit.body, o, blurbOf(looked, describe(looked)), looked.curses);
-    choices.render(v, A, busy);
+    choices.render(v, A, busy, dealEnd(log));
     renderOutcome(outBox, outcome);
     history.update(log);
     if (refocus && !A.locked) {

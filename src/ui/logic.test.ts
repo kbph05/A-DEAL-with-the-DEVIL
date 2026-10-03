@@ -3,7 +3,7 @@ import type { MapView, Observation } from "../game";
 import assert from "node:assert/strict";
 import { createGame, describe } from "../game";
 import type { Command } from "../game";
-import { availableActions, blurbOf, buyLabel, curseText, effectChips, eventClass, afterKinds, dagModel, exitNumber, fightLabel, lockReason, moveLock, nodeState, nodeTitle, outcomeEvents, pct, STAIRS_ID, topId } from "./logic";
+import { availableActions, blurbOf, chooseCards, dealEnd, devilPhase, haggleText, panelKinds, shopItems, buyLabel, curseText, effectChips, eventClass, afterKinds, dagModel, exitNumber, fightLabel, lockReason, moveLock, nodeState, nodeTitle, outcomeEvents, pct, STAIRS_ID, topId } from "./logic";
 import { diffDeal } from "./dealDiff";
 import { sanitizeDeal } from "../game/deal";
 
@@ -257,4 +257,85 @@ test("dagModel: a next node is clickable iff {cmd:'go', n} is in the engine's ac
   assert.ok(flat(d).filter((n) => n.state === "next").every((n) => n.disabled === "Not possible right now."));
   const ok = dagModel(obs(), fixture(), false, [{ cmd: "go", n: 2 }]);
   assert.deepEqual(flat(ok).filter((n) => n.state === "next").map((n) => [n.id, n.disabled === null]), [["b", false], ["c", true]]);
+});
+
+test("panelKinds: devil at deals, shop only at the village, single-use choices at campfire and well, fight beats all", () => {
+  const k = (kind: Observation["kind"], enemy: Observation["enemy"] = null) => panelKinds({ kind, enemy });
+  assert.deepEqual(k("deal"), ["devil"]);
+  assert.deepEqual(k("village"), ["shop"]);
+  assert.deepEqual(k("campfire"), ["choose"]);
+  assert.deepEqual(k("well"), ["choose"]); // single use, so not a shop
+  assert.deepEqual(k("fight"), []);
+  assert.deepEqual(k("final"), []);
+  const foe = { name: "cave rat", hp: 3, maxHp: 3, boss: false };
+  assert.deepEqual(k("fight", foe), ["fight"]);
+  assert.deepEqual(k("boss", foe), ["fight"]);
+});
+
+test("devil phase and how a deal ended come from the engine flags plus the log", () => {
+  const offer = { dialogue: "x", effects: { gold: 1 } };
+  assert.equal(devilPhase({ resolved: false, offer: null }, null), "ask");
+  assert.equal(devilPhase({ resolved: false, offer }, null), "offer");
+  assert.equal(devilPhase({ resolved: true, offer: null }, "struck"), "struck");
+  assert.equal(devilPhase({ resolved: true, offer: null }, "walked"), "walked");
+  assert.equal(devilPhase({ resolved: true, offer: null }, null), "settled");
+  assert.equal(dealEnd([{ type: "deal_refused" }, { type: "deal_offered", deal: offer }]), "walked");
+  assert.equal(dealEnd([{ type: "deal_applied", deal: offer, changes: {} }, { type: "deal_refused" }]), "struck"); // newest wins
+  assert.equal(dealEnd([{ type: "moved", from: "a", to: "b", kind: "deal", act: 0 }, { type: "deal_refused" }]), null); // an older node's deal
+  assert.equal(dealEnd([]), null);
+  assert.equal(haggleText(2, true), "Haggles left: 2");
+  assert.match(haggleText(0, true), /Haggles left: 0/);
+  assert.match(haggleText(3, false), /3 times/);
+});
+
+test("shop lists price tags at the village only; the well's blessing is a single-use choice", () => {
+  const g = createGame("ui-1"), o = g.observe();
+  const village = { ...o, kind: "village" as const, state: { ...o.state, gold: 12 } };
+  const items = shopItems(village, availableActions(village));
+  assert.deepEqual(items.map((i) => [i.item, i.cost, i.affordable, i.reason]), [["heal", 10, true, null], ["blade", 15, false, "need 3 more gold"]]);
+  const well = { ...o, kind: "well" as const, resolved: false, state: { ...o.state, gold: 12 } };
+  assert.deepEqual(shopItems(well, availableActions(well)), []);
+  assert.deepEqual(chooseCards(well, availableActions(well)).map((c) => [c.key, c.state]), [["blessing", "available"]]);
+  const broke = { ...well, state: { ...well.state, gold: 5 } };
+  const [c] = chooseCards(broke, availableActions(broke));
+  assert.deepEqual([c.state, c.note], ["short", "need 3 more gold"]);
+  assert.deepEqual(chooseCards({ ...well, resolved: true }, availableActions({ ...well, resolved: true })).map((c) => c.state), ["chosen"]);
+  const camp = { ...o, kind: "campfire" as const, resolved: false };
+  assert.deepEqual(chooseCards(camp, availableActions(camp)).map((c) => [c.key, c.state]), [["rest", "available"]]);
+  assert.deepEqual(chooseCards({ ...camp, resolved: true }, availableActions({ ...camp, resolved: true })).map((c) => c.state), ["chosen"]);
+  assert.deepEqual(chooseCards(village, availableActions(village)), []);
+});
+
+test("real engine: one pick resolves campfire and well; the village keeps selling", () => {
+  // Walk seeds until each kind turns up, driving the engine with the bot-ish rule: take exit 1, fight when blocked.
+  const seen = new Set<string>();
+  for (let i = 0; i < 40 && seen.size < 3; i++) {
+    const g = createGame(`panel-${i}`);
+    for (let step = 0; step < 60; step++) {
+      const v = g.view();
+      if (v.ending) break;
+      const A = availableActions(v, false, v.actions);
+      if (v.kind === "campfire" && !v.resolved) {
+        assert.equal(chooseCards(v, A)[0].state, "available");
+        g.rest(); const after = g.view();
+        assert.equal(chooseCards(after, availableActions(after, false, after.actions))[0].state, "chosen");
+        assert.ok(!after.actions.some((c) => c.cmd === "rest"));
+        seen.add("campfire");
+      }
+      if (v.kind === "village" && v.state.gold >= 10) {
+        g.buy("heal"); const after = g.view();
+        assert.deepEqual(panelKinds(after), ["shop"]);
+        assert.ok(after.actions.some((c) => c.cmd === "buy" && c.item === "heal") === (after.state.gold >= 10));
+        seen.add("village");
+      }
+      if (v.kind === "well" && v.state.gold >= 8 && !v.resolved) {
+        g.buy("blessing"); const after = g.view();
+        assert.ok(after.resolved && !after.actions.some((c) => c.cmd === "buy"));
+        assert.equal(chooseCards(after, availableActions(after, false, after.actions))[0].state, "chosen");
+        seen.add("well");
+      }
+      if (v.enemy) g.fight(); else if (v.exits.length) g.go(1); else break;
+    }
+  }
+  assert.ok(seen.has("campfire"), `saw ${[...seen]}`);
 });

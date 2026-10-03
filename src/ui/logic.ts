@@ -227,3 +227,97 @@ export function blurbOf(looked: Extract<GameEvent, { type: "looked" }>, text: st
 /** Events worth showing as "what just happened": everything except the `looked` chatter and the sync markers. */
 export const outcomeEvents = (events: GameEvent[]): GameEvent[] =>
   events.filter((e) => e.type !== "looked" && !isSyncMarker(e));
+
+// ---- the action panels: which kind of choice is on offer here (pure) ---------------------------------------------
+
+/** The four kinds of panel in "Your choices". Only the ones relevant to the node are drawn. */
+export type PanelKind = "devil" | "shop" | "choose" | "fight";
+
+/**
+ * Which panels to show at this node, in order. A blocking enemy means only the Fight panel (the engine refuses everything
+ * else, and deal nodes hold no fights). Otherwise: deal node = the Devil's table (kept after the deal, to show how it
+ * ended); village = Shop (buy as often as you can pay); campfire and well = Choose one (each is single-use: the engine sets
+ * `resolved` after one action, and the well's blessing is not a shop). Anything else has no panel.
+ */
+export function panelKinds(o: Pick<Observation, "kind" | "enemy">): PanelKind[] {
+  if (o.enemy) return ["fight"];
+  switch (o.kind) {
+    case "deal": return ["devil"];
+    case "village": return ["shop"];
+    case "campfire": case "well": return ["choose"];
+    default: return [];
+  }
+}
+
+export const PANEL_TITLE: Record<PanelKind, { icon: string; title: string }> = {
+  devil: { icon: "😈", title: "The Devil's table" },
+  shop: { icon: "🛒", title: "Shop — buy as many as you like" },
+  choose: { icon: "☝️", title: "Choose one" },
+  fight: { icon: "⚔️", title: "Fight" },
+};
+
+/** How a deal ended, read from the log (newest first). Null while it is undecided or unknown (e.g. a resumed save with no log). */
+export type DealEnd = "struck" | "walked" | null;
+export function dealEnd(log: readonly GameEvent[]): DealEnd {
+  for (const e of log) {
+    if (e.type === "deal_applied") return "struck";
+    if (e.type === "deal_refused") return "walked";
+    if (e.type === "moved" || e.type === "started") return null; // earlier than this node
+  }
+  return null;
+}
+
+export type DevilPhase = "ask" | "offer" | "struck" | "walked" | "settled";
+/** Where the deal at this node stands. `settled` = resolved, but the log cannot say how. */
+export function devilPhase(o: Pick<Observation, "resolved" | "offer">, end: DealEnd): DevilPhase {
+  if (o.resolved) return end ?? "settled";
+  return o.offer ? "offer" : "ask";
+}
+export const DEVIL_END_TEXT: Record<"struck" | "walked" | "settled", { head: string; body: string }> = {
+  struck: { head: "Deal struck", body: "The devil has what he came for. He is gone from the table." },
+  walked: { head: "You walked away", body: "No deal. The devil shrugs and is gone from the table." },
+  settled: { head: "The deal is settled", body: "The devil has already gone from the table." },
+};
+
+/** "Haggles left: 2" once an offer is on the table; before the first ask, how many tries the devil allows. */
+export function haggleText(asksLeft: number, hasOffer: boolean): string {
+  if (!hasOffer) return `The devil will hear you out up to ${asksLeft} time${asksLeft === 1 ? "" : "s"}.`;
+  return asksLeft > 0 ? `Haggles left: ${asksLeft}` : "Haggles left: 0. Accept or refuse.";
+}
+
+const WARE_EFFECT: Record<Ware, string> = { heal: "Restore 12 HP", blade: "+1 Attack", blessing: "A random blessing: +3 Max HP, +1 Attack or +8 HP" };
+const WARE_ICON: Record<Ware, string> = { heal: "❤️", blade: "🗡️", blessing: "✨" };
+
+export interface ShopItem { item: Ware; icon: string; name: string; effect: string; cost: number; affordable: boolean; /** e.g. "need 3 more gold"; null when affordable. */ reason: string | null }
+/** The shop's price tags (village only: the well's single blessing is a choice, not a shop). */
+export function shopItems(o: Pick<Observation, "kind" | "state">, A: Pick<Actions, "buy">): ShopItem[] {
+  if (o.kind !== "village") return [];
+  return A.buy.map((w) => ({ item: w.item, icon: WARE_ICON[w.item], name: WARE_NAME[w.item], effect: WARE_EFFECT[w.item], cost: w.cost, affordable: w.affordable, reason: buyLabel(w, o.state.gold).reason }));
+}
+
+export interface ChooseCard {
+  key: string; icon: string; title: string; effect: string;
+  /** What clicking it sends. */
+  cmd: Command;
+  /** available = pick it; chosen = this is what you took (node resolved); short = cannot pay yet. */
+  state: "available" | "chosen" | "short";
+  /** Gold shortfall note, or null. */
+  note: string | null;
+}
+/**
+ * The single-use choices of a campfire or well. Once the node is resolved (the engine's `resolved`, and no rest / blessing
+ * in `actions`) the card shows as chosen and nothing can be clicked: you only ever get one.
+ */
+export function chooseCards(o: Pick<Observation, "kind" | "resolved" | "state">, A: Pick<Actions, "rest" | "buy">): ChooseCard[] {
+  if (o.kind === "campfire") {
+    const heal = Math.ceil(o.state.maxHp * 0.4);
+    return [{ key: "rest", icon: "🔥", title: "Rest at the campfire", effect: `Heal up to ${heal} HP`, cmd: { cmd: "rest" }, state: o.resolved ? "chosen" : "available", note: null }];
+  }
+  if (o.kind === "well") {
+    const w = A.buy.find((b) => b.item === "blessing");
+    const base = { key: "blessing", icon: WARE_ICON.blessing, title: "Drink from the well (8g)", effect: WARE_EFFECT.blessing, cmd: { cmd: "buy", item: "blessing" } as Command };
+    if (o.resolved || !w) return [{ ...base, state: "chosen", note: null }];
+    return [{ ...base, state: w.affordable ? "available" : "short", note: buyLabel(w, o.state.gold).reason }];
+  }
+  return [];
+}
