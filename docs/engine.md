@@ -8,7 +8,7 @@ Source: `src/game/gameState.ts` (the state and read-only queries), `src/game/sta
 
 One JSON-serializable object with everything the engine needs to continue a run exactly: `JSON.parse(JSON.stringify(state))` continues byte-for-byte. It contains no class instances, functions, Maps or Sets.
 
-**The devil is not in the state.** The devil is an outside party, and its memory is its own. The `StubDevil` keeps a private RNG and remembers its last offer. To replay a restored run identically, keep the same devil instance: `restoreGame(state, sameDevil)`. With a fresh `StubDevil` (the default in `restoreGame(state)`), the run continues legally but the devil's offers can differ from the next deal on. A stateless backend devil (a pure function of the request) has no such caveat.
+**The devil is not in the state, and doesn't need to be.** `StubDevil` is a pure function of the request (its dice are seeded from the run seed and `askIndex`), so `restoreGame(state)` with a fresh devil replays a saved run exactly. A backend devil gives the same guarantee only if it is also pure (same request, same reply); an LLM devil generally isn't, so restored runs will get different offers from the next deal on, but they stay legal.
 
 | Field | Meaning |
 | --- | --- |

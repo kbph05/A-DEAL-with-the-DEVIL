@@ -122,22 +122,22 @@ const FINE_PRINT = /fine print|loophole|clause|read the contract|contract/i;
 
 /** Canned bad-faith offers, deterministic in (seed, ask sequence). Stands in until the Gemini devil is plugged in. */
 export class StubDevil implements Devil {
-  private rng: Rng;
-  private last = "";
-  constructor(seed: string | number) {
-    this.rng = mulberry32(hashSeed(`devil:${seed}`));
-  }
+  /**
+   * Pure: the offer depends only on the request (seed, askIndex, state, context, text), never on what this
+   * instance said before, so a saved GameState resumes identically with any StubDevil (or the mock server).
+   * The seed argument is kept for API compatibility; the run seed in the context is what counts.
+   */
+  constructor(_seed?: string | number) {}
 
   async offer(state: Readonly<PlayerState>, context: DevilContext, playerText?: string): Promise<Deal> {
     const text = playerText ?? "";
-    const options = OFFERS.filter((o) => o.id !== this.last && o.eligible(state, context));
-    const pool = options.length ? options : OFFERS.filter((o) => o.eligible(state, context));
+    const rng: Rng = mulberry32(hashSeed(`devil:${context.seed}:${context.askIndex}`));
+    const pool = OFFERS.filter((o) => o.eligible(state, context));
     const weights = pool.map((o) => (o.hint?.test(text) ? 5 : 1));
-    let r = this.rng() * weights.reduce((a, b) => a + b, 0);
+    let r = rng() * weights.reduce((a, b) => a + b, 0);
     let chosen = pool[pool.length - 1];
     for (let i = 0; i < pool.length; i++) if ((r -= weights[i]) < 0) { chosen = pool[i]; break; }
-    this.last = chosen.id;
-    const deal = chosen.make(state, context, this.rng);
+    const deal = chosen.make(state, context, rng);
     if (deal.curse && FINE_PRINT.test(text)) { // the player's trick: he slips up and the curse is struck
       delete deal.curse;
       deal.dialogue = `You read the fine print aloud. He winces. "...Struck. Hateful habit, reading." ${deal.dialogue}`;

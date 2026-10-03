@@ -84,8 +84,8 @@ export function createGame(seed?: string | number, devil?: Devil): Game {
 
 /**
  * Continue a saved run (e.g. `JSON.parse` of an earlier `game.gameState`). Devil defaults as in createGame. The
- * engine state is complete, but a devil's own memory is not part of it: pass the same devil instance to replay
- * identically (a fresh StubDevil restarts its private RNG, so later offers may differ).
+ * engine state is complete. StubDevil is a pure function of the request, so a restored run replays identically with
+ * any StubDevil; a backend devil should be pure too (same request, same reply) for exact save/resume.
  */
 export function restoreGame(state: GameState, devil?: Devil): Game {
   return new Game(structuredClone(state), devil ?? devilFor(state.seed));
