@@ -1,6 +1,6 @@
 # A DEAL with the DEVIL: feature sheet
 
-What is **already in the game**, as the code does it today (snapshot of `main` on 3 Oct 2026 plus the stateless-engine refactor and the rules-round-1 changes: start at the shop, campfire Rest or Train; 73 passing tests). Written for gameplay design: every number below was read from source, with the file in brackets. Anything marked **(first guess)** is a placeholder value nobody has balanced yet. Where the code and `requirements.md` disagree, see section 12.
+What is **already in the game**, as the code does it today (snapshot of `main` on 3 Oct 2026 plus the stateless-engine refactor and the rules-round-1 changes: start at the shop, campfire Rest or Train, wider planar maps with committed lanes; 74 passing tests). Written for gameplay design: every number below was read from source, with the file in brackets. Anything marked **(first guess)** is a placeholder value nobody has balanced yet. Where the code and `requirements.md` disagree, see section 12.
 
 Contents: 1 Overview, 2 Run structure and map, 3 Player, 4 Nodes, 5 Combat, 6 The devil, 7 Curses, 8 Soul and endings, 9 Events, 10 Interfaces, 11 Balance snapshot, 12 Gaps and known issues.
 
@@ -23,10 +23,11 @@ Source: `src/map/mapgen.ts`, `src/map/types.ts`, `src/map/rng.ts`, `src/map/READ
 - A run = **3 acts** (`ACTS = 3`). Each act has **6 to 8 nodes** (inclusive of its entry and exit), drawn uniformly. The act-3 **final** node is extra, outside that count.
 - Each act is a **layered DAG**: nodes sit in layers, edges only go from layer n to layer n+1 (no backtracking, no skipping).
 - Exactly **1 entry node** (layer 0) and **1 exit node** (last layer). Every node has at least one parent (except entry) and at least one child (except exit), so every node is reachable and no dead ends exist.
-- Middle layers hold **1 to 3 nodes** (`MAX_WIDTH = 3`). The generator never produces a straight line: with the default alternating layout there are **4 or 6 layers**, and the extra nodes (total minus layer count) are dropped into random middle layers.
+- Middle layers hold **1 to 4 nodes** (`MAX_WIDTH = 4`, kbph 3 Oct: more branches; was 3). The generator never produces a straight line: with the default alternating layout there are **4 or 6 layers**, and the extra nodes (total minus layer count) are dropped into random middle layers.
   - 6 nodes: always 4 layers, middle layers 2+2, 1+3 or 3+1.
-  - 7 or 8 nodes: 50/50 between 4 layers (wide middles, up to 3+3) and 6 layers.
-- Edges: every node is first linked to one random parent in the previous layer and one random child in the next, then each remaining cross-layer pair gets an extra edge with **25% chance** (`EXTRA_EDGE_P`). So paths branch and merge.
+  - 7 or 8 nodes: 50/50 between 4 layers (wide middles: 4+1, 3+2, ... up to 4+2 or 3+3) and 6 layers. A 4-wide layer needs a 4-layer act of 7 or 8 nodes: about 15% of acts have one.
+- Edges are **lanes, planar by construction** (kbph 3 Oct: "each direction should be more of a dedication of where you're going"; `linkLayers` in `src/map/mapgen.ts`). Between two layers of m and n nodes the generator lays a monotone staircase from the leftmost pair to the rightmost: the fewest edges that give every node a parent and a child, max(m, n). Where the widths match these are parallel lanes; where they differ, a random lane splits or merges. Then, with **20% chance** per layer pair (`CROSS_LINK_P`, at most one), it adds one cross-link that crosses no existing edge. So edges never cross when each layer is drawn in slot order, and picking a branch mostly commits you to that lane until the lanes merge toward the boss. Each node's exits are numbered left to right.
+  - Measured over 3000 acts (seeds `run-0..999`, all 3 acts): average out-degree of a non-exit node **1.31** (was 1.39 with 3 wide and the old 25%-per-pair extra edges), middle nodes with more than one exit **12%** (was 21%), edges per act 7.9 (was 8.4), acts with a crossing in slot order **0** (was 1227 of 3000). The old generator linked random parents and children plus extras, so lanes crossed and braided.
 - Node ids are `a{act}n{index}` (for example `a0n3`), unique across the run. The act-3 final node has id `final`. The entry is always `a{act}n0`.
 - **Final node**: after act 3's exit boss, the exit offers a "gate" to `final`. It is a verdict door, not a fight (see 8).
 
@@ -459,11 +460,11 @@ In test builds, `VITE_DEVIL_URL` only sets the default URL shown in the Devil la
 
 | File | Tests | Covers |
 | --- | --- | --- |
-| `src/map/mapgen.test.ts` | 15 | act 1 always starting on the village, 6 to 8 node counts and all three sizes occurring, structure (single root and leaf, reachability, boss exit, alternation on and off), determinism, unique ids across acts, rewrite rules and rejections, polarity flips and change log, modifiers (force/ban, silly input), 1000 random seeds never breaking invariants |
+| `src/map/mapgen.test.ts` | 16 | act 1 always starting on the village, lanes (width up to 4 and every width 2 to 4 occurring, average out-degree <= 1.35 and forked middle nodes <= 16% over 3000 acts), planarity in slot order and at most one cross-link per layer pair (checked for every act in every test), 6 to 8 node counts and all three sizes occurring, structure (single root and leaf, reachability, boss exit, alternation on and off), determinism, unique ids across acts, rewrite rules and rejections, polarity flips and change log, modifiers (force/ban, silly input), 1000 random seeds never breaking invariants |
 | `src/game/deal.test.ts` | 9 | `sanitizeDeal` clamps and junk, a hostile devil never crashing the engine, rewrite applied and rewrite failure reporting, curses firing once, revival once, soul sold and fatal in one deal not reviving, StubDevil validity and determinism |
 | `src/game/autoplay.test.ts` | 6 | 200 seeds always end win, lose or hell with no stalls, stats always in range, determinism, `simulate` tallies, a do-nothing policy times out, hell when winning soulless vs win with soul |
 | `src/game/httpDevil.test.ts` | 5 | HttpDevil against the mock backend (request body, sanitizable reply), a full bot run with chaos on, chaos replies either reject or sanitize, refused connection and timeout never throw, non-JSON server |
-| `src/ui/logic.test.ts` | 22 | button availability from `observe()` and from the engine's `actions`, event colour classes, `diffDeal`, labels and chips, the DAG model and exit numbers, `planarOrder`, panel kinds, shop and choose cards (campfire Rest/Train, `fireChoice`), against the real engine |
+| `src/ui/logic.test.ts` | 22 | button availability from `observe()` and from the engine's `actions`, event colour classes, `diffDeal`, labels and chips, the DAG model and exit numbers, `planarOrder` (every generated act lays out with 0 crossings in the generator's own order), panel kinds, shop and choose cards (campfire Rest/Train, `fireChoice`), against the real engine |
 | `src/game/equivalence.test.ts` | 3 | 500 bot seeds and 200 chaos seeds (random valid and invalid commands) reproduce, command for command, the results, events and final states recorded with the pre-refactor engine (`src/game/__fixtures__/`) |
 | `src/game/contract.test.ts` | 2 | the JSON contract is additive only: path-to-type snapshots (`contract.json`, the frozen pre-refactor baseline, and `contract-current.json`, with the new fields) of Command, PlayerState, Observation, MapView, Result, every GameEvent, the devil request, REPL `--json` lines (also `--state`, `--manual-devil`) |
 | `src/game/engine.test.ts` | 11 | `step` purity (deep-frozen input), legal-actions property, act 1 opening on the village, campfire rest xor train (and the attack cap), the devil round trip, GameState JSON save and restore mid-run, devil-stage events, `Session.onSync`, `view` |
@@ -474,10 +475,36 @@ Not covered by tests: the DOM UI rendering, the console, REPL text mode, combat 
 
 ## 11. Balance snapshot
 
-Throwaway script (not committed), default `botPolicy`, `simulate(500)` with seeds `sim-0 ... sim-499`, StubDevil, on this branch (rules round 1: act 1 starts at the village, campfire Rest or Train with the bot training at HP >= 70%):
+Throwaway script (not committed), default `botPolicy`, `simulate(500)` with seeds `sim-0 ... sim-499`, StubDevil, on this branch (rules round 1: act 1 starts at the village, campfire Rest or Train with the bot training at HP >= 70%, maps up to 4 wide with planar lanes):
 
 | Outcome | Runs | Share |
 | --- | --- | --- |
+| win (soul kept) | 113 | 22.6% |
+| hell (reached final, soul gone) | 196 | 39.2% |
+| lose (died) | 191 | 38.2% |
+| timeout | 0 | 0% |
+
+- Average steps (commands) per run: **46.0** overall (lose 44.8, hell 47.3, win 45.8).
+- Reached the final door: 309 of 500 (61.8%).
+- **Revival fired in 359 of 500 runs (72%).** Hell is 63% of runs that reach the final door.
+- Campfires: the bot trained 440 times and rested 316 times (rests counted by `healed` events, so rests at full HP are missed).
+- Deaths by act: act 1 **0**, act 2 **24**, act 3 **167** (of 191). Killers: the act-3 boss **156**, the act-2 boss **24**, the rest regular enemies. The **bosses** (the act-3 boss most of all) are still the real wall.
+- Deals: 749 offers in 500 runs; the bot accepted 252 (28 of which sold the soul) and refused 497. 35 rewrites landed (none failed), 111 curses added and all fired.
+
+What each change did (same script, same seeds):
+
+| Build | win | lose | hell | avg steps |
+| --- | --- | --- | --- | --- |
+| `main` (3d43eac) | 46 (9.2%) | 249 (49.8%) | 205 (41.0%) | 48.1 |
+| + act 1 starts at the village | 36 (7.2%) | 275 (55.0%) | 189 (37.8%) | 47.1 |
+| + campfire Rest or Train | **102 (20.4%)** | 197 (39.4%) | 201 (40.2%) | 46.1 |
+| + wider planar maps (lanes) | 113 (22.6%) | 191 (38.2%) | 196 (39.2%) | 46.0 |
+
+Starting at the shop instead of a random good node costs the bot a little: it loses the early deal or campfire some seeds used to open on, and 10 gold buys nothing it wants at full HP. Training is the big swing: +1 attack per fire compounds through every later fight and both late bosses. The map change mostly reshuffles which nodes the bot (which always takes exit 1, the leftmost lane) walks through, so its effect here is small and close to seed noise. The strategy variants measured on `main` (refuse every deal: win 34 / lose 275 / hell 191; accept every deal: win 70 / lose 221 / hell 209) have not been re-run.
+
+Caveats: this is one bot and one stub devil. The Gemini devil will change everything about deals. All combat and shop numbers are first guesses, and the bot's 70% training rule is a sensible default, not a tuned one.
+
+--- | --- | --- |
 | win (soul kept) | 102 | 20.4% |
 | hell (reached final, soul gone) | 201 | 40.2% |
 | lose (died) | 197 | 39.4% |

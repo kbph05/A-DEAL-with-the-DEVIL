@@ -1,8 +1,9 @@
 # src/map: act map generator
 
-Dependency-free TypeScript. A run is 3 acts, each a layered DAG of 6-8 nodes with one entry and one exit
+Dependency-free TypeScript. A run is 3 acts, each a layered DAG of 6-8 nodes (layers up to 4 wide) with one entry and one exit
 (always a `boss`); act 3 also has a separate `final` node after its boss. Deterministic from
-`(runSeed, actIndex, modifiers)`; generate act 0 at start, acts 1 and 2 on arrival.
+`(runSeed, actIndex, modifiers)`; generate act 0 at start, acts 1 and 2 on arrival. Edges form lanes that never cross when each layer is drawn in slot order (planar by
+construction), with at most one cross-link per pair of layers (`CROSS_LINK_P`).
 
 - `generateAct(runSeed, actIndex /*0..2*/, modifiers?, { alternate = true }?) => Act`
 - `rewriteNode(act, nodeId, newKind) => { ok: true, act } | { ok: false, reason }`: immutable, never throws;

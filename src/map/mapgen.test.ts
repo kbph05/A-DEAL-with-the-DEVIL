@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import {
-  ACTS, KINDS, START_KIND, generateAct, markVisited, mulberry32, polarity, rewriteNode,
+  ACTS, CROSS_LINK_P, KINDS, MAX_WIDTH, START_KIND, generateAct, markVisited, mulberry32, polarity, rewriteNode,
   type Act, type Kind, type Modifiers,
 } from "./index";
 
@@ -34,6 +34,19 @@ function checkInvariants(act: Act): void {
   assert.ok(nodes.every((n) => n.kind !== "final"));
   const slots = new Set(nodes.map((n) => `${n.layer}:${n.slot}`));
   assert.equal(slots.size, nodes.length, "unique (layer, slot)");
+  // Lanes: at most MAX_WIDTH (4) per layer, and planar by construction: no two edges between the same layers cross in
+  // slot order. Between two layers there are the fewest edges that connect them, max(m, n), plus at most one cross-link.
+  const layers: Array<typeof nodes> = [];
+  for (const n of nodes) (layers[n.layer] ??= []).push(n);
+  assert.equal(layers[0].length, 1); assert.equal(layers[layers.length - 1].length, 1);
+  for (let l = 0; l + 1 < layers.length; l++) {
+    assert.ok(layers[l].length <= MAX_WIDTH, `layer ${l} width ${layers[l].length}`);
+    const es = layers[l].flatMap((n) => n.next.map((t) => [n.slot, byId.get(t)!.slot] as const));
+    for (const [i, e] of es.entries()) for (const f of es.slice(i + 1))
+      assert.ok((e[0] - f[0]) * (e[1] - f[1]) >= 0, `edges ${e} and ${f} cross between layers ${l} and ${l + 1}`);
+    assert.ok(es.length <= Math.max(layers[l].length, layers[l + 1].length) + 1, `at most one cross-link between layers ${l} and ${l + 1}`);
+    for (const n of layers[l]) assert.deepEqual(n.next, [...n.next].sort((a, b) => byId.get(a)!.slot - byId.get(b)!.slot), "exits numbered left to right");
+  }
   if (act.alternate) for (const n of nodes) for (const t of n.next)
     assert.notEqual(polarity(n.kind), polarity(byId.get(t)!.kind), `alternation ${n.id}->${t}`);
   if (act.index === ACTS - 1) {
@@ -48,6 +61,29 @@ test("node count is 6-8 and all three sizes occur", () => {
   const sizes = new Set<number>();
   for (let s = 0; s < 200; s++) sizes.add(generateAct(s, 0).nodes.length);
   assert.deepEqual([...sizes].sort(), [6, 7, 8]);
+});
+
+test("lanes: widths up to 4 occur; few cross-links, so a branch mostly commits you to its lane (planar via checkInvariants)", () => {
+  assert.equal(MAX_WIDTH, 4);
+  assert.ok(CROSS_LINK_P <= 0.25, "fewer cross-links than the old 25%-per-node-pair rule");
+  const widths = new Set<number>();
+  let nonExit = 0, out = 0, middle = 0, branching = 0;
+  for (let s = 0; s < 1000; s++) for (let a = 0; a < ACTS; a++) {
+    const act = generateAct(`lanes-${s}`, a);
+    checkInvariants(act);
+    const perLayer = new Map<number, number>();
+    for (const n of act.nodes) perLayer.set(n.layer, (perLayer.get(n.layer) ?? 0) + 1);
+    widths.add(Math.max(...perLayer.values()));
+    for (const n of act.nodes) {
+      if (n.id === act.exit) continue;
+      nonExit++; out += n.next.length;
+      if (n.id !== act.entry) { middle++; if (n.next.length > 1) branching++; }
+    }
+  }
+  assert.deepEqual([...widths].sort(), [2, 3, 4]);
+  // Measured on 3 Oct: avg out-degree 1.31 (was 1.39 with 3 wide and 25% cross-links), middle nodes with a fork 12% (was 21%).
+  assert.ok(out / nonExit <= 1.35, `average out-degree ${(out / nonExit).toFixed(3)}`);
+  assert.ok(branching / middle <= 0.16, `middle nodes with more than one exit: ${(branching / middle).toFixed(3)}`);
 });
 
 test("structure: single root/leaf, reachability, boss exit, alternation (both option values)", () => {

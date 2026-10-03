@@ -8,12 +8,44 @@ import {
 export const ACTS = 3;
 /** Act 1 always opens on this kind: the run starts at the shop, never at the devil's table (kbph, 3 Oct). */
 export const START_KIND: Kind = "village";
-const MAX_WIDTH = 3;
-const EXTRA_EDGE_P = 0.25;
+/** Lanes per layer (kbph: more branches). */
+export const MAX_WIDTH = 4;
+/**
+ * Chance that a pair of adjacent layers gets one cross-link between lanes, beyond the fewest edges that connect them
+ * (kbph, 3 Oct: "each direction should be more of a dedication of where you're going"). At most one per layer pair.
+ */
+export const CROSS_LINK_P = 0.2;
 const pick = <T>(rng: Rng, xs: readonly T[]): T => xs[Math.floor(rng() * xs.length)];
 const layerPolarity = (layer: number): Polarity => (layer % 2 === 0 ? "good" : "bad");
 
-/** Layered DAG: one node in the first and last layer, 1..3 in between, edges only layer n -> n+1. */
+/** Two edges between the same pair of layers cross, in slot order, iff their ends are in opposite order. */
+const crosses = (e: readonly [number, number], f: readonly [number, number]): boolean => (e[0] - f[0]) * (e[1] - f[1]) < 0;
+
+/**
+ * Edges (as slot pairs) joining a layer of `m` nodes to one of `n`: planar in slot order by construction. A monotone
+ * staircase from (0, 0) to (m-1, n-1) gives every node a parent and a child with the fewest edges, max(m, n): parallel
+ * lanes where the widths match, a split or merge where they differ (placed at random). Then, with CROSS_LINK_P, one
+ * extra edge that crosses none of the others (only the corners of a diagonal step qualify).
+ */
+function linkLayers(rng: Rng, m: number, n: number): Array<[number, number]> {
+  const di = m - 1, dj = n - 1, steps: Array<"i" | "j" | "ij"> = [];
+  for (let k = Math.min(di, dj); k > 0; k--) steps.push("ij");
+  for (let k = Math.abs(di - dj); k > 0; k--) steps.push(di > dj ? "i" : "j");
+  for (let k = steps.length - 1; k > 0; k--) { const r = Math.floor(rng() * (k + 1)); [steps[k], steps[r]] = [steps[r], steps[k]]; }
+  const edges: Array<[number, number]> = [[0, 0]];
+  let [i, j] = [0, 0];
+  for (const st of steps) { if (st !== "j") i++; if (st !== "i") j++; edges.push([i, j]); }
+  if (rng() < CROSS_LINK_P) {
+    const has = (a: number, b: number) => edges.some(([x, y]) => x === a && y === b);
+    const free: Array<[number, number]> = [];
+    for (let a = 0; a < m; a++) for (let b = 0; b < n; b++)
+      if (!has(a, b) && edges.every((e) => !crosses(e, [a, b]))) free.push([a, b]);
+    if (free.length) edges.push(pick(rng, free));
+  }
+  return edges;
+}
+
+/** Layered DAG: one node in the first and last layer, 1..MAX_WIDTH in between, edges only layer n -> n+1, never crossing. */
 function buildShape(rng: Rng, actIndex: number, alternate: boolean): MapNode[][] {
   const total = 6 + Math.floor(rng() * 3); // 6..8
   // Exit must be bad (boss), so with alternation its layer index is odd: 4 or 6 layers.
@@ -29,12 +61,10 @@ function buildShape(rng: Rng, actIndex: number, alternate: boolean): MapNode[][]
   const layers = widths.map((w, layer) =>
     Array.from({ length: w }, (_, slot): MapNode => ({ id: `a${actIndex}n${n++}`, kind: "fight", layer, slot, next: [] })),
   );
-  const link = (a: MapNode, b: MapNode) => { if (!a.next.includes(b.id)) a.next.push(b.id); };
   for (let l = 0; l < layerCount - 1; l++) {
     const [from, to] = [layers[l], layers[l + 1]];
-    for (const b of to) link(pick(rng, from), b); // every node has a parent
-    for (const a of from) if (!a.next.length) link(a, pick(rng, to)); // every node has a child
-    for (const a of from) for (const b of to) if (rng() < EXTRA_EDGE_P) link(a, b); // some variety
+    for (const [a, b] of linkLayers(rng, from.length, to.length)) from[a].next.push(to[b].id);
+    for (const a of from) a.next.sort((x, y) => to.findIndex((t) => t.id === x) - to.findIndex((t) => t.id === y)); // exits left to right
   }
   return layers;
 }

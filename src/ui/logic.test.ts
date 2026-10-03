@@ -360,7 +360,7 @@ test("fireChoice reads what was done at this campfire from the log (newest first
   assert.equal(eventClass({ type: "trained", amount: 1, attack: 4 }), "ev-good");
 });
 
-test("planarOrder: removes avoidable crossings; real acts lay out with no crossings when possible", async () => {
+test("planarOrder: removes avoidable crossings; every real act is planar in the generator's own order", async () => {
   const { planarOrder } = await import("./logic");
   // Two crossed edges: a->d, b->c with order [a,b] / [c,d] crosses once; reordering the top layer fixes it.
   const r = planarOrder([["a", "b"], ["c", "d"]], [["a", "d"], ["b", "c"]]);
@@ -376,8 +376,9 @@ test("planarOrder: removes avoidable crossings; real acts lay out with no crossi
     const edges = act.nodes.flatMap((n) => n.next.map((t) => [n.id, t] as [string, string]));
     const res = planarOrder(layers, edges);
     total++; if (res.crossings === 0) planar++;
-    for (const l of res.order) assert.ok(l.length <= 3);
+    for (const l of res.order) assert.ok(l.length <= 4);
+    assert.deepEqual(res.order, layers, "the generator's slot order is already crossing-free, so it is kept");
   }
-  assert.ok(planar / total > 0.5, `planar ${planar}/${total}`);
+  assert.equal(planar, total, `planar ${planar}/${total}`);
   console.log(`# planar acts: ${planar}/${total}`);
 });
