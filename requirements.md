@@ -9,7 +9,7 @@ StormHacks 2026, team Spin 2 Win. Drafted from the team chat on 3 Oct. **Locked*
 
 ## Run structure (locked)
 - A run is a DAG of nodes, Slay the Spire style.
-- It has **3 acts of 6–8 seeded-random nodes** each. Each act has one entry node and one exit node, the acts are chained together, and the **final win/lose node** comes after act 3.
+- It has **3 acts of 12–14 seeded-random nodes (kbph, 3 Oct; was 6–8)** each. Each act has one entry node and one exit node, the acts are chained together, and the **final win/lose node** comes after act 3.
 - Act 1 is generated at the start; acts 2–3 are generated when the player reaches them.
 - **Devil deals can rewrite nodes further along the run** (swap or replace upcoming nodes).
 
