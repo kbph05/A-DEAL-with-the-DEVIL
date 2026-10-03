@@ -339,3 +339,25 @@ test("real engine: one pick resolves campfire and well; the village keeps sellin
   }
   assert.ok(seen.has("campfire"), `saw ${[...seen]}`);
 });
+
+test("planarOrder: removes avoidable crossings; real acts lay out with no crossings when possible", async () => {
+  const { planarOrder } = await import("./logic");
+  // Two crossed edges: a->d, b->c with order [a,b] / [c,d] crosses once; reordering the top layer fixes it.
+  const r = planarOrder([["a", "b"], ["c", "d"]], [["a", "d"], ["b", "c"]]);
+  assert.equal(r.crossings, 0);
+  // K2,2 is planar in layers; K-style full bipartite 2x2 always has 1 crossing.
+  assert.equal(planarOrder([["a", "b"], ["c", "d"]], [["a", "c"], ["a", "d"], ["b", "c"], ["b", "d"]]).crossings, 1);
+  const { generateAct } = await import("../map");
+  let planar = 0, total = 0;
+  for (let s = 0; s < 300; s++) for (let a = 0; a < 3; a++) {
+    const act = generateAct(`p${s}`, a);
+    const layers: string[][] = [];
+    for (const n of act.nodes) (layers[n.layer] ??= []).push(n.id);
+    const edges = act.nodes.flatMap((n) => n.next.map((t) => [n.id, t] as [string, string]));
+    const res = planarOrder(layers, edges);
+    total++; if (res.crossings === 0) planar++;
+    for (const l of res.order) assert.ok(l.length <= 3);
+  }
+  assert.ok(planar / total > 0.5, `planar ${planar}/${total}`);
+  console.log(`# planar acts: ${planar}/${total}`);
+});

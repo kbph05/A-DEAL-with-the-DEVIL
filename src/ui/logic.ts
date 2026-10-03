@@ -173,12 +173,46 @@ export function dagModel(o: Observation, map: MapView, busy = false, legal?: rea
     id: STAIRS_ID, kind: STAIRS_ID, state: bossHere ? "next" : "far", rewritten: false, n: bossHere ? 1 : null,
     disabled: bossHere ? off(1) : null, label: dagLabel(STAIRS_ID, STAIRS_ID, bossHere ? "next" : "far", false, [], bossHere ? off(1) : null),
   };
-  const rows = [[top], ...[...map.layers].reverse().map((l) => l.nodes.map(mk))];
   const edges: Array<[string, string]> = [];
   for (const n of nodes.values()) for (const t of n.next) edges.push([n.id, t]);
+  // Lay each layer out to avoid crossing edges (kbph: "the graph should be planar").
+  const { order } = planarOrder(map.layers.map((l) => l.nodes.map((n) => n.id)), edges);
+  const rows = [[top], ...order.map((ids) => ids.map((id) => mk(nodes.get(id)!))).reverse()];
   const boss = [...nodes.values()].find((n) => n.kind === "boss");
   if (boss) edges.push([boss.id, top.id]);
   return { rows, edges, lock };
+}
+
+
+/** Number of crossing edge pairs between two adjacent layers, given left-to-right orders. */
+function crossingsBetween(lower: readonly string[], upper: readonly string[], edges: ReadonlyArray<[string, string]>): number {
+  const pl = new Map(lower.map((id, i) => [id, i])), pu = new Map(upper.map((id, i) => [id, i]));
+  const es = edges.filter(([a, b]) => pl.has(a) && pu.has(b)).map(([a, b]) => [pl.get(a)!, pu.get(b)!] as const);
+  let c = 0;
+  for (let i = 0; i < es.length; i++) for (let j = i + 1; j < es.length; j++)
+    if ((es[i][0] - es[j][0]) * (es[i][1] - es[j][1]) < 0) c++;
+  return c;
+}
+
+function permutations<T>(xs: readonly T[]): T[][] {
+  if (xs.length <= 1) return [[...xs]];
+  return xs.flatMap((x, i) => permutations([...xs.slice(0, i), ...xs.slice(i + 1)]).map((p) => [x, ...p]));
+}
+
+/**
+ * Left-to-right order for each layer (bottom layer first) with the fewest edge crossings — zero whenever the act's
+ * graph can be drawn planar. Exact: layers are at most 3 wide, so a pruned search over all orders is cheap.
+ * Ties keep the generator's original order (stable, deterministic).
+ */
+export function planarOrder(layers: readonly string[][], edges: ReadonlyArray<[string, string]>): { order: string[][]; crossings: number } {
+  let best = { order: layers.map((l) => [...l]), crossings: Infinity };
+  const walk = (i: number, acc: string[][], c: number) => {
+    if (c >= best.crossings) return;
+    if (i === layers.length) { best = { order: acc.map((l) => [...l]), crossings: c }; return; }
+    for (const perm of permutations(layers[i])) walk(i + 1, [...acc, perm], c + (i ? crossingsBetween(acc[i - 1], perm, edges) : 0));
+  };
+  walk(0, [], 0);
+  return best;
 }
 
 const WARE_NAME: Record<Ware, string> = { heal: "Heal", blade: "Blade", blessing: "Blessing" };
