@@ -1,8 +1,7 @@
-/** Test-only "Run & dev tools" column: seed, map, autoplay, raw state, and the devil lab (HTTP backend tester). Loaded by dynamic import in test builds only; final builds tree-shake it out. */
+/** Test-only "Run & dev tools" column: seed, autoplay, raw state, and the devil lab (HTTP backend tester). Loaded by dynamic import in test builds only; final builds tree-shake it out. */
 import { autoplay, sanitizeDeal, setDevil, HttpDevil, DEFAULT_DEVIL_URL, type Exchange } from "../game";
 import type { Session } from "../game/session";
 import { diffDeal } from "./dealDiff";
-import { renderMap } from "./mapView";
 
 export interface DevilConfig { mode: "stub" | "http"; url: string }
 const KEY = "devil-lab.config";
@@ -89,19 +88,16 @@ export function mountTools(layout: HTMLElement, session: Session): void {
   }
   listeners.add(() => { sel = null; show(); });
 
-  // ---- run: seed, map, raw state ----
+  // ---- run: seed, raw state (the map itself is part of the Game column) ----
   const seedNow = el("code"), seedIn = el("input");
   seedIn.placeholder = "seed (blank = random)"; seedIn.setAttribute("aria-label", "Seed for the next run");
   const newBtn = el("button", "", "New game");
   newBtn.onclick = () => session.newGame(seedIn.value.trim() || undefined);
-  const mapTitle = el("h3"), mapEl = el("div", "map");
   const rawState = el("pre"), rawMap = el("pre");
 
   const refresh = () => {
     const g = session.game(), m = g.map();
     seedNow.textContent = g.seed;
-    mapTitle.textContent = `Map, act ${m.act + 1} (entry at bottom)`;
-    renderMap(mapEl, m);
     rawState.textContent = pretty(g.observe()); rawMap.textContent = pretty(m);
   };
   session.subscribe(refresh);
@@ -117,7 +113,6 @@ export function mountTools(layout: HTMLElement, session: Session): void {
     el("h2", "", "Run & dev tools"),
     row(el("span", "", "Seed:"), seedNow, seedIn, newBtn),
     el("h3", "", "Autoplay"), row(apBtn), apOut,
-    mapTitle, mapEl,
     det("Raw state", el("h3", "", "observe()"), rawState, el("h3", "", "map()"), rawMap),
     el("h3", "", "Devil lab"),
     lab(row(...radios, url, apply), status, row(text, send), hist, out),

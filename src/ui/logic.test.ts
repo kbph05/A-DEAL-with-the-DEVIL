@@ -2,7 +2,8 @@ import { test } from "node:test";
 import type { MapView, Observation } from "../game";
 import assert from "node:assert/strict";
 import { createGame, describe } from "../game";
-import { availableActions, blurbOf, buyLabel, curseText, effectChips, eventClass, exitLabel, exitLabels, fightLabel, lockReason, nodeTitle, outcomeEvents, pct } from "./logic";
+import type { Command } from "../game";
+import { availableActions, blurbOf, buyLabel, curseText, effectChips, eventClass, afterKinds, dagModel, exitNumber, fightLabel, lockReason, moveLock, nodeState, nodeTitle, outcomeEvents, pct, STAIRS_ID, topId } from "./logic";
 import { diffDeal } from "./dealDiff";
 import { sanitizeDeal } from "../game/deal";
 
@@ -16,7 +17,7 @@ test("actions follow the observation", () => {
   const poor = { ...o, kind: "village" as const, state: { ...o.state, gold: 9 } };
   assert.deepEqual(availableActions(poor).buy.map((b) => [b.item, b.affordable]), [["heal", false], ["blade", false]]);
   const deal = { ...o, kind: "deal" as const, resolved: false, offer: null };
-  assert.deepEqual(availableActions(deal).ask, { again: false });
+  assert.deepEqual(availableActions(deal).ask, { again: false, enabled: true });
   assert.deepEqual(availableActions({ ...deal, resolved: true }).ask, null);
   assert.equal(availableActions({ ...o, ending: "win" }).locked, true);
 });
@@ -48,8 +49,6 @@ test("effects become signed chips, zeros dropped", () => {
 
 test("choice labels and disabled reasons", () => {
   assert.equal(nodeTitle(1, "village"), "Act 2 · Village");
-  assert.equal(exitLabel({ n: 1, kind: "fight" }), "Go → fight");
-  assert.match(exitLabel({ n: 1, kind: "stairs" }), /^Go → stairs/);
   assert.deepEqual(buyLabel({ item: "blade", cost: 15, affordable: false }, 12), { label: "Blade (15g) — need 3 more gold", reason: "need 3 more gold" });
   assert.deepEqual(buyLabel({ item: "heal", cost: 10, affordable: true }, 20), { label: "Heal (10g)", reason: null });
   assert.equal(fightLabel({ name: "cave rat", hp: 3, maxHp: 3, boss: false }), "Fight the cave rat");
@@ -69,16 +68,193 @@ test("pct is safe, and the description is pulled out of look()", () => {
   assert.deepEqual(outcomeEvents([l, { type: "deal_refused" }]), [{ type: "deal_refused" }]);
 });
 
-test("exitLabels tells same-kind exits apart by where they lead", () => {
-  const o = { nodeId: "a", exits: [{ n: 1, kind: "fight" }, { n: 2, kind: "fight" }] } as unknown as Observation;
-  const map = { act: 0, changes: [], layers: [
-    { layer: 0, nodes: [{ id: "a", kind: "deal", visited: true, current: true, rewritten: false, next: ["b", "c"] }] },
-    { layer: 1, nodes: [{ id: "b", kind: "fight", visited: false, current: false, rewritten: false, next: ["d"] },
-                        { id: "c", kind: "fight", visited: false, current: false, rewritten: false, next: ["e"] }] },
-    { layer: 2, nodes: [{ id: "d", kind: "deal", visited: false, current: false, rewritten: false, next: [] },
-                        { id: "e", kind: "campfire", visited: false, current: false, rewritten: false, next: [] }] },
-  ] } as unknown as MapView;
-  assert.deepEqual(exitLabels(o, map), ["Go → fight · then deal", "Go → fight · then campfire"]);
-  const same = structuredClone(map); same.layers[2].nodes[1].kind = "deal";
-  assert.deepEqual(exitLabels(o, same), ["Go → fight · then deal (left)", "Go → fight · then deal (right)"]);
+// ---- the map as a choice (DAG) ----
+
+const mn = (id: string, kind: string, next: string[], over: Record<string, unknown> = {}) => ({ id, kind, visited: false, current: false, rewritten: false, next, ...over });
+const fixture = () => ({ act: 0, changes: [], layers: [
+  { layer: 0, nodes: [mn("a", "deal", ["b", "c"], { visited: true, current: true })] },
+  { layer: 1, nodes: [mn("b", "fight", ["d"]), mn("c", "fight", ["e"], { rewritten: true })] },
+  { layer: 2, nodes: [mn("d", "deal", ["x"]), mn("e", "campfire", ["x"])] },
+  { layer: 3, nodes: [mn("x", "boss", [])] },
+] }) as unknown as MapView;
+const obs = (over: Record<string, unknown> = {}) => ({ nodeId: "a", kind: "deal", enemy: null, offer: null, pending: false, ending: null, exits: [], ...over }) as unknown as Observation;
+const flat = (d: ReturnType<typeof dagModel>) => d.rows.flat();
+
+test("exitNumber maps a map node to the engine's exit n (index in `next`, plus 1)", () => {
+  const m = fixture();
+  assert.equal(exitNumber(obs(), m, "b"), 1);
+  assert.equal(exitNumber(obs(), m, "c"), 2);
+  assert.equal(exitNumber(obs(), m, "d"), null, "two steps away");
+  assert.equal(exitNumber(obs(), m, "a"), null, "not itself");
+  assert.equal(exitNumber(obs(), m, STAIRS_ID), null, "stairs only from the boss");
+  assert.equal(exitNumber(obs({ nodeId: "x" }), m, STAIRS_ID), 1);
+  assert.equal(exitNumber(obs({ nodeId: "x" }), m, "b"), null);
+  assert.equal(exitNumber(obs({ nodeId: "nope" }), m, "b"), null);
+  const last = { ...m, final: mn("final", "final", []) } as unknown as MapView;
+  assert.equal(topId(last), "final");
+  assert.equal(exitNumber(obs({ nodeId: "x" }), last, "final"), 1);
+  assert.equal(exitNumber(obs({ nodeId: "final" }), last, "x"), null);
+  assert.equal(exitNumber(obs({ nodeId: "final" }), last, "final"), null);
+});
+
+test("nodeState classifies current / visited / next / far", () => {
+  const next = new Set(["b"]);
+  assert.equal(nodeState({ id: "a", current: true, visited: true }, next), "current");
+  assert.equal(nodeState({ id: "z", current: false, visited: true }, next), "visited");
+  assert.equal(nodeState({ id: "b", current: false, visited: false }, next), "next");
+  assert.equal(nodeState({ id: "d", current: false, visited: false }, next), "far");
+});
+
+test("afterKinds and moveLock", () => {
+  const m = fixture();
+  assert.deepEqual(afterKinds(m, "a"), ["fight"]);
+  assert.deepEqual(afterKinds(m, "b"), ["deal"]);
+  assert.deepEqual(afterKinds(m, "x"), []);
+  assert.deepEqual(afterKinds(m, "nope"), []);
+  assert.equal(moveLock(obs()), null);
+  assert.match(moveLock(obs({ enemy: { name: "rat" } }))!, /fight first/i);
+  assert.match(moveLock(obs({ offer: { dialogue: "x" } }))!, /offer/i);
+  assert.match(moveLock(obs(), true)!, /considers/);
+  assert.match(moveLock(obs({ pending: true }))!, /considers/);
+  assert.match(moveLock(obs({ ending: "win" }))!, /over/);
+});
+
+test("dagModel: rows top to bottom, node states, edges, labels", () => {
+  const d = dagModel(obs(), fixture());
+  assert.deepEqual(d.rows.map((r) => r.map((n) => n.id)), [[STAIRS_ID], ["x"], ["d", "e"], ["b", "c"], ["a"]]);
+  const by = Object.fromEntries(flat(d).map((n) => [n.id, n]));
+  assert.deepEqual([by.a.state, by.b.state, by.c.state, by.d.state, by.x.state, by[STAIRS_ID].state], ["current", "next", "next", "far", "far", "far"]);
+  assert.deepEqual([by.b.n, by.c.n, by.d.n, by.a.n], [1, 2, null, null]);
+  assert.equal(by.c.rewritten, true);
+  assert.equal(by.b.disabled, null);
+  assert.equal(by.b.label, "Go to fight b, then deal");
+  assert.equal(by.a.label, "You are here: deal a");
+  assert.deepEqual(d.edges.filter(([f]) => f === "a"), [["a", "b"], ["a", "c"]]);
+  assert.ok(d.edges.some(([f, t]) => f === "x" && t === STAIRS_ID), "boss -> stairs edge");
+  assert.equal(d.lock, null);
+});
+
+test("dagModel: an enemy or an offer keeps next nodes visible but disabled, with the reason", () => {
+  for (const [over, re] of [[{ enemy: { name: "rat" } }, /fight first/i], [{ offer: { dialogue: "x" } }, /offer/i]] as const) {
+    const d = dagModel(obs(over), fixture());
+    const next = flat(d).filter((n) => n.state === "next");
+    assert.deepEqual(next.map((n) => [n.id, n.n]), [["b", 1], ["c", 2]], "still mapped");
+    for (const n of next) { assert.match(n.disabled!, re); assert.match(n.label, re); }
+    assert.match(d.lock!, re);
+  }
+  assert.ok(flat(dagModel(obs({ ending: "lose" }), fixture())).filter((n) => n.state === "next").every((n) => n.disabled));
+});
+
+test("dagModel at the boss: the stairs (or the final door) is the one way on", () => {
+  const m = fixture();
+  const at = { ...m, layers: m.layers.map((l) => ({ ...l, nodes: l.nodes.map((n) => ({ ...n, current: n.id === "x" })) })) } as MapView;
+  const d = dagModel(obs({ nodeId: "x", kind: "boss" }), at);
+  assert.deepEqual(flat(d).filter((n) => n.state === "next").map((n) => [n.id, n.n]), [[STAIRS_ID, 1]]);
+  assert.match(flat(d)[0].label, /stairs/i);
+  const last = { ...at, final: mn("final", "final", []) } as unknown as MapView;
+  const d2 = dagModel(obs({ nodeId: "x", kind: "boss" }), last);
+  assert.deepEqual(d2.rows[0].map((n) => [n.id, n.state, n.n]), [["final", "next", 1]]);
+  assert.match(d2.rows[0][0].label, /final door/);
+});
+
+/** Walks a real game (first exit, fighting whatever blocks) until it arrives at the act boss, fight not started; null if the run died first. */
+function toBoss(seed: string) {
+  const g = createGame(seed);
+  for (let i = 0; i < 40; i++) {
+    let o = g.observe();
+    if (o.ending) return null;
+    if (o.kind === "boss") return g;
+    if (o.enemy) { g.fight(); continue; }
+    if (o.kind === "deal" && o.offer) { g.refuse(); continue; }
+    g.go(1);
+  }
+  return null;
+}
+
+test("click mapping matches the engine: go(n) for a next node really lands on that node", () => {
+  let checked = 0;
+  for (const seed of ["demo", "ui-1", "ui-2", "ui-3", "ui-4"]) {
+    for (let steps = 0; steps < 6; steps++) {
+      // replay the same walk (always the first exit, fighting as needed) then branch from here for every next node
+      const probe = (n: number | null) => {
+        const g = createGame(seed);
+        for (let i = 0; i < steps; i++) { while (g.observe().enemy && !g.observe().ending) g.fight(); if (g.observe().kind === "deal") g.refuse(); if (!g.observe().ending && g.observe().exits.length) g.go(1); }
+        while (g.observe().enemy && !g.observe().ending) g.fight();
+        if (g.observe().offer) g.refuse();
+        if (n === null) return g;
+        g.go(n);
+        return g;
+      };
+      const g0 = probe(null), o = g0.observe(), m = g0.map();
+      if (o.ending) break;
+      const d = dagModel(o, m);
+      for (const node of flat(d).filter((x) => x.state === "next")) {
+        const after = probe(node.n);
+        const a = after.observe();
+        if (node.id === STAIRS_ID) assert.equal(a.act, o.act + 1);
+        else assert.equal(a.nodeId, node.id, `${seed} step ${steps}: n=${node.n} for ${node.id}`);
+        assert.equal(o.exits[node.n! - 1].kind, node.id === STAIRS_ID ? "stairs" : node.kind, "kind matches the engine's exit list");
+        checked++;
+      }
+      assert.equal(flat(d).filter((x) => x.state === "next").length, o.exits.length, "one next node per engine exit");
+    }
+  }
+  assert.ok(checked >= 10, `checked ${checked}`);
+});
+
+test("click mapping at a real boss: shown but disabled mid-fight, then stairs = go(1)", () => {
+  let g = null as ReturnType<typeof createGame> | null;
+  for (const seed of ["demo", "ui-1", "ui-2", "ui-3", "ui-4", "ui-5", "ui-6"]) { g = toBoss(seed); if (g) break; }
+  assert.ok(g, "some seed reaches a boss");
+  let o = g!.observe();
+  assert.ok(o.enemy, "boss fight on arrival");
+  const mid = flat(dagModel(o, g!.map())).filter((n) => n.state === "next");
+  assert.deepEqual(mid.map((n) => [n.id, n.n]), [[topId(g!.map()), 1]]);
+  assert.match(mid[0].disabled!, /fight first/i);
+  while (g!.observe().enemy && !g!.observe().ending) g!.fight();
+  o = g!.observe();
+  if (o.ending) return; // lost the boss fight: nothing more to check on this seed
+  const done = flat(dagModel(o, g!.map())).filter((n) => n.state === "next");
+  assert.equal(done.length, 1);
+  assert.equal(done[0].disabled, null);
+  assert.equal(o.exits[0].kind, o.act < 2 ? "stairs" : "gate");
+  g!.go(done[0].n!);
+  assert.ok(g!.observe().act === o.act + 1 || g!.observe().nodeId === "final");
+});
+
+// ---- clickability comes from the engine's `actions` ----
+
+test("availableActions with the engine's list: enabled strictly by it", () => {
+  const g = createGame("demo"), v = g.view();
+  const a = availableActions(v, false, v.actions);
+  assert.equal(a.fight, v.actions.some((c) => c.cmd === "fight"));
+  assert.equal(a.rest, v.actions.some((c) => c.cmd === "rest"));
+  const poor = { ...v, kind: "village" as const, state: { ...v.state, gold: 12 } };
+  const legal: Command[] = [{ cmd: "buy", item: "heal" }];
+  assert.deepEqual(availableActions(poor, false, legal).buy.map((b) => [b.item, b.affordable]), [["heal", true], ["blade", false]]);
+  const deal = { ...v, kind: "deal" as const, resolved: false, offer: null };
+  assert.deepEqual(availableActions(deal, false, [{ cmd: "deal" }]).ask, { again: false, enabled: true });
+  assert.deepEqual(availableActions({ ...deal, offer: { dialogue: "x", effects: {} } }, false, [{ cmd: "accept" }, { cmd: "refuse" }]).ask, { again: true, enabled: false }, "no more haggling");
+});
+
+test("dagModel: a next node is clickable iff {cmd:'go', n} is in the engine's actions", () => {
+  for (const seed of ["demo", "ui-1", "ui-2"]) {
+    const g = createGame(seed);
+    for (let i = 0; i < 12; i++) {
+      const v = g.view();
+      if (v.ending) break;
+      const next = flat(dagModel(v, v.map, false, v.actions)).filter((n) => n.state === "next");
+      for (const n of next) {
+        const legal = v.actions.some((c) => c.cmd === "go" && c.n === n.n);
+        if (!v.enemy && !v.offer) assert.equal(n.disabled === null, legal, `${seed} ${n.id}`);
+        if (n.disabled === null) assert.ok(legal, "enabled implies legal");
+      }
+      if (v.enemy) g.fight(); else if (v.offer) g.refuse(); else g.go(1);
+    }
+  }
+  // an engine list without that go (e.g. only devil_reply) disables everything, even with no UI lock
+  const d = dagModel(obs(), fixture(), false, [{ cmd: "devil_reply", deal: null }]);
+  assert.ok(flat(d).filter((n) => n.state === "next").every((n) => n.disabled === "Not possible right now."));
+  const ok = dagModel(obs(), fixture(), false, [{ cmd: "go", n: 2 }]);
+  assert.deepEqual(flat(ok).filter((n) => n.state === "next").map((n) => [n.id, n.disabled === null]), [["b", false], ["c", true]]);
 });

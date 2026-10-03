@@ -1,6 +1,6 @@
 /** Pure helpers for the test UI: which buttons make sense, and how to style events. No DOM here, so tests can import it. */
-import { isSyncMarker, type Deal, type GameEvent, type MapView, type Observation } from "../game";
-import type { EnemyView, Exit } from "../game/events";
+import { isSyncMarker, type Command, type Deal, type GameEvent, type MapView, type Observation } from "../game";
+import type { EnemyView } from "../game/events";
 import { WARES } from "../game/gameState";
 import type { Kind } from "../map";
 
@@ -12,24 +12,30 @@ export interface Actions {
   fight: boolean;
   rest: boolean;
   buy: Array<{ item: Ware; cost: number; affordable: boolean }>;
-  /** Show the "ask the devil" row (wish input + button); `again` means an offer is already on the table (haggle). */
-  ask: { again: boolean } | null;
+  /** Show the "ask the devil" row (wish input + button); `again` means an offer is already on the table (haggle); `enabled` is false once the devil is done haggling. */
+  ask: { again: boolean; enabled: boolean } | null;
   offer: Deal | null;
 }
 
+const has = (legal: readonly Command[], pred: (c: Command) => boolean) => legal.some(pred);
+
 /**
- * Buttons derived from observe() only. Anything the observation can't tell us (e.g. how many haggles are left)
- * stays enabled and the engine's `rejected` reason is shown instead.
+ * Buttons derived from the observation, and, when `legal` (the engine's `actions` list from `view()`) is given, enabled
+ * strictly by it: fight, rest, an affordable buy, and another deal/haggle exist only if the engine would accept them.
+ * Which buttons are *shown* (and the unaffordable-buy reason) still follows the node kind, so the player sees what is for
+ * sale even when it is out of reach. Without `legal` (pure tests) the old observation-only rules apply.
  */
-export function availableActions(o: Observation, busy = false): Actions {
+export function availableActions(o: Observation, busy = false, legal?: readonly Command[]): Actions {
   const wares: Ware[] = o.kind === "village" ? ["heal", "blade"] : o.kind === "well" && !o.resolved ? ["blessing"] : [];
+  const showAsk = o.kind === "deal" && !o.resolved && !o.enemy;
   return {
     locked: busy || o.pending || o.ending !== null,
     exits: o.exits,
-    fight: o.enemy !== null,
-    rest: o.kind === "campfire" && !o.resolved,
-    buy: wares.map((item) => ({ item, cost: WARES[item].cost, affordable: o.state.gold >= WARES[item].cost })),
-    ask: o.kind === "deal" && !o.resolved && !o.enemy ? { again: o.offer !== null } : null,
+    fight: legal ? has(legal, (c) => c.cmd === "fight") : o.enemy !== null,
+    rest: legal ? has(legal, (c) => c.cmd === "rest") : o.kind === "campfire" && !o.resolved,
+    buy: wares.map((item) => ({ item, cost: WARES[item].cost,
+      affordable: legal ? has(legal, (c) => c.cmd === "buy" && c.item === item) : o.state.gold >= WARES[item].cost })),
+    ask: showAsk ? { again: o.offer !== null, enabled: legal ? has(legal, (c) => c.cmd === "deal") : true } : null,
     offer: o.offer,
   };
 }
@@ -54,31 +60,125 @@ const KIND_WORD: Record<Kind, string> = { campfire: "Campfire", village: "Villag
 /** "Act 2 · Village": where the player is, in words. `act` is 0-based as in the engine. */
 export const nodeTitle = (act: number, kind: Kind): string => `Act ${act + 1} · ${KIND_WORD[kind]}`;
 
-/**
- * Exit button labels that tell same-kind exits apart: "Go → fight · then deal" vs "Go → fight · then campfire".
- * Uses the current act's map (where each exit leads next); falls back to left/middle/right if that's identical too.
- */
-export function exitLabels(o: Observation, map: MapView): string[] {
-  const nodes = new Map(map.layers.flatMap((l) => l.nodes).map((n) => [n.id, n]));
-  const here = nodes.get(o.nodeId);
-  const hints = o.exits.map((x) => {
-    const target = here && x.kind !== "stairs" && x.kind !== "gate" ? nodes.get(here.next[x.n - 1]) : undefined;
-    const after = target ? [...new Set(target.next.map((id) => nodes.get(id)?.kind ?? "?"))] : [];
-    return after.length ? ` · then ${after.join(" / ")}` : "";
-  });
-  const side = (i: number, n: number) => (n === 2 ? ["left", "right"][i] : n === 3 ? ["left", "middle", "right"][i] : `#${i + 1}`);
-  return o.exits.map((x, i) => {
-    const twins = o.exits.map((y, j) => (y.kind === x.kind && hints[j] === hints[i] ? j : -1)).filter((j) => j >= 0);
-    const where = twins.length > 1 ? ` (${side(twins.indexOf(i), twins.length)})` : "";
-    return exitLabel(x) + hints[i] + where;
-  });
+// ---- the map as a choice: DAG model (pure) ---------------------------------------------------------------------
+
+/** The synthetic node drawn above the act's boss on every act but the last (the engine's "stairs" exit). */
+export const STAIRS_ID = "stairs";
+export type DagKind = Kind | typeof STAIRS_ID;
+/** current = you are here; visited = already walked; next = one step away; far = anything else (muted, not clickable). */
+export type DagState = "current" | "visited" | "next" | "far";
+type MapNodeView = MapView["layers"][number]["nodes"][number];
+
+export interface DagNode {
+  id: string;
+  kind: DagKind;
+  state: DagState;
+  rewritten: boolean;
+  /** The exit number for `{cmd:"go", n}`; set for every `next` node, even while a lock disables it. */
+  n: number | null;
+  /** Why a `next` node cannot be clicked right now; null when it can (and always null for other states). */
+  disabled: string | null;
+  /** Accessible name, e.g. "Go to fight a0n2, then deal". */
+  label: string;
+}
+export interface Dag {
+  /** Rows from the top of the screen (stairs or final door, then the boss) down to the act's entry. */
+  rows: DagNode[][];
+  /** Edges as [lower id, upper id], i.e. the direction you walk in. */
+  edges: Array<[string, string]>;
+  /** The one reason all next nodes are disabled, or null. */
+  lock: string | null;
 }
 
-/** Label of an exit button: "Go → fight". Stairs and the final gate get a plain-words hint. */
-export function exitLabel(x: Exit): string {
-  if (x.kind === "stairs") return "Go → stairs (down to the next act)";
-  if (x.kind === "gate") return "Go → the final gate";
-  return `Go → ${x.kind}`;
+const nodeIndex = (map: MapView): Map<string, MapNodeView> =>
+  new Map([...map.layers.flatMap((l) => l.nodes), ...(map.final ? [map.final] : [])].map((n) => [n.id, n]));
+
+/** Kinds of the nodes a node leads to, deduplicated, e.g. ["deal", "campfire"]. Empty if unknown or a dead end. */
+export function afterKinds(map: MapView, id: string): Kind[] {
+  const nodes = nodeIndex(map), n = nodes.get(id);
+  return n ? [...new Set(n.next.map((x) => nodes.get(x)?.kind).filter((k): k is Kind => !!k))] : [];
+}
+
+/** The id of the node above the act's boss: the real final door on the last act, the stairs pseudo-node elsewhere. */
+export const topId = (map: MapView): string => map.final?.id ?? STAIRS_ID;
+
+/**
+ * Map node id -> exit number for `{cmd:"go", n}`, or null when that node is not one step away. The engine's exits are
+ * `here.next` in order, so n = index + 1. The act's boss (the only "boss" kind; rewrites cannot create one) has no `next`
+ * and its single exit (stairs, or the gate on the last act) is n = 1, mapped to `topId(map)`. Computed from the map alone,
+ * not `observe().exits`, because that list is empty while an enemy blocks the way.
+ */
+export function exitNumber(o: Pick<Observation, "nodeId">, map: MapView, targetId: string): number | null {
+  const here = nodeIndex(map).get(o.nodeId);
+  if (!here || here.kind === "final") return null;
+  if (here.kind === "boss") return targetId === topId(map) ? 1 : null;
+  const i = here.next.indexOf(targetId);
+  return i >= 0 ? i + 1 : null;
+}
+
+/**
+ * Why moving is not possible right now, or null. Wording is the tooltip and the visible hint under the map.
+ * The offer rule is stricter than the engine (which would let you `go` with an offer on the table): it is a UI choice so
+ * an offer is never silently abandoned. Whether a given `go n` is clickable is decided by the engine's `actions`, see `dagModel`.
+ */
+export function moveLock(o: Observation, busy = false): string | null {
+  if (o.ending) return "The run is over. Start a new game.";
+  if (busy || o.pending) return "The devil considers…";
+  if (o.enemy) return "Finish the fight first.";
+  if (o.offer) return "Accept or refuse the devil's offer first.";
+  return null;
+}
+
+/** Is `{cmd:"go", n}` among the engine's legal actions? (`legal` undefined = no engine list: trust the map.) */
+const goLegal = (legal: readonly Command[] | undefined, n: number | null): boolean =>
+  n !== null && (!legal || legal.some((c) => c.cmd === "go" && c.n === n));
+const NOT_NOW = "Not possible right now.";
+
+/** Classifies one node. `nextIds` are the ids one step from the current node (from `exitNumber`, not from the lock). */
+export function nodeState(n: Pick<MapNodeView, "id" | "current" | "visited">, nextIds: ReadonlySet<string>): DagState {
+  return n.current ? "current" : n.visited ? "visited" : nextIds.has(n.id) ? "next" : "far";
+}
+
+const DAG_WORD: Record<DagKind, string> = { ...KIND_WORD, stairs: "Stairs" };
+export const dagWord = (k: DagKind): string => DAG_WORD[k];
+
+function dagLabel(kind: DagKind, id: string, state: DagState, rewritten: boolean, then: Kind[], lock: string | null): string {
+  const word = kind.toLowerCase(), star = rewritten ? " (rewritten by the devil)" : "";
+  if (kind === "stairs") return state === "next" ? `Go down the stairs to the next act${lock ? `. ${lock}` : ""}` : "Stairs to the next act, not reachable yet";
+  const here = id === "final" ? "the final door" : `${word} ${id}`;
+  if (state === "current") return `You are here: ${here}${star}`;
+  if (state === "visited") return `${here}, visited${star}`;
+  if (state === "far") return `${here}, not reachable yet${star}`;
+  return `Go to ${id === "final" ? "the final door" : here}${then.length ? `, then ${then.join(" or ")}` : ""}${star}${lock ? `. ${lock}` : ""}`;
+}
+
+/**
+ * Everything the DAG view needs. Node states, labels and exit numbers come from the map (so unreachable and blocked
+ * nodes can still be drawn); whether a next node is *clickable* comes from the engine's `actions` (`legal`, from
+ * `view().actions`), and the UI-only offer rule in `moveLock` can disable it further.
+ */
+export function dagModel(o: Observation, map: MapView, busy = false, legal?: readonly Command[]): Dag {
+  const lock = moveLock(o, busy);
+  const off = (n: number | null): string | null => lock ?? (goLegal(legal, n) ? null : NOT_NOW);
+  const nodes = nodeIndex(map);
+  const all = [...nodes.keys(), ...(map.final ? [] : [STAIRS_ID])];
+  const nextIds = new Set(all.filter((id) => exitNumber(o, map, id) !== null));
+  const bossHere = nodes.get(o.nodeId)?.kind === "boss";
+  const mk = (n: MapNodeView): DagNode => {
+    const state = nodeState(n, nextIds);
+    const num = state === "next" ? exitNumber(o, map, n.id) : null, why = state === "next" ? off(num) : null;
+    return { id: n.id, kind: n.kind, state, rewritten: n.rewritten, n: num, disabled: why, label: dagLabel(n.kind, n.id, state, n.rewritten, afterKinds(map, n.id), why) };
+  };
+  const top: DagNode = map.final ? mk(map.final) : {
+    id: STAIRS_ID, kind: STAIRS_ID, state: bossHere ? "next" : "far", rewritten: false, n: bossHere ? 1 : null,
+    disabled: bossHere ? off(1) : null, label: dagLabel(STAIRS_ID, STAIRS_ID, bossHere ? "next" : "far", false, [], bossHere ? off(1) : null),
+  };
+  const rows = [[top], ...[...map.layers].reverse().map((l) => l.nodes.map(mk))];
+  const edges: Array<[string, string]> = [];
+  for (const n of nodes.values()) for (const t of n.next) edges.push([n.id, t]);
+  const boss = [...nodes.values()].find((n) => n.kind === "boss");
+  if (boss) edges.push([boss.id, top.id]);
+  return { rows, edges, lock };
 }
 
 const WARE_NAME: Record<Ware, string> = { heal: "Heal", blade: "Blade", blessing: "Blessing" };

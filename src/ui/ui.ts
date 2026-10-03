@@ -1,6 +1,6 @@
 /** Game UI: plain DOM over the headless engine. Every button calls the same engine functions as the console. */
 import "./ui.css";
-import { describe, execute, type Command, type GameEvent, type Observation } from "../game";
+import { describe, execute, type Command, type GameEvent } from "../game";
 import type { Session } from "../game/session";
 import { mountChoices } from "./choices";
 import { h, region } from "./dom";
@@ -56,7 +56,7 @@ export function mountUI(root: HTMLElement, session: Session): { layout: HTMLElem
   const choices = mountChoices(ch.body, (c) => void run(c));
 
   function render() {
-    const g = session.game(), o: Observation = g.observe(), A = availableActions(o, busy);
+    const g = session.game(), v = g.view(), o = v, A = availableActions(o, busy, v.actions);
     const looked = g.look().events[0] as Extract<GameEvent, { type: "looked" }>;
     banner.replaceChildren();
     banner.className = o.ending ? `banner show ${o.ending}` : "banner";
@@ -67,12 +67,12 @@ export function mountUI(root: HTMLElement, session: Session): { layout: HTMLElem
       banner.append(h("b", { text: END[o.ending][0] }), " ", END[o.ending][1], " ", again);
     }
     renderSituation(sit.body, o, blurbOf(looked, describe(looked)), looked.curses);
-    choices.render(o, A, busy, g.map());
+    choices.render(v, A, busy);
     renderOutcome(outBox, outcome);
     history.update(log);
     if (refocus && !A.locked) {
       refocus = false;
-      ch.body.querySelector<HTMLElement>("button:not(:disabled)")?.focus();
+      (ch.body.querySelector<HTMLElement>(".actions button:not(:disabled)") ?? ch.body.querySelector<HTMLElement>(".dag button:not(:disabled)"))?.focus();
     }
   }
 
