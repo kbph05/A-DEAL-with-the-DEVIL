@@ -13,6 +13,7 @@ npm install              # install dependencies (first time, or after package.js
 | --- | --- |
 | `npm run dev` | Dev server in **test mode** (`vite --mode test`): game UI plus the test tools (Devil lab with stub/HTTP toggle, autoplay button, F12 console commands). Add `?seed=abc` for a fixed map. |
 | `npm run build:test` | The same test-tools flavour as a static bundle in `dist-test/`. `npm run preview:test` serves it. |
+| `/fight.html` (test builds) | **Fight lab**: the realtime 2D fight on its own (pick act and boss, play, see the `FightResult`). Not in the final build. See [docs/fight.md](docs/fight.md). |
 | `npm run build` | **Final** bundle in `dist/`: game UI only. The lab, autoplay and console are tree-shaken out (`import.meta.env.MODE` check in `src/main.ts`), not hidden. The devil is the HTTP backend at `VITE_DEVIL_URL` (set at build time, e.g. `VITE_DEVIL_URL=https://example.com/deal npm run build`), or the built-in StubDevil if unset. `npm run preview` serves it. |
 | `npm run mock:devil` | Mock backend on `localhost:8787/deal` (StubDevil replies, `?chaos=1` for junk, `?delay=ms`) for testing the HTTP devil without Gemini. Contract: [docs/devil-api.md](docs/devil-api.md). |
 | `npm test` | Unit tests (network-free except the HttpDevil test, which starts the mock on a random local port). |

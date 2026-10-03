@@ -1,0 +1,53 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no" />
+    <title>Fight lab: A DEAL with the DEVIL</title>
+    <style>
+      html, body { margin: 0; height: 100%; background: #120a0a; color: #eee; font: 14px system-ui, sans-serif; }
+      body { display: flex; flex-direction: column; height: 100dvh; overflow: hidden; }
+      #bar { display: flex; flex-wrap: wrap; gap: 6px 12px; align-items: center; padding: 6px 10px; background: #1d1111; border-bottom: 1px solid #3a2222; }
+      #bar label { display: inline-flex; gap: 4px; align-items: center; }
+      #bar input[type=number] { width: 3.2em; }
+      #bar input[type=text] { width: 6em; }
+      #bar input, #bar select, #bar button { font: inherit; background: #2a1a1a; color: #eee; border: 1px solid #553333; border-radius: 4px; padding: 3px 6px; }
+      #bar button { background: #8a2020; border-color: #b33; font-weight: 600; min-height: 32px; padding: 3px 14px; }
+      #bar button:disabled { opacity: .5; }
+      #bar .foe { color: #c99; }
+      #stats { display: contents; }
+      #stats summary { display: none; }
+      @media (max-width: 700px) { #stats { display: block; } #stats summary { display: list-item; cursor: pointer; } #stats[open] { flex-basis: 100%; } }
+      #stage { position: relative; flex: 1; min-height: 0; touch-action: none; user-select: none; -webkit-user-select: none; }
+      #idle { position: absolute; inset: 0; display: grid; place-items: center; color: #a99; text-align: center; padding: 1em; }
+      #done { position: absolute; inset: 0; display: none; place-items: center; background: rgba(10, 4, 4, .85); }
+      #done.show { display: grid; }
+      #done div { max-width: 90%; text-align: center; }
+      #done h2 { margin: 0 0 .4em; }
+      #done pre { text-align: left; background: #000; padding: 10px; border-radius: 6px; font-size: 13px; overflow: auto; }
+      #done button { font: inherit; font-size: 18px; padding: 10px 24px; background: #8a2020; color: #fff; border: 1px solid #b33; border-radius: 6px; min-height: 44px; }
+    </style>
+  </head>
+  <body>
+    <div id="bar">
+      <strong>Fight lab</strong>
+      <label>Act <select id="act"><option value="0">1</option><option value="1">2</option><option value="2">3</option></select></label>
+      <label><input id="boss" type="checkbox" /> Boss</label>
+      <label>Seed <input id="seed" type="text" placeholder="random" /></label>
+      <details id="stats"><summary>Stats</summary>
+        <span>You: <label>HP <input id="php" type="number" min="1" max="60" /></label>/<input id="pmax" type="number" min="1" max="60" aria-label="max HP" />
+          <label>Atk <input id="patk" type="number" min="1" max="12" /></label></span>
+        <span class="foe" id="foe"></span>
+        <label>HP <input id="ehp" type="number" min="1" max="99" /></label>
+        <label>Power <input id="epow" type="number" min="0" max="12" /></label>
+      </details>
+      <button id="go" type="button">Fight</button>
+    </div>
+    <div id="stage">
+      <div id="idle">Pick an act, then press <b>Fight</b>.<br />Desktop: WASD / arrows, Space or click to attack, Shift to dash. Touch: left thumb joystick, Attack and Dash buttons.</div>
+      <div id="done"><div><h2 id="verdict"></h2><pre id="result"></pre><button id="again" type="button">Fight again</button></div></div>
+    </div>
+    <script type="module" src="/src/fight/dev.ts"></script>
+  </body>
+</html>
