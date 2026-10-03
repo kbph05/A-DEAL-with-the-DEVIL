@@ -3,7 +3,7 @@
  * No game logic here. The real point of the console is poking the engine and running `autoplay` / `simulate`.
  */
 import { autoplay, simulate, type Policy } from "./autoplay";
-import { describe, type Result } from "./events";
+import { describe, isSyncMarker, type Result } from "./events";
 import type { Game } from "./run";
 import { createSession, type Session } from "./session";
 
@@ -29,7 +29,7 @@ export function installConsole(target: object = window, session: Session | strin
   if (typeof session === "string") session = createSession(session);
   const s = session;
   const game = () => s.game();
-  const show = (r: Result) => { for (const e of r.events) log(describe(e)); s.emit(r.events); };
+  const show = (r: Result) => { for (const e of r.events) if (!isSyncMarker(e)) log(describe(e)); s.emit(r.events); };
   const w = target as Record<string, unknown>;
   const start = () => { log(`A DEAL with the DEVIL (seed "${game().seed}")\nThe road ends at a table. Someone is already sitting there.`); log(HELP); show(game().look()); };
 

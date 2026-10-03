@@ -54,6 +54,9 @@ const BLURB: Record<Kind, string[]> = {
   final: ["The last door."],
 };
 
+/** Bookkeeping events (backend sync points) that text front ends need not print. */
+export const isSyncMarker = (e: GameEvent): boolean => e.type === "devil_stage_entered" || e.type === "devil_stage_left";
+
 /** One-line (or short multi-line) plain text for an event: for the console and for reading transcripts. */
 export function describe(e: GameEvent): string {
   switch (e.type) {

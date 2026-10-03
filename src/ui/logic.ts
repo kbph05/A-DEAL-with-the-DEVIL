@@ -1,5 +1,5 @@
 /** Pure helpers for the test UI: which buttons make sense, and how to style events. No DOM here, so tests can import it. */
-import type { Deal, GameEvent, MapView, Observation } from "../game";
+import { isSyncMarker, type Deal, type GameEvent, type MapView, type Observation } from "../game";
 import type { EnemyView, Exit } from "../game/events";
 import { WARES } from "../game/gameState";
 import type { Kind } from "../map";
@@ -124,5 +124,6 @@ export function blurbOf(looked: Extract<GameEvent, { type: "looked" }>, text: st
   return i >= 0 ? first.slice(i + looked.kind.length + 4) : first;
 }
 
-/** Events worth showing as "what just happened": everything except the `looked` chatter. */
-export const outcomeEvents = (events: GameEvent[]): GameEvent[] => events.filter((e) => e.type !== "looked");
+/** Events worth showing as "what just happened": everything except the `looked` chatter and the sync markers. */
+export const outcomeEvents = (events: GameEvent[]): GameEvent[] =>
+  events.filter((e) => e.type !== "looked" && !isSyncMarker(e));
