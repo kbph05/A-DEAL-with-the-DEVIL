@@ -24,7 +24,7 @@ export interface Act {
   /** 0-based act index (0..2). */
   index: number;
   runSeed: Seed;
-  /** Whether layers alternate good/bad; rewriteNode enforces it too. */
+  /** Whether layers still alternate good/bad. Generated acts do; a devil rewrite that flips a node's polarity clears it. */
   alternate: boolean;
   /** 6-8 nodes, ordered by layer then slot. */
   nodes: MapNode[];
@@ -32,6 +32,8 @@ export interface Act {
   exit: string;
   /** Last act only: the win/lose node after the boss. Not in `nodes`; draw exit -> final. */
   final?: MapNode;
+  /** Every devil rewrite so far, oldest first, so the UI can show the player what changed. */
+  changes: RewriteChange[];
   /** Node ids already visited (not rewritable). */
   visited: string[];
 }
@@ -48,4 +50,12 @@ export interface GenOptions {
   alternate?: boolean;
 }
 
-export type RewriteResult = { ok: true; act: Act } | { ok: false; reason: string };
+export interface RewriteChange {
+  nodeId: string;
+  from: Kind;
+  to: Kind;
+  /** True when the swap crosses good/bad (e.g. campfire -> fight). */
+  polarityFlip: boolean;
+}
+
+export type RewriteResult = { ok: true; act: Act; change: RewriteChange } | { ok: false; reason: string };

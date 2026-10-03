@@ -6,7 +6,7 @@ Dependency-free TypeScript. A run is 3 acts, each a layered DAG of 6-8 nodes wit
 
 - `generateAct(runSeed, actIndex /*0..2*/, modifiers?, { alternate = true }?) => Act`
 - `rewriteNode(act, nodeId, newKind) => { ok: true, act } | { ok: false, reason }`: immutable, never throws;
-  rejects visited nodes, entry, exit, boss/final, unknown kinds, and polarity flips while alternating.
+  rejects visited nodes, entry, exit, boss/final, unknown kinds and no-op swaps. The devil MAY break good/bad alternation: the result carries `change` (`{nodeId, from, to, polarityFlip}`) and the act keeps a `changes` log, so the UI can tell the player what moved.
 - `markVisited(act, nodeId) => Act`
 - `Modifiers = { forceKinds?: Partial<Record<Kind, number>>, banKinds?: Kind[] }`: "at least N" and "never".
   They change kinds, never shape; a ban that leaves a slot no legal kind is ignored for that polarity.

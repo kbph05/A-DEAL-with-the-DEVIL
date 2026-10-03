@@ -2,7 +2,7 @@ import { hashSeed, mulberry32, type Rng } from "./rng";
 import {
   GOOD_KINDS, BAD_KINDS, isKind, polarity,
   type Act, type GenOptions, type Kind, type MapNode, type Modifiers, type Polarity,
-  type RewriteResult, type Seed,
+  type RewriteChange, type RewriteResult, type Seed,
 } from "./types";
 
 export const ACTS = 3;
@@ -77,7 +77,7 @@ export function generateAct(runSeed: Seed, actIndex: number, modifiers: Modifier
   assignKinds(layers, rng, alternate, modifiers);
   const nodes = layers.flat();
   const exit = layers[layers.length - 1][0];
-  const act: Act = { index: actIndex, runSeed, alternate, nodes, entry: nodes[0].id, exit: exit.id, visited: [] };
+  const act: Act = { index: actIndex, runSeed, alternate, nodes, entry: nodes[0].id, exit: exit.id, changes: [], visited: [] };
   if (actIndex === ACTS - 1) act.final = { id: "final", kind: "final", layer: exit.layer + 1, slot: 0, next: [] };
   return act;
 }
@@ -88,7 +88,11 @@ export function markVisited(act: Act, nodeId: string): Act {
   return known && !act.visited.includes(nodeId) ? { ...act, visited: [...act.visited, nodeId] } : act;
 }
 
-/** Devil rewrite of a not-yet-visited node. Never throws; returns the new act or a reason. */
+/**
+ * Devil rewrite of a not-yet-visited node. Never throws; returns the new act plus the change (for the UI)
+ * or a reason. The devil may break good/bad alternation (team call, 3 Oct): a polarity flip is allowed,
+ * clears `act.alternate`, and is flagged on the change so the player can be told.
+ */
 export function rewriteNode(act: Act, nodeId: string, newKind: Kind): RewriteResult {
   const no = (reason: string): RewriteResult => ({ ok: false, reason });
   const node = act.nodes.find((n) => n.id === nodeId);
@@ -98,6 +102,8 @@ export function rewriteNode(act: Act, nodeId: string, newKind: Kind): RewriteRes
   if (node.id === act.exit) return no("the exit boss cannot be rewritten");
   if (act.visited.includes(node.id)) return no("node already visited");
   if (newKind === "boss" || newKind === "final") return no(`${newKind} is reserved for the act exit`);
-  if (act.alternate && polarity(newKind) !== polarity(node.kind)) return no("would break good/bad alternation");
-  return { ok: true, act: { ...act, nodes: act.nodes.map((n) => (n === node ? { ...n, kind: newKind } : n)) } };
+  if (newKind === node.kind) return no(`node is already ${newKind}`);
+  const change: RewriteChange = { nodeId, from: node.kind, to: newKind, polarityFlip: polarity(newKind) !== polarity(node.kind) };
+  const nodes = act.nodes.map((n) => (n === node ? { ...n, kind: newKind } : n));
+  return { ok: true, change, act: { ...act, nodes, alternate: act.alternate && !change.polarityFlip, changes: [...act.changes, change] } };
 }

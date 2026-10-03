@@ -97,7 +97,6 @@ test("rewriteNode: valid rewrite is immutable and keeps invariants", () => {
 test("rewriteNode: rejections return a result, never throw", () => {
   const act = generateAct(11, 0);
   const mid = act.nodes.find((n) => n.id !== act.entry && n.id !== act.exit)!;
-  const wrong: Kind = polarity(mid.kind) === "good" ? "fight" : "village";
   const reasons = [
     rewriteNode(act, "nope", "well"),
     rewriteNode(act, act.entry, act.nodes[0].kind === "well" ? "village" : "well"),
@@ -105,7 +104,7 @@ test("rewriteNode: rejections return a result, never throw", () => {
     rewriteNode(act, mid.id, "boss"),
     rewriteNode(act, mid.id, "final"),
     rewriteNode(act, mid.id, "dragon" as Kind),
-    rewriteNode(act, mid.id, wrong),
+    rewriteNode(act, mid.id, mid.kind),
     rewriteNode(markVisited(act, mid.id), mid.id, mid.kind === "fight" ? "fight" : "well"),
   ];
   for (const r of reasons) { assert.equal(r.ok, false); assert.ok(!r.ok && r.reason.length > 0); }
@@ -120,14 +119,31 @@ test("rewriteNode: without alternation, cross-polarity is allowed, boss/entry/ex
   assert.ok(!rewriteNode(act, act.entry, "well").ok);
 });
 
-test("rewriteNode: random rewrites of alternating acts never break alternation", () => {
+test("rewriteNode: the devil may break alternation, and the change is reported", () => {
+  const act = generateAct(11, 0);
+  const mid = act.nodes.find((n) => n.id !== act.entry && n.id !== act.exit && polarity(n.kind) === "good")!;
+  const r = rewriteNode(act, mid.id, "fight");
+  assert.ok(r.ok);
+  if (r.ok) {
+    assert.deepEqual(r.change, { nodeId: mid.id, from: mid.kind, to: "fight", polarityFlip: true });
+    assert.equal(r.act.alternate, false, "alternation flag cleared");
+    assert.deepEqual(r.act.changes, [r.change]);
+    assert.deepEqual(act.changes, [], "input act untouched");
+    checkInvariants(r.act);
+  }
+  const same = act.nodes.find((n) => n.id !== act.entry && n.id !== act.exit && n.kind === "fight");
+  if (same) { const s2 = rewriteNode(act, same.id, "fight"); assert.equal(s2.ok, false); }
+});
+
+test("rewriteNode: random rewrites keep invariants and log every change", () => {
   const rng = mulberry32(99);
   for (let s = 0; s < 200; s++) {
     let act = generateAct(s, 0);
     for (let i = 0; i < 10; i++) {
       const n = act.nodes[Math.floor(rng() * act.nodes.length)];
+      const before = act.changes.length;
       const r = rewriteNode(act, n.id, KINDS[Math.floor(rng() * KINDS.length)]);
-      if (r.ok) act = r.act;
+      if (r.ok) { act = r.act; assert.equal(act.changes.length, before + 1); }
     }
     checkInvariants(act);
   }
