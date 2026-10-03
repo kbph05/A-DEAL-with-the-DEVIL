@@ -45,6 +45,7 @@ Gemini returns JSON. The game validates it, clamps every number to its stat's ra
 - A map generator, with random nodes each run.
 
 ## Tech (locked)
+- **Platforms:** mobile and desktop web app (locked 3 Oct). Use responsive scaling (Phaser `Scale.FIT`) and an on-screen joystick for touch (rexrainbow VirtualJoystick).
 - **TypeScript end to end.** The web frontend and the backend share the deal types.
 - **Backend (owner: kbph):** a Gemini harness and key proxy. The browser never sees the API key. SDK: `@google/genai`.
 - **Frontend:** owner and framework **open**. Phaser 3 is the suggestion, with Tiled tilemaps and Arcade physics; Kaplay is the simpler alternative.
