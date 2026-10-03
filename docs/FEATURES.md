@@ -372,7 +372,7 @@ Exits are described by `Exit { n, kind }`, where `kind` is the next node's kind,
 
 ### 10.1 Engine API (`src/game/state-machine.ts` and friends, re-exported in `src/game/index.ts`; details in `docs/engine.md`)
 
-The engine is a **pure reducer**: the whole run is one plain JSON object, `GameState` (seed, dice RNG state, generated acts, player, curses, enemy, deal bookkeeping, ending, pending devil request), and `step(state, command)` returns `{ ok, state, events, actions, awaiting? }` without mutating its input or doing I/O. `initialState(seed)` starts a run; `JSON.parse(JSON.stringify(state))` continues it identically.
+The engine is a **pure reducer**: the whole run is one plain JSON object, `GameState` (seed, dice RNG state, generated acts, player, curses, enemy, deal bookkeeping, ending, pending devil request), and `step(state, command)` returns `{ ok, state, events, actions, awaiting? }` without mutating its input or doing I/O. `initialState(seed)` starts a run; `JSON.parse(JSON.stringify(state))` continues it identically (given the same devil: the StubDevil's own RNG lives outside the state).
 
 - **Commands** (`Command`): `{cmd:"look"}`, `{cmd:"go",n}`, `{cmd:"fight"}`, `{cmd:"rest"}`, `{cmd:"buy",item}`, `{cmd:"deal",text?}`, `{cmd:"accept"}`, `{cmd:"refuse"}`, and `{cmd:"devil_reply",deal}`.
 - **Rejection:** a rejected command returns the same state and one `rejected` event.
@@ -460,7 +460,7 @@ In test builds, `VITE_DEVIL_URL` only sets the default URL shown in the Devil la
 | `src/game/httpDevil.test.ts` | 5 | HttpDevil against the mock backend (request body, sanitizable reply), a full bot run with chaos on, chaos replies either reject or sanitize, refused connection and timeout never throw, non-JSON server |
 | `src/ui/logic.test.ts` | 7 | button availability from `observe()`, event colour classes, `diffDeal`, labels and chips, exit labels |
 | `src/game/equivalence.test.ts` | 3 | 500 bot seeds and 200 chaos seeds (random valid and invalid commands) reproduce, command for command, the results, events and final states recorded with the pre-refactor engine (`src/game/__fixtures__/`) |
-| `src/game/contract.test.ts` | 2 | the JSON contract is additive only: path-to-type snapshot of Command, PlayerState, Observation, MapView, Result, every GameEvent, the devil request, REPL `--json` lines (and `--state`) |
+| `src/game/contract.test.ts` | 2 | the JSON contract is additive only: path-to-type snapshots (`contract.json`, the frozen pre-refactor baseline, and `contract-current.json`, with the new fields) of Command, PlayerState, Observation, MapView, Result, every GameEvent, the devil request, REPL `--json` lines (also `--state`, `--manual-devil`) |
 | `src/game/engine.test.ts` | 9 | `step` purity (deep-frozen input), legal-actions property, the devil round trip, GameState JSON save and restore mid-run, devil-stage events, `Session.onSync`, `view` |
 
 Not covered by tests: the DOM UI rendering, the console, REPL text mode, combat numbers, shop numbers, balance (the REPL `--json` shape is covered by the contract test).

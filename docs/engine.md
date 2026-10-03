@@ -6,7 +6,9 @@ Source: `src/game/gameState.ts` (the state and read-only queries), `src/game/sta
 
 ## GameState
 
-One JSON-serializable object with everything needed to continue a run exactly: `JSON.parse(JSON.stringify(state))` continues byte-for-byte. It contains no class instances, functions, Maps or Sets.
+One JSON-serializable object with everything the engine needs to continue a run exactly: `JSON.parse(JSON.stringify(state))` continues byte-for-byte. It contains no class instances, functions, Maps or Sets.
+
+**The devil is not in the state.** The devil is an outside party, and its memory is its own. The `StubDevil` keeps a private RNG and remembers its last offer. To replay a restored run identically, keep the same devil instance: `restoreGame(state, sameDevil)`. With a fresh `StubDevil` (the default in `restoreGame(state)`), the run continues legally but the devil's offers can differ from the next deal on. A stateless backend devil (a pure function of the request) has no such caveat.
 
 | Field | Meaning |
 | --- | --- |
@@ -101,5 +103,7 @@ Plan: keep the state client-side and exchange it with the backend only when ente
 ## Safety nets (tests)
 
 - **`src/game/equivalence.test.ts`:** replays 500 bot seeds and 200 "chaos" seeds against fixtures recorded with the old class engine. The chaos seeds mix random valid and invalid commands, haggles and fine print. The comparison covers every command, result, event and final state. Regenerate with `npx tsx src/game/__fixtures__/generate.ts` only for an intended behaviour change.
-- **`src/game/contract.test.ts`:** fails on any non-additive change to an external JSON shape: `Command`, `PlayerState`, `Observation`, `MapView`, `Result`, every `GameEvent`, the devil request, and the REPL `--json` lines.
+- **`src/game/contract.test.ts`:** fails on any non-additive change to an external JSON shape: `Command`, `PlayerState`, `Observation`, `MapView`, `Result`, every `GameEvent`, the devil request, and the REPL `--json` lines. It checks against two snapshots:
+  - `contract.json`: the frozen pre-refactor baseline.
+  - `contract-current.json`: includes `actions`, `awaiting`, `game_state`, `curses`, `asksLeft`, the `devil_stage_*` events, and the `--manual-devil` lines. When you add a field, regenerate this one with the generator.
 - **`src/game/engine.test.ts`:** covers purity (deep-frozen inputs), the legal-actions property, the devil round trip, JSON save and restore mid-run, the sync events and `onSync`, and `view`.

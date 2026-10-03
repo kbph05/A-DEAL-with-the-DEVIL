@@ -115,7 +115,7 @@ const ODD: Array<(seed: string) => Devil> = [
 ];
 
 /** Collect the shapes of PlayerState, Observation, MapView, events, commands, Result and the devil request. */
-export async function contractShapes(): Promise<Record<string, string[]>> {
+export async function contractShapes(opts: { includeNew?: boolean } = {}): Promise<Record<string, string[]>> {
   const states: unknown[] = [], ctxs: unknown[] = [], obs: unknown[] = [], maps: unknown[] = [], results: unknown[] = [], requests: unknown[] = [];
   const events = new Map<string, unknown[]>(), cmds = new Map<string, unknown[]>();
   const push = <K>(m: Map<K, unknown[]>, k: K, v: unknown) => { const a = m.get(k); if (a) a.push(v); else m.set(k, [v]); };
@@ -148,13 +148,18 @@ export async function contractShapes(): Promise<Record<string, string[]>> {
   shapes([{ ...ap, events: [] }], "AutoplayResult", out);
   for (const [t, xs] of [...events].sort()) shapes(xs, `GameEvent:${t}`, out);
   for (const [c, xs] of [...cmds].sort()) shapes(xs, `Command:${c}`, out);
-  Object.assign(out, replShapes());
-  return Object.fromEntries(Object.entries(out).filter(([k]) => ![...NEW_EVENT_TYPES].some((t) => k.startsWith(`GameEvent:${t}`))).sort(([a], [b]) => (a < b ? -1 : 1)));
+  Object.assign(out, replShapes(opts.includeNew ? ["--state"] : []));
+  if (opts.includeNew) { // the devil driven by hand: awaiting, devil_reply
+    const reply = '{"cmd":"devil_reply","deal":{"dialogue":"Sign.","effects":{"gold":5},"curse":{"trigger":"on_hit","effect":{"hp":-1}}}}';
+    Object.assign(out, replShapes(["--state", "--manual-devil"], "repl-manual", ['{"cmd":"deal","text":"gold"}', '{"cmd":"go","n":1}', reply, '{"cmd":"deal"}', reply, '{"cmd":"accept"}']));
+  }
+  const keep = ([k]: [string, unknown]) => opts.includeNew || ![...NEW_EVENT_TYPES].some((t) => k.startsWith(`GameEvent:${t}`));
+  return Object.fromEntries(Object.entries(out).filter(keep).sort(([a], [b]) => (a < b ? -1 : 1)));
 }
 
 /** The REPL's `--json` output lines, driven through a real child process. */
-export function replShapes(extraArgs: string[] = []): Record<string, string[]> {
-  const lines = [
+export function replShapes(extraArgs: string[] = [], prefix = "repl", extraLines: string[] = []): Record<string, string[]> {
+  const lines = [...extraLines,
     '{"cmd":"look"}', '{"cmd":"map"}', '{"cmd":"help"}', "not a command", '{"cmd":"go"}', '{"nope":1}',
     ...Array.from({ length: 6 }, () => ['{"cmd":"fight"}', '{"cmd":"rest"}', '{"cmd":"buy","item":"blessing"}', '{"cmd":"buy","item":"heal"}',
       '{"cmd":"deal","text":"gold"}', '{"cmd":"deal"}', '{"cmd":"accept"}', '{"cmd":"refuse"}', '{"cmd":"go","n":1}', "fight", "go 2", "buy blade", "deal soul", "accept"]).flat(),
@@ -165,7 +170,7 @@ export function replShapes(extraArgs: string[] = []): Record<string, string[]> {
   const out = r.stdout.trim().split("\n").map((l) => JSON.parse(l) as Record<string, unknown>);
   const group = (o: Record<string, unknown>) => ("error" in o ? "error" : "help" in o ? "help" : "events" in o ? "report" : "map");
   const shp: Record<string, string[]> = {};
-  for (const g of ["report", "map", "error", "help"]) shapes(out.filter((o) => group(o) === g), `repl:${g}`, shp);
+  for (const g of ["report", "map", "error", "help"]) shapes(out.filter((o) => group(o) === g), `${prefix}:${g}`, shp);
   // events inside report lines are covered per type above; keep only the line-level and non-event structure here
-  return Object.fromEntries(Object.entries(shp).filter(([k]) => !k.startsWith("repl:report.events[].")));
+  return Object.fromEntries(Object.entries(shp).filter(([k]) => !k.startsWith(`${prefix}:report.events[].`)));
 }

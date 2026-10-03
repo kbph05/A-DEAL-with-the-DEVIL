@@ -71,7 +71,7 @@ function report(cmd: Input | string, r: Result) {
 
 function showMap() {
   const m = game.map();
-  if (JSON_MODE) return console.log(JSON.stringify({ cmd: "map", ok: true, map: m }));
+  if (JSON_MODE) return console.log(JSON.stringify({ cmd: "map", ok: true, map: m, ...(WITH_STATE ? { game_state: game.gameState } : {}) }));
   for (const l of [...m.layers].reverse())
     console.log("  " + l.nodes.map((n) => `${n.current ? "[" : " "}${n.kind}${n.rewritten ? "*" : ""}${n.visited ? "·" : ""}${n.current ? "]" : " "}`).join("  "));
 }
