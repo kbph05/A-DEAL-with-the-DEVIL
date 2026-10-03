@@ -15,4 +15,7 @@ npm run preview          # serve dist/ locally to check the build
 
 To share a build, upload the contents of `dist/` to itch.io (HTML game) or GitHub Pages.
 
-Phaser 3 + Vite + TypeScript. Scaled with `Scale.FIT` (720×1280 design size) for mobile and desktop.
+Phaser 3 + Vite + TypeScript. **Current prototype round is console-only**: no canvas; `src/main.ts` boots `src/game/console.ts` and the page just says to open devtools.
+Play in the browser console (F12): `help()`, `look()`, `go(1)`, `fight()`, `rest()`, `buy("heal")`, `deal("text")`, `accept()`, `refuse()`, `map()`, `newgame("abc")`. `?seed=abc` fixes the run.
+The engine (`src/game/run.ts`) is headless: each command returns `{ ok, events, state }`. For automated play use `await autoplay("abc")` (full event log) or `await simulate(200)` (outcome counts); both also run in Node tests.
+Devil: `StubDevil` by default; kbph's Gemini client plugs in via `setDevil()` in `src/game/devil.ts`. Phaser scene (`src/scenes/MapScene.ts`) is kept but not imported; see the comment in `main.ts` to switch back.
