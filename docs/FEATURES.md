@@ -20,7 +20,7 @@ Source: `src/map/mapgen.ts`, `src/map/types.ts`, `src/map/rng.ts`, `src/map/READ
 
 ### 2.1 Acts, layers, node counts
 
-- A run = **3 acts** (`ACTS = 3`). Each act has **6 to 8 nodes** (inclusive of its entry and exit), drawn uniformly. The act-3 **final** node is extra, outside that count.
+- A run = **3 acts** (`ACTS = 3`). Each act has **12 to 14 nodes** (inclusive of its entry and exit), drawn uniformly. The act-3 **final** node is extra, outside that count.
 - Each act is a **layered DAG**: nodes sit in layers, edges only go from layer n to layer n+1 (no backtracking, no skipping).
 - Exactly **1 entry node** (layer 0) and **1 exit node** (last layer). Every node has at least one parent (except entry) and at least one child (except exit), so every node is reachable and no dead ends exist.
 - Middle layers hold **1 to 4 nodes** (`MAX_WIDTH = 4`, kbph 3 Oct: more branches; was 3). The generator never produces a straight line: with the default alternating layout there are **4 or 6 layers**, and the extra nodes (total minus layer count) are dropped into random middle layers.
@@ -460,7 +460,7 @@ In test builds, `VITE_DEVIL_URL` only sets the default URL shown in the Devil la
 
 | File | Tests | Covers |
 | --- | --- | --- |
-| `src/map/mapgen.test.ts` | 16 | act 1 always starting on the village, lanes (width up to 4 and every width 2 to 4 occurring, average out-degree <= 1.35 and forked middle nodes <= 16% over 3000 acts), planarity in slot order and at most one cross-link per layer pair (checked for every act in every test), 6 to 8 node counts and all three sizes occurring, structure (single root and leaf, reachability, boss exit, alternation on and off), determinism, unique ids across acts, rewrite rules and rejections, polarity flips and change log, modifiers (force/ban, silly input), 1000 random seeds never breaking invariants |
+| `src/map/mapgen.test.ts` | 16 | act 1 always starting on the village, lanes (width up to 4 and every width 2 to 4 occurring, average out-degree <= 1.35 and forked middle nodes <= 16% over 3000 acts), planarity in slot order and at most one cross-link per layer pair (checked for every act in every test), 12 to 14 node counts and all three sizes occurring, structure (single root and leaf, reachability, boss exit, alternation on and off), determinism, unique ids across acts, rewrite rules and rejections, polarity flips and change log, modifiers (force/ban, silly input), 1000 random seeds never breaking invariants |
 | `src/game/deal.test.ts` | 9 | `sanitizeDeal` clamps and junk, a hostile devil never crashing the engine, rewrite applied and rewrite failure reporting, curses firing once, revival once, soul sold and fatal in one deal not reviving, StubDevil validity and determinism |
 | `src/game/autoplay.test.ts` | 6 | 200 seeds always end win, lose or hell with no stalls, stats always in range, determinism, `simulate` tallies, a do-nothing policy times out, hell when winning soulless vs win with soul |
 | `src/game/httpDevil.test.ts` | 5 | HttpDevil against the mock backend (request body, sanitizable reply), a full bot run with chaos on, chaos replies either reject or sanitize, refused connection and timeout never throw, non-JSON server |
@@ -557,7 +557,7 @@ Gaps against `requirements.md` (and the team's intent):
 - **Modifiers (`forceKinds` / `banKinds`) are not wired** to anything, so devils cannot shape the next act in the way the requirements hint at (only rewrite nodes in the current act).
 - **Devil rewrites** are only allowed within the current act and only to `fight, village, campfire, well, deal`. "Replace upcoming nodes" in later acts is not possible (later acts do not exist yet when you are in act 1).
 - **Same devil every time:** "whether every deal is with the same devil" is open; the code has one devil object per game.
-- **Acts:** 3 acts of 6 to 8 nodes, one entry, one exit, a final win/lose node: matches. "Final win/lose node": the final node always means win or hell; "lose" only comes from dying.
+- **Acts:** 3 acts of 12 to 14 nodes, one entry, one exit, a final win/lose node: matches. "Final win/lose node": the final node always means win or hell; "lose" only comes from dying.
 - **Open decision implemented as default:** good and bad nodes strictly alternate by layer (the requirements left this open); the devil is allowed to break it.
 
 Known issues and design flags:

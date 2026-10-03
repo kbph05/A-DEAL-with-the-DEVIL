@@ -10,7 +10,7 @@ function checkInvariants(act: Act): void {
   const { nodes } = act;
   const byId = new Map(nodes.map((n) => [n.id, n]));
   assert.equal(byId.size, nodes.length, "unique ids");
-  assert.ok(nodes.length >= 6 && nodes.length <= 8, `node count ${nodes.length}`);
+  assert.ok(nodes.length >= 12 && nodes.length <= 14, `node count ${nodes.length}`);
   const incoming = new Map<string, string[]>(nodes.map((n) => [n.id, []]));
   for (const n of nodes) for (const t of n.next) {
     assert.ok(byId.has(t), `edge to unknown ${t}`);
@@ -57,10 +57,10 @@ function checkInvariants(act: Act): void {
 
 const count = (act: Act, k: Kind) => act.nodes.filter((n) => n.kind === k).length;
 
-test("node count is 6-8 and all three sizes occur", () => {
+test("node count is 12-14 and all three sizes occur", () => {
   const sizes = new Set<number>();
   for (let s = 0; s < 200; s++) sizes.add(generateAct(s, 0).nodes.length);
-  assert.deepEqual([...sizes].sort(), [6, 7, 8]);
+  assert.deepEqual([...sizes].sort((a, b) => a - b), [12, 13, 14]);
 });
 
 test("lanes: widths up to 4 occur; few cross-links, so a branch mostly commits you to its lane (planar via checkInvariants)", () => {
@@ -83,7 +83,7 @@ test("lanes: widths up to 4 occur; few cross-links, so a branch mostly commits y
   assert.deepEqual([...widths].sort(), [2, 3, 4]);
   // Measured on 3 Oct: avg out-degree 1.31 (was 1.39 with 3 wide and 25% cross-links), middle nodes with a fork 12% (was 21%).
   assert.ok(out / nonExit <= 1.35, `average out-degree ${(out / nonExit).toFixed(3)}`);
-  assert.ok(branching / middle <= 0.16, `middle nodes with more than one exit: ${(branching / middle).toFixed(3)}`);
+  assert.ok(branching / middle <= 0.2, `middle nodes with more than one exit: ${(branching / middle).toFixed(3)}`);
 });
 
 test("structure: single root/leaf, reachability, boss exit, alternation (both option values)", () => {

@@ -359,7 +359,7 @@ export function fireChoice(log: readonly GameEvent[]): FireChoice {
 }
 
 /**
- * The single-use choices of a campfire (Rest or Train: one or the other) or a well. Once the node is resolved (the
+ * The single-use choices of a campfire (Rest or Sharpen Weapon: one or the other) or a well. Once the node is resolved (the
  * engine's `resolved`, and no rest / train / blessing in `actions`) the card taken shows as chosen, the other as closed,
  * and nothing can be clicked: you only ever get one. `fire` says which campfire card was taken (see `fireChoice`).
  */
@@ -370,7 +370,7 @@ export function chooseCards(o: Pick<Observation, "kind" | "resolved" | "state">,
     const trainable = A.train ?? o.state.attack < cap;
     return [
       { key: "rest", icon: "🔥", title: "Rest", effect: `Heal up to ${heal} HP`, cmd: { cmd: "rest" }, state: o.resolved ? spent("rest") : "available", note: null },
-      { key: "train", icon: "🗡️", title: "Train", effect: `+${TRAIN_ATTACK} Attack, for the rest of the run`, cmd: { cmd: "train" },
+      { key: "train", icon: "🗡️", title: "Sharpen Weapon", effect: `+${TRAIN_ATTACK} Attack, for the rest of the run`, cmd: { cmd: "train" },
         state: o.resolved ? spent("train") : trainable ? "available" : "short", note: !o.resolved && !trainable ? `Attack is already at its peak (${cap})` : null },
     ];
   }

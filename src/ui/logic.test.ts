@@ -314,7 +314,7 @@ test("shop lists price tags at the village only; the well's blessing is a single
 test("real engine: one pick resolves campfire and well; the village keeps selling", () => {
   // Walk seeds until each kind turns up, driving the engine with the bot-ish rule: take exit 1, fight when blocked.
   const seen = new Set<string>();
-  for (let i = 0; i < 40 && seen.size < 3; i++) {
+  for (let i = 0; i < 60 && !["village", "well", "campfire", "train"].every((k) => seen.has(k)); i++) {
     const g = createGame(`panel-${i}`);
     for (let step = 0; step < 60; step++) {
       const v = g.view();

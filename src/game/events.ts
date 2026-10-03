@@ -78,7 +78,7 @@ export function describe(e: GameEvent): string {
     case "enemy_slain": return `${e.name} falls. +${e.gold} gold.`;
     case "damaged": return `You take ${e.amount} damage from ${e.source}. HP ${e.hp}.`;
     case "healed": return `You heal ${e.amount} (${e.source}). HP ${e.hp}.`;
-    case "trained": return `You train by the fire instead of resting: Attack +${e.amount}, now ${e.attack}. The embers die.`;
+    case "trained": return `You sharpen your weapon by the fire instead of resting: Attack +${e.amount}, now ${e.attack}. The embers die.`;
     case "bought": return `Bought ${e.item} for ${e.cost}g: ${fmtDeltas(e.changes)}.`;
     case "deal_offered": {
       const d = e.deal;

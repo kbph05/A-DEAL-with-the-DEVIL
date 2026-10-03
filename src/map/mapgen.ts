@@ -10,6 +10,8 @@ export const ACTS = 3;
 export const START_KIND: Kind = "village";
 /** Lanes per layer (kbph: more branches). */
 export const MAX_WIDTH = 4;
+/** Fewest lanes in a middle layer (entry and exit layers are always 1). Raise to 2+ for maps that always branch. */
+export const MIN_WIDTH = 1;
 /**
  * Chance that a pair of adjacent layers gets one cross-link between lanes, beyond the fewest edges that connect them
  * (kbph, 3 Oct: "each direction should be more of a dedication of where you're going"). At most one per layer pair.
@@ -47,21 +49,23 @@ function linkLayers(rng: Rng, m: number, n: number): Array<[number, number]> {
 
 /** Layered DAG: one node in the first and last layer, 1..MAX_WIDTH in between, edges only layer n -> n+1, never crossing. */
 function buildShape(rng: Rng, actIndex: number, alternate: boolean): MapNode[][] {
-  const total = 6 + Math.floor(rng() * 3); // 6..8
-  // Exit must be bad (boss), so with alternation its layer index is odd: 4 or 6 layers.
-  // Keep at least one layer wider than 1 so an act is never a straight line.
+  const total = 12 + Math.floor(rng() * 3); // 12..14 (kbph: longer acts, more decisions)
+  // Exit must be bad (boss), so with alternation its layer index is odd: 6 or 8 layers.
   const r = rng();
-  const layerCount = alternate ? (total >= 7 && r < 0.5 ? 6 : 4) : 4 + Math.floor(r * Math.min(3, total - 4));
-  const widths = new Array<number>(layerCount).fill(1);
-  for (let extra = total - layerCount; extra > 0; extra--) {
-    const open = widths.map((w, i) => (i > 0 && i < layerCount - 1 && w < MAX_WIDTH ? i : -1)).filter((i) => i >= 0);
+  const layerCount = alternate ? (r < 0.5 ? 6 : 8) : 6 + Math.floor(r * 3); // even when alternating: entry good, exit bad
+  // Middle layers start at MIN_WIDTH; if that can't fit the node budget, fall back to fewer layers.
+  let lc = layerCount;
+  while (lc > 4 && 2 + (lc - 2) * MIN_WIDTH > total) lc -= alternate ? 2 : 1;
+  const widths = Array.from({ length: lc }, (_, i) => (i === 0 || i === lc - 1 ? 1 : MIN_WIDTH));
+  for (let extra = total - widths.reduce((a, b) => a + b, 0); extra > 0; extra--) {
+    const open = widths.map((w, i) => (i > 0 && i < lc - 1 && w < MAX_WIDTH ? i : -1)).filter((i) => i >= 0);
     widths[pick(rng, open)]++;
   }
   let n = 0;
   const layers = widths.map((w, layer) =>
     Array.from({ length: w }, (_, slot): MapNode => ({ id: `a${actIndex}n${n++}`, kind: "fight", layer, slot, next: [] })),
   );
-  for (let l = 0; l < layerCount - 1; l++) {
+  for (let l = 0; l < lc - 1; l++) {
     const [from, to] = [layers[l], layers[l + 1]];
     for (const [a, b] of linkLayers(rng, from.length, to.length)) from[a].next.push(to[b].id);
     for (const a of from) a.next.sort((x, y) => to.findIndex((t) => t.id === x) - to.findIndex((t) => t.id === y)); // exits left to right
