@@ -61,7 +61,7 @@ blockquote { margin: 6px 0; padding: 6px 12px; border-left: 4px solid #9a6ac0; f
 .dag-edges .edge { stroke: #5a4040; stroke-width: 2; stroke-dasharray: 4 4; }
 .dag-edges .edge.walked { stroke: #7a6a6a; stroke-dasharray: none; }
 .dag-edges .edge.out { stroke: var(--accent); stroke-width: 3; stroke-dasharray: none; }
-.dag-rows { position: relative; display: flex; flex-direction: column; gap: 22px; }
+.dag-rows { position: relative; display: flex; flex-direction: column; gap: 34px; padding-top: 18px; }
 .layer { display: flex; flex-wrap: wrap; justify-content: center; gap: 10px 14px; }
 .node { box-sizing: border-box; display: flex; flex-direction: column; align-items: center; justify-content: center; position: relative;
   min-width: 92px; min-height: 52px; padding: 4px 10px; border: 2px solid #5a3a3a; border-radius: 10px; background: #1c1010; color: var(--ink); font-size: 14px; line-height: 1.2; text-align: center; }
@@ -70,7 +70,14 @@ blockquote { margin: 6px 0; padding: 6px 12px; border-left: 4px solid #9a6ac0; f
 .node.fight, .node.boss { border-color: #8a3a30; } .node.deal { border-color: #8a5aa0; }
 .node.far { opacity: .5; border-style: dashed; color: #c8b4b4; }
 .node.visited { opacity: .6; background: #140c0c; }
-.node.current { opacity: 1; outline: 3px solid var(--accent); outline-offset: 2px; background: #3a2a10; }
+.node.current { opacity: 1; z-index: 1; transform: scale(1.12); background: #ffb070; border: 3px solid #fff3e0; color: #1a0c06;
+  box-shadow: 0 0 0 4px #ffb07066, 0 0 22px 6px #ffb070aa; animation: here-pulse 1.6s ease-in-out infinite; }
+.node.current .id { color: #4a2a14; } .node.current .kind { font-weight: 800; }
+.node .here { position: absolute; top: -26px; left: 50%; transform: translateX(-50%); white-space: nowrap;
+  padding: 2px 8px; border-radius: 999px; background: #fff3e0; color: #1a0c06; font-size: 11px; font-weight: 800; letter-spacing: .04em;
+  box-shadow: 0 1px 4px #000a; }
+@keyframes here-pulse { 50% { box-shadow: 0 0 0 7px #ffb07033, 0 0 30px 10px #ffb070cc; } }
+@media (prefers-reduced-motion: reduce) { .node.current { animation: none; } }
 .node.rewritten { background: #3a2a10; border-color: #e0a030; }
 button.node.next { cursor: pointer; background: #3a2a22; border-color: #ffb070; color: #fff; font-weight: 600; box-shadow: 0 0 10px #ffb07044; }
 button.node.next:hover:not(:disabled) { background: #4c3a2e; }

@@ -26,6 +26,7 @@ export function mountDag(send: (c: Command) => void): DagView {
       h("small", { class: "id", text: n.kind === "stairs" ? "next act" : n.id }),
     ];
     if (n.rewritten) kids.push(h("span", { class: "star", aria: { hidden: "true" }, text: "★" }));
+    if (n.state === "current") kids.unshift(h("span", { class: "here", aria: { hidden: "true" }, text: "▼ YOU ARE HERE" }));
     const cls = `node ${n.kind} ${n.state}${n.rewritten ? " rewritten" : ""}`;
     if (n.state !== "next") {
       const d = h("div", { class: cls }, ...kids);
