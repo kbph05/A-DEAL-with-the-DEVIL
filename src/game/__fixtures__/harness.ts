@@ -12,7 +12,8 @@ import { autoplay, botPolicy, execute, type Command, type Policy } from "../auto
 import { StubDevil, type Deal, type Devil } from "../devil";
 import type { GameEvent, Result } from "../events";
 import { HttpDevil } from "../httpDevil";
-import { createGame, type Game } from "../run";
+import { initialState } from "../gameState";
+import { createGame, restoreGame, type Game } from "../run";
 
 export const BOT_SEEDS = Array.from({ length: 500 }, (_, i) => `eq-${i}`);
 export const CHAOS_SEEDS = Array.from({ length: 200 }, (_, i) => `chaos-${i}`);
@@ -136,6 +137,15 @@ export async function contractShapes(opts: { includeNew?: boolean } = {}): Promi
   for (let i = 0; i < 12; i++) await play(createGame(`contract-${i}`, wire(new StubDevil(`contract-${i}`))), chaosPolicy(mulberry32(i + 1)));
   for (let i = 0; i < 40; i++) await play(createGame(`odd-${i}`, wire(ODD[i % ODD.length](`odd-${i}`))), chaosPolicy(mulberry32(100 + i)));
   for (let i = 0; i < 20; i++) await play(createGame(`odd-bot-${i}`, wire(ODD[i % ODD.length](`odd-bot-${i}`))), botPolicy);
+  { // Anchor: a look while a cursed, rewriting offer stands, and again once it is accepted, so the `looked` shapes (offer,
+    // curses) never depend on the random policies happening to look at the right moment (they drift when maps or rules
+    // change). The run is put on a deal node by hand: act 1 opens on the village.
+    const s = initialState("contract-anchor");
+    s.acts[0].nodes[0].kind = "deal";
+    const g = restoreGame(s, ODD[0]("contract-anchor"));
+    const look = () => { const l = json(g.look()); results.push(l); for (const e of l.events) push(events, e.type, e); };
+    await g.deal(); look(); g.accept(); look();
+  }
   const ap = json(await autoplay("contract-ap", botPolicy, 1000, new StubDevil("contract-ap")));
   for (const e of ap.events) push(events, e.type, e);
   const out: Record<string, string[]> = {};
