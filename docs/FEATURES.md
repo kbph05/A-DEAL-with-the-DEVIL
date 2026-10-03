@@ -1,6 +1,6 @@
 # A DEAL with the DEVIL: feature sheet
 
-What is **already in the game**, as the code does it today (snapshot of `master` on 3 Oct 2026, 40 passing tests). Written for gameplay design: every number below was read from source, with the file in brackets. Anything marked **(first guess)** is a placeholder value nobody has balanced yet. Where the code and `requirements.md` disagree, see section 12.
+What is **already in the game**, as the code does it today (snapshot of `main` on 3 Oct 2026 plus the stateless-engine refactor, 55 passing tests). Written for gameplay design: every number below was read from source, with the file in brackets. Anything marked **(first guess)** is a placeholder value nobody has balanced yet. Where the code and `requirements.md` disagree, see section 12.
 
 Contents: 1 Overview, 2 Run structure and map, 3 Player, 4 Nodes, 5 Combat, 6 The devil, 7 Curses, 8 Soul and endings, 9 Events, 10 Interfaces, 11 Balance snapshot, 12 Gaps and known issues.
 
@@ -10,13 +10,13 @@ Contents: 1 Overview, 2 Run structure and map, 3 Player, 4 Nodes, 5 Combat, 6 Th
 
 A run is a walk through **3 acts**, each a small branching map ending in a boss, followed by one last "final" door. You start with 30 HP, 10 gold, attack 3 and your soul. At each node you do what the node allows: fight, rest, shop, drink from a well, or sit down with the devil and haggle over a deal. The devil's deals are bad-faith: they pay now and cost later (curses), and can **rewrite nodes ahead of you on the map**. You **lose** if HP hits 0 (unless your soul pays for one revival), and at the final door you **win** if you still own your soul, or go to **hell** if you sold or spent it.
 
-Everything is a headless engine (`src/game/run.ts`) that returns plain event data. There is no canvas or art yet. Today you can play it four ways: in a terminal (`npm run play`, text or `--json`), in a plain-DOM test page (`npm run dev`), from the browser console (F12, test builds), or let a bot play (`autoplay`, `simulate`). The devil is a canned `StubDevil` by default, or an HTTP backend (the Gemini proxy) behind the same interface.
+Everything is a headless, stateless engine: one JSON `GameState` and a pure `step(state, command)` reducer (`src/game/state-machine.ts`, wrapped as the `Game` class in `src/game/run.ts`; see `docs/engine.md`) that returns plain event data. There is no canvas or art yet. Today you can play it four ways: in a terminal (`npm run play`, text or `--json`), in a plain-DOM test page (`npm run dev`), from the browser console (F12, test builds), or let a bot play (`autoplay`, `simulate`). The devil is a canned `StubDevil` by default, or an HTTP backend (the Gemini proxy) behind the same interface.
 
 ---
 
 ## 2. Run structure and map
 
-Source: `src/map/mapgen.ts`, `src/map/types.ts`, `src/map/rng.ts`, `src/map/README.md`. Engine use: `src/game/run.ts`.
+Source: `src/map/mapgen.ts`, `src/map/types.ts`, `src/map/rng.ts`, `src/map/README.md`. Engine use: `src/game/state-machine.ts`.
 
 ### 2.1 Acts, layers, node counts
 
@@ -38,7 +38,7 @@ Source: `src/map/mapgen.ts`, `src/map/types.ts`, `src/map/rng.ts`, `src/map/READ
 
 ### 2.3 Lazy generation
 
-Act 1 is generated when the game is created. Acts 2 and 3 are generated at the moment you take the stairs (`go()` in `run.ts`). The generator depends only on `(runSeed, actIndex)`, so act 2 is the same map whether it is generated early or late, and it is **not** affected by anything you did (the engine never passes modifiers, see 2.6).
+Act 1 is generated when the game is created. Acts 2 and 3 are generated at the moment you take the stairs (`go` in `state-machine.ts`). The generator depends only on `(runSeed, actIndex)`, so act 2 is the same map whether it is generated early or late, and it is **not** affected by anything you did (the engine never passes modifiers, see 2.6).
 
 ### 2.4 Seeding and determinism
 
@@ -109,7 +109,7 @@ What changes each stat:
 
 ## 4. Nodes
 
-Source: `src/game/run.ts` (`enter`, `rest`, `buy`, `deal`, `accept`, `refuse`), `src/map/types.ts`. Each node has a `resolved` flag, reset every time you arrive; it is how once-only actions work. You can leave any node without using it (except fights and bosses: you cannot leave a live enemy). You cannot revisit a node (maps are forward-only).
+Source: `src/game/state-machine.ts` (`enter`, `rest`, `buy`, `deal`, `accept`, `refuse`), `src/map/types.ts`. Each node has a `resolved` flag, reset every time you arrive; it is how once-only actions work. You can leave any node without using it (except fights and bosses: you cannot leave a live enemy). You cannot revisit a node (maps are forward-only).
 
 What happens on **entering any node**, in order: the `moved` event, then **`on_enter` curses fire**, then (fight and boss only) the enemy appears (`enemy_appeared`), then **`on_fight` curses fire**.
 
@@ -167,7 +167,7 @@ What happens on **entering any node**, in order: the `moved` event, then **`on_e
 
 ## 5. Combat
 
-Source: `src/game/run.ts` (`fight`, `enter`). **One `fight()` call = one round.** Dice come from the run's own seeded stream, so a seed replays identically given the same commands.
+Source: `src/game/state-machine.ts` (`fight`, `enter`). **One `fight()` call = one round.** Dice come from the run's own seeded stream, so a seed replays identically given the same commands.
 
 ### 5.1 Round order and formulas
 
@@ -210,7 +210,7 @@ At attack 3, an act-1 regular enemy (avg 9.5 HP) takes about 2 to 3 rounds and d
 
 ## 6. The devil
 
-Source: `src/game/devil.ts`, `src/game/deal.ts`, `src/game/httpDevil.ts`, `docs/devil-api.md`, `scripts/mock-devil-server.ts`, `devil_prompt.txt`, `src/game/run.ts` (`deal`, `context`, `accept`).
+Source: `src/game/devil.ts`, `src/game/deal.ts`, `src/game/httpDevil.ts`, `docs/devil-api.md`, `scripts/mock-devil-server.ts`, `devil_prompt.txt`, `src/game/state-machine.ts` (`deal`, `devil_reply`, `accept`), `src/game/gameState.ts` (`devilContext`).
 
 ### 6.1 The Devil interface
 
@@ -263,8 +263,8 @@ If the player's text matches `/fine print|loophole|clause|read the contract|cont
 
 ### 6.5 Asking, haggling, sanitizing
 
-- `deal(text?)` is **async** (the backend is a network call). While waiting, `pending` is true: `go`, `accept`, `refuse` and another `deal` are rejected.
-- Sequence: reject if wrong node / already resolved / pending / enemy present / 3 asks used; otherwise ask the devil (any thrown error becomes "no reply"), sanitize, store as the current offer, emit `deal_offered`. If you left the node or the run ended while it thought, the reply is thrown away ("the moment passed").
+- `deal(text?)` is **async** (the backend is a network call). In the engine it is a round trip: `step(deal)` records the request in `state.pending` and returns `awaiting`, and the devil's answer comes back as `step(devil_reply)` (see `docs/engine.md`). While waiting, `pending` is true and every command except `look` and `devil_reply` is rejected ("the devil is still speaking").
+- Sequence: reject if wrong node / already resolved / pending / enemy present / 3 asks used; otherwise ask the devil (any thrown error becomes "no reply"), sanitize, store as the current offer, emit `deal_offered`. Since nothing else can happen while the devil thinks, the reply always lands on the node it was asked at.
 - **`sanitizeDeal`** (`src/game/deal.ts`) turns anything into a safe Deal. Never throws.
   - Not an object (string, null, array, number): replaced by the **silent devil**: dialogue "The devil only smiles. He has nothing to say to you today.", no effects.
   - `dialogue`: must be a non-empty string, trimmed and cut to **600 chars**, else `"..."`.
@@ -297,7 +297,7 @@ If the player's text matches `/fine print|loophole|clause|read the contract|cont
 
 ## 7. Curses
 
-Source: `src/game/run.ts` (`fire`, `accept`), `src/game/devil.ts`.
+Source: `src/game/state-machine.ts` (`fire`, `accept`), `src/game/devil.ts`.
 
 A curse is `{ trigger, effect }`, where `effect` is a stat-delta object like any deal effect (sanitized the same way). It is added when you accept a deal that carries one, and it is **single-shot**: it fires once and is then removed. The player holds at most **5** at a time.
 
@@ -318,7 +318,7 @@ Rules:
 
 ## 8. Soul and endings
 
-Source: `src/game/state.ts` (`settle`), `src/game/run.ts` (`settleHp`, `enter`).
+Source: `src/game/state.ts` (`settle`), `src/game/state-machine.ts` (`settleHp`, `enter`).
 
 - **Death rule** (`settle`, called after anything that lowers HP): if HP is 0 or below and **soul = 1**, the soul is spent: **soul becomes 0 and HP becomes `max(1, ceil(maxHp / 2))`** (revived event). It works **once**, since soul is then 0. If HP is 0 or below with soul 0, you lose (`lost`, with a cause such as the enemy's name, "a curse" or "the devil's bargain").
 - **Selling the soul**: a deal with `soul: -1` sets soul to 0 immediately (that is the `soul` StubDevil offer). The same revival can no longer be used afterward.
@@ -361,6 +361,8 @@ Source: `src/game/events.ts`. Every command returns `Result = { ok, events, stat
 | `hell` | reached `final` with soul 0 |
 | `lost { cause }` | HP hit 0 with no soul |
 | `rejected { reason }` | any invalid command |
+| `devil_stage_entered { nodeId }` | right after `moved` onto a deal node (a backend sync point; see `docs/engine.md`) |
+| `devil_stage_left { nodeId }` | right before `moved` off a deal node |
 
 Exits are described by `Exit { n, kind }`, where `kind` is the next node's kind, or `"stairs"` / `"gate"` at an act exit. The player can see the kind of every next node in advance (no fog), and the full current-act map via `map()`.
 
@@ -368,23 +370,42 @@ Exits are described by `Exit { n, kind }`, where `kind` is the next node's kind,
 
 ## 10. Interfaces
 
-### 10.1 Engine API (`src/game/run.ts`, re-exported in `src/game/index.ts`)
+### 10.1 Engine API (`src/game/state-machine.ts` and friends, re-exported in `src/game/index.ts`; details in `docs/engine.md`)
 
-`createGame(seed?, devil?)` returns a `Game`. Commands (all return `Result`; `deal` returns a `Promise<Result>`):
+The engine is a **pure reducer**: the whole run is one plain JSON object, `GameState` (seed, dice RNG state, generated acts, player, curses, enemy, deal bookkeeping, ending, pending devil request), and `step(state, command)` returns `{ ok, state, events, actions, awaiting? }` without mutating its input or doing I/O. `initialState(seed)` starts a run; `JSON.parse(JSON.stringify(state))` continues it identically.
+
+- **Commands** (`Command`): `{cmd:"look"}`, `{cmd:"go",n}`, `{cmd:"fight"}`, `{cmd:"rest"}`, `{cmd:"buy",item}`, `{cmd:"deal",text?}`, `{cmd:"accept"}`, `{cmd:"refuse"}`, and `{cmd:"devil_reply",deal}`.
+- **Rejection:** a rejected command returns the same state and one `rejected` event.
+- **`actions`:** the exact list of legal next commands (`legalActions(state)`); `look` is always legal and not listed.
+- **The devil round trip:** `deal` returns `awaiting: { devil: { state, context, playerText } }`, the same body `HttpDevil` sends. The next command must be `devil_reply` with the devil's answer, which is sanitized into the offer. `look` still works while waiting; everything else is rejected.
+- **`view(state)`:** the player-safe projection: what `observe()` and `map()` show, plus `curses`, `asksLeft`, `seed` and `actions`, without the dice state or enemy power.
+
+`createGame(seed?, devil?)` returns a `Game`, a thin wrapper holding a `GameState` and a `Devil`. `restoreGame(state, devil?)` continues a saved state. Its commands all return `Result` and `step` the held state; `deal` returns a `Promise<Result>` and performs the devil round trip:
 
 | Command | Does |
 | --- | --- |
-| `look()` | describe the current node (never changes state; works after the run ends) |
+| `look()` | describe the current node (never changes state; works after the run ends and while the devil is pending) |
 | `go(n)` | take exit `n` (1-based). Rejected if an enemy is present, the devil is pending, `n` is out of range, or the run is over |
 | `fight()` | one combat round |
 | `rest()` | campfire heal |
 | `buy(item)` | village `heal` / `blade`, well `blessing` |
 | `deal(text?)` | ask or haggle (async) |
 | `accept()` / `refuse()` | answer the current offer |
+| `step(cmd)` / `devilReply(deal)` | raw access: one `step` on the held state (`deal` here only asks; answer with `devilReply`) |
 
-Queries: `observe()` returns an `Observation` (state snapshot, nodeId, kind, act, current enemy, exits, current offer, `resolved`, `pending`, `dealsDecided`, ending). `map()` returns a `MapView` (layers of nodes with `kind`, `visited`, `current`, `rewritten`, `next`; the `final` node; the rewrite `changes` list). `context()` returns the devil's `DevilContext` (pure). `state` is the live player state; `ending` is `null | "win" | "lose" | "hell"`.
+**Queries:**
+
+- `observe()` returns an `Observation`: state snapshot, nodeId, kind, act, current enemy, exits, current offer, `resolved`, `pending`, `dealsDecided`, ending, `curses` and `asksLeft`.
+- `map()` returns a `MapView`: layers of nodes with `kind`, `visited`, `current`, `rewritten`, `next`; the `final` node; the rewrite `changes` list.
+- `view()` returns both of those, plus `seed` and `actions`.
+- `context()` returns the devil's `DevilContext` (pure).
+- `state` is the live player state.
+- `ending` is `null | "win" | "lose" | "hell"`.
+- `gameState` is the current full `GameState`.
 
 `Result.state` is always a detached copy. Everything is plain JSON-serialisable data.
+
+**Sync hook:** `createSession(seed?, { onSync })` / `session.onSync = (kind, state) => ...` (default no-op). It is called with a copy of the full `GameState` when emitted events include `devil_stage_entered`, `devil_stage_left`, `won`, `lost` or `hell`, and when a run starts on a deal node. It is a planned backend sync point; no networking yet.
 
 ### 10.2 Console commands (F12, test builds only)
 
@@ -392,10 +413,10 @@ Installed by `installConsole` (`src/game/console.ts`) on `window`, sharing the s
 
 ### 10.3 `npm run play` (terminal REPL, `src/game/repl.ts`)
 
-`npm run play [-- seed] [--json]` (default seed `demo`).
+`npm run play [-- seed] [--json] [--state] [--manual-devil]` (default seed `demo`).
 
-- **Text mode** commands: `look | go N | fight | rest | buy ITEM | deal [text] | accept | refuse | map | new [seed] | help | quit` (also `exit`). `map` prints the act layer by layer, boss at top; `[x]` is you, `·` is visited, `*` is rewritten.
-- **`--json` mode:** one JSON object per line in and out (also accepts the text commands). Input examples: `{"cmd":"go","n":1}`, `{"cmd":"fight"}`, `{"cmd":"buy","item":"blade"}`, `{"cmd":"deal","text":"..."}`, `{"cmd":"accept"}`, `{"cmd":"refuse"}`, `{"cmd":"rest"}`, `{"cmd":"look"}`, `{"cmd":"map"}`, `{"cmd":"new","seed":"abc"}`. Output after every command: `{ cmd, ok, text: [...describe lines], events, state, observation, map, ending }`; unparseable input returns `{"ok":false,"error":"..."}`. Designed for scripts, `jq`, or an LLM playing the game. It always uses the StubDevil (the REPL does not read `VITE_DEVIL_URL`).
+- **Text mode** commands: `look | go N | fight | rest | buy ITEM | deal [text] | accept | refuse | reply {deal json} | map | new [seed] | help | quit` (also `exit`). `map` prints the act layer by layer, boss at top; `[x]` is you, `·` is visited, `*` is rewritten.
+- **`--json` mode:** one JSON object per line in and out (also accepts the text commands). Input examples: `{"cmd":"go","n":1}`, `{"cmd":"fight"}`, `{"cmd":"buy","item":"blade"}`, `{"cmd":"deal","text":"..."}`, `{"cmd":"accept"}`, `{"cmd":"refuse"}`, `{"cmd":"rest"}`, `{"cmd":"look"}`, `{"cmd":"map"}`, `{"cmd":"new","seed":"abc"}`. Also `{"cmd":"devil_reply","deal":{...}}`. Output after every command: `{ cmd, ok, text: [...describe lines], events, state, observation, map, ending, actions }`, plus `awaiting` while the devil's answer is pending and, with `--state`, `game_state` (the full `GameState`); unparseable input returns `{"ok":false,"error":"..."}`. `--manual-devil`: `deal` does not call the StubDevil; the line carries `awaiting.devil` (the HTTP request body) and you answer with `devil_reply`. Designed for scripts, `jq`, or an LLM playing the game. It always uses the StubDevil (the REPL does not read `VITE_DEVIL_URL`).
 
 ### 10.4 Test UI and Devil lab (`src/ui/*`)
 
@@ -429,7 +450,7 @@ A deliberately plain DOM page over the same `Session` (one `Game` plus an event 
 
 In test builds, `VITE_DEVIL_URL` only sets the default URL shown in the Devil lab; the lab starts in Stub mode unless you picked HTTP before. `npm run build` and `build:test` run `tsc` first, so a type error fails the build.
 
-### 10.7 Tests (40, all passing, network-free except the HttpDevil test which starts the mock on a local port)
+### 10.7 Tests (55, all passing, network-free except the HttpDevil test which starts the mock on a local port)
 
 | File | Tests | Covers |
 | --- | --- | --- |
@@ -437,9 +458,12 @@ In test builds, `VITE_DEVIL_URL` only sets the default URL shown in the Devil la
 | `src/game/deal.test.ts` | 9 | `sanitizeDeal` clamps and junk, a hostile devil never crashing the engine, rewrite applied and rewrite failure reporting, curses firing once, revival once, soul sold and fatal in one deal not reviving, StubDevil validity and determinism |
 | `src/game/autoplay.test.ts` | 6 | 200 seeds always end win, lose or hell with no stalls, stats always in range, determinism, `simulate` tallies, a do-nothing policy times out, hell when winning soulless vs win with soul |
 | `src/game/httpDevil.test.ts` | 5 | HttpDevil against the mock backend (request body, sanitizable reply), a full bot run with chaos on, chaos replies either reject or sanitize, refused connection and timeout never throw, non-JSON server |
-| `src/ui/logic.test.ts` | 3 | button availability from `observe()`, event colour classes, `diffDeal` |
+| `src/ui/logic.test.ts` | 7 | button availability from `observe()`, event colour classes, `diffDeal`, labels and chips, exit labels |
+| `src/game/equivalence.test.ts` | 3 | 500 bot seeds and 200 chaos seeds (random valid and invalid commands) reproduce, command for command, the results, events and final states recorded with the pre-refactor engine (`src/game/__fixtures__/`) |
+| `src/game/contract.test.ts` | 2 | the JSON contract is additive only: path-to-type snapshot of Command, PlayerState, Observation, MapView, Result, every GameEvent, the devil request, REPL `--json` lines (and `--state`) |
+| `src/game/engine.test.ts` | 9 | `step` purity (deep-frozen input), legal-actions property, the devil round trip, GameState JSON save and restore mid-run, devil-stage events, `Session.onSync`, `view` |
 
-Not covered by tests: the DOM UI rendering, console and REPL, combat numbers, shop numbers, balance.
+Not covered by tests: the DOM UI rendering, the console, REPL text mode, combat numbers, shop numbers, balance (the REPL `--json` shape is covered by the contract test).
 
 ---
 

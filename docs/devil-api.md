@@ -96,6 +96,16 @@ Access-Control-Allow-Methods: POST, OPTIONS
 Access-Control-Allow-Headers: content-type
 ```
 
+## Planned: game-state sync points
+
+Not implemented yet; the client side is ready. The game keeps its state client-side and would exchange the full `GameState` (one plain JSON object, see `docs/engine.md`) with a backend only at three moments:
+
+- entering the devil stage (event `devil_stage_entered`, or a run that starts on a deal node),
+- leaving it (`devil_stage_left`),
+- the end of the game (`won`, `lost`, `hell`).
+
+`Session.onSync(kind, state)` in `src/game/session.ts` fires at exactly those moments (default: does nothing); a backend client would hook in there. The deal request above is unchanged: in the engine it is the `awaiting.devil` value of a `deal` step, and the response is fed back as a `devil_reply` step.
+
 ## Trying it
 
 ```
