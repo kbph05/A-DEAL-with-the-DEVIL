@@ -1,5 +1,7 @@
 /**
- * Play the headless engine one command at a time in a terminal: `npm run play [-- seed]`.
+ * Play the headless engine one command at a time in a terminal: `npm run play [-- seed] [--json]`.
+ * --json: after every command, also print one line of JSON with the events, the full state and the map
+ * (`{"cmd", "ok", "events", "state", "observation", "map"}`), e.g. to pipe into jq or diff two runs.
  * Commands: look | go N | fight | rest | buy ITEM | deal [text] | accept | refuse | map | new [seed] | help | quit
  */
 import { createInterface } from "node:readline/promises";
@@ -8,10 +10,15 @@ import { describe, type Result } from "./events";
 import { createGame } from "./run";
 
 const HELP = "look | go N | fight | rest | buy heal|blade|blessing | deal [text] | accept | refuse | map | new [seed] | help | quit";
-let seed = argv[2] ?? "demo";
+const JSON_MODE = argv.includes("--json");
+let seed = argv.slice(2).find((a) => !a.startsWith("--")) ?? "demo";
 let game = createGame(seed);
 
-const show = (r: Result) => { for (const e of r.events) console.log(describe(e).replace(/^/gm, "  ")); };
+let lastCmd = "start";
+const show = (r: Result) => {
+  for (const e of r.events) console.log(describe(e).replace(/^/gm, "  "));
+  if (JSON_MODE) console.log(JSON.stringify({ cmd: lastCmd, ok: r.ok, events: r.events, state: r.state, observation: game.observe(), map: game.map() }));
+};
 
 function showMap() {
   const m = game.map();
@@ -26,6 +33,7 @@ rl.prompt();
 for await (const line of rl) {
   const [cmd = "", ...rest] = line.trim().split(/\s+/);
   const arg = rest.join(" ");
+  lastCmd = line.trim();
   switch (cmd.toLowerCase()) {
     case "": break;
     case "look": show(game.look()); break;
