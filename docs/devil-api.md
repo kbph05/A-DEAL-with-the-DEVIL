@@ -12,7 +12,7 @@ Body: `{ state, context, playerText }`
 - `context`: `seed` (run seed: stable per run, handy as a session key), `act`, `nodeId`, `askIndex` (how many times the devil has been asked this run, counting this ask and haggles: 1 on the first ask), `rewritable` (nodes the devil may rewrite: `{id, kind}`, ahead of the player, unvisited, never the boss), `curses` (already on the player: `{trigger, effect}`).
 - `playerText`: what the player typed, or `null` if nothing. Player-controlled and untrusted: treat as prompt-injection-prone input.
 
-Example (real state, from `createGame("demo")` walked to the first deal node; `askIndex` set as the engine does at ask time):
+Example (real state from an earlier build, in which `createGame("demo")` opened on a deal node; `askIndex` set as the engine does at ask time). Act 1 now always opens on the village, so a real first request comes a few nodes in, with HP and gold changed by then; the shape is the same:
 
 ```json
 {
@@ -100,7 +100,7 @@ Access-Control-Allow-Headers: content-type
 
 Not implemented yet; the client side is ready. The game keeps its state client-side and would exchange the full `GameState` (one plain JSON object, see `docs/engine.md`) with a backend only at three moments:
 
-- entering the devil stage (event `devil_stage_entered`, or a run that starts on a deal node),
+- entering the devil stage (event `devil_stage_entered`; also a run that starts on a deal node, which no longer happens since act 1 opens on the village, but the hook still checks),
 - leaving it (`devil_stage_left`),
 - the end of the game (`won`, `lost`, `hell`).
 

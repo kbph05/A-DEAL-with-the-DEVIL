@@ -87,8 +87,19 @@ test("actions: [] once over, only devil_reply while awaiting; every step result 
   }
 });
 
+/** A fresh run whose act-1 entry is swapped to a deal node (test-only: the real map always opens on the village). */
+const onDeal = (seed: string): GameState => { const s = initialState(seed); s.acts[0].nodes[0].kind = "deal"; return s; };
+
+test("act 1 always opens on the village (the shop), never at the devil's table", () => {
+  for (let i = 0; i < 300; i++) {
+    const v = view(initialState(`start-${i}`));
+    assert.equal(v.kind, "village");
+    assert.ok(v.actions.some((c) => c.cmd === "buy"), "the starting gold buys something");
+  }
+});
+
 test("deal awaits the devil with the HttpDevil request shape; only devil_reply (or look) continues", () => {
-  let s = initialState("demo"); // starts on a deal node
+  let s = onDeal("demo");
   assert.equal(view(s).kind, "deal");
   const asked = step(s, { cmd: "deal", text: "gold" });
   assert.ok(asked.ok && asked.awaiting);
@@ -157,12 +168,17 @@ test("devil stage events bracket deal nodes; endings stay last", async () => {
 
 test("Session.onSync fires on entering/leaving the devil's table and on the ending, with the full state", async () => {
   const seen: Array<[SyncKind, GameState]> = [];
-  const session = createSession("demo", { onSync: (k, st) => seen.push([k, st]) });
-  assert.deepEqual(seen.map(([k]) => k), ["devil_stage_entered"], "demo starts on a deal node");
-  const g = session.game();
-  for (let n = 0; !g.ending && n < 1000; n++) session.emit((await execute(g, botPolicy(g.observe())!)).events);
+  let session = createSession("demo", { onSync: (k, st) => seen.push([k, st]) });
+  assert.equal(seen.length, 0, "act 1 opens on the village: nothing to sync at the start");
+  let g = session.game();
+  for (let i = 0; !seen.some(([k]) => k === "devil_stage_left") && i < 50; i++) { // a bot run that sits at the devil's table
+    seen.length = 0;
+    session = createSession(`sync-${i}`, { onSync: (k, st) => seen.push([k, st]) });
+    g = session.game();
+    for (let n = 0; !g.ending && n < 1000; n++) session.emit((await execute(g, botPolicy(g.observe())!)).events);
+  }
   const kinds = seen.map(([k]) => k);
-  assert.ok(kinds.includes("devil_stage_left"));
+  assert.ok(kinds.includes("devil_stage_entered") && kinds.includes("devil_stage_left"));
   assert.ok(["won", "lost", "hell"].includes(kinds[kinds.length - 1]));
   const [, last] = seen[seen.length - 1];
   assert.deepEqual(last, g.gameState);
@@ -171,9 +187,10 @@ test("Session.onSync fires on entering/leaving the devil's table and on the endi
 });
 
 test("view: player-safe projection with curses and haggles left, no dice or enemy power", () => {
-  const g = createGame("demo");
+  const g = restoreGame(onDeal("demo"));
   const v = g.view();
   assert.equal(v.asksLeft, 3);
+  assert.equal(createGame("demo").view().asksLeft, 0, "not at a deal node");
   assert.deepEqual(v.curses, []);
   assert.deepEqual({ ...g.observe() }, Object.fromEntries(Object.keys(g.observe()).map((k) => [k, (v as unknown as Record<string, unknown>)[k]])));
   assert.deepEqual(v.map, g.map());

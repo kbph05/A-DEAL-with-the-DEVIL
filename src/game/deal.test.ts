@@ -3,7 +3,8 @@ import assert from "node:assert/strict";
 import { sanitizeDeal } from "./deal";
 import type { Deal, Devil, DevilContext } from "./devil";
 import { StubDevil } from "./devil";
-import { createGame, type Game } from "./run";
+import { initialState } from "./gameState";
+import { restoreGame, type Game } from "./run";
 import { newPlayer } from "./state";
 
 test("sanitizeDeal clamps numbers and ignores unknown keys", () => {
@@ -38,13 +39,14 @@ test("sanitizeDeal survives junk and drops bad curses and rewrites", () => {
   assert.doesNotThrow(() => sanitizeDeal(evil));
 });
 
-/** A seeded game standing on a deal node (entry nodes are good kinds, so one turns up quickly). */
-function dealGame(devil: Devil): Game {
-  for (let i = 0; i < 500; i++) {
-    const g = createGame(`deal-${i}`, devil);
-    if (g.observe().kind === "deal" && g.observe().enemy === null) return g;
-  }
-  throw new Error("no seed with a deal entry");
+/**
+ * A seeded game standing on a deal node with the act ahead of it. Act 1 now always opens on the village, so the entry
+ * is swapped to a deal node by hand (a test-only state: the real map never starts at the devil's table).
+ */
+function dealGame(devil: Devil, seed = "deal-0"): Game {
+  const s = initialState(seed);
+  s.acts[0].nodes[0].kind = "deal";
+  return restoreGame(s, devil);
 }
 const devilSaying = (fn: (ctx: DevilContext) => unknown): Devil => ({ offer: async (_s, ctx) => fn(ctx) as Deal });
 

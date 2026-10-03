@@ -34,7 +34,7 @@ Source: `src/map/mapgen.ts`, `src/map/types.ts`, `src/map/rng.ts`, `src/map/READ
 
 - The exit of each act is always a `boss`. Acts 1 and 2: leaving the exit offers "stairs" to the next act's entry. Act 3: the exit offers "gate" to `final`.
 - You cannot leave the exit node while its boss is alive (movement is blocked during any fight).
-- Entry node kind is a random **good** kind (deal, village, campfire or well), never a fight. You can start an act on a deal node.
+- **Act 1 always opens on a village** (the shop; `START_KIND` in `src/map/mapgen.ts`, kbph 3 Oct): you start with 10 gold at the stall, never at the devil's table. Like the exit boss, this ignores `banKinds`/`forceKinds`. The generator still draws the entry kind and then overrides it, so the rest of act 1 is the same as before the rule. Acts 2 and 3 open on a random **good** kind (deal, village, campfire or well), never a fight, so you can still start a later act on a deal node.
 
 ### 2.3 Lazy generation
 
@@ -405,7 +405,7 @@ The engine is a **pure reducer**: the whole run is one plain JSON object, `GameS
 
 `Result.state` is always a detached copy. Everything is plain JSON-serialisable data.
 
-**Sync hook:** `createSession(seed?, { onSync })` / `session.onSync = (kind, state) => ...` (default no-op). It is called with a copy of the full `GameState` when emitted events include `devil_stage_entered`, `devil_stage_left`, `won`, `lost` or `hell`, and when a run starts on a deal node. It is a planned backend sync point; no networking yet.
+**Sync hook:** `createSession(seed?, { onSync })` / `session.onSync = (kind, state) => ...` (default no-op). It is called with a copy of the full `GameState` when emitted events include `devil_stage_entered`, `devil_stage_left`, `won`, `lost` or `hell`, and when a run starts on a deal node (which no longer happens: act 1 opens on the village). It is a planned backend sync point; no networking yet.
 
 ### 10.2 Console commands (F12, test builds only)
 

@@ -81,17 +81,16 @@ The devil is outside the engine; it may be a network call.
 Plan: keep the state client-side and exchange it with the backend only when entering or leaving the devil stage and at the end of the game.
 
 - **Events:** `devil_stage_left { nodeId }` comes just before the `moved` that leaves a deal node. `devil_stage_entered { nodeId }` comes just after the `moved` that arrives on one. The endings (`won`, `lost`, `hell`) are unchanged and always come last.
-- **A run that starts on a deal node:** there is no `moved` event in this case, so check `view(state).kind === "deal"`.
+- **A run that starts on a deal node:** there is no `moved` event in this case, so check `view(state).kind === "deal"`. Act 1 now always opens on the village (the shop), so a new run never starts there; the check stays for hand-built states.
 - **`Session.onSync(kind, state)`** (`src/game/session.ts`): defaults to a no-op. It is called with a copy of the full `GameState` (as it is after the command) for those events, and when a new run starts on a deal node. No networking is implemented yet; see docs/devil-api.md.
 
 ## Example: one step
 
-`step(initialState("demo"), {"cmd":"go","n":1})`. The run starts on a deal node, so leaving it emits `devil_stage_left`. Acts are elided:
+`step(initialState("demo"), {"cmd":"go","n":1})`. The run starts on the village (act 1 always does), so there is no `devil_stage_left`; leaving a deal node would emit one before `moved`. Acts are elided:
 
 ```json
 { "ok": true,
-  "events": [ { "type": "devil_stage_left", "nodeId": "a0n0" },
-              { "type": "moved", "from": "a0n0", "to": "a0n1", "kind": "fight", "act": 0 },
+  "events": [ { "type": "moved", "from": "a0n0", "to": "a0n1", "kind": "fight", "act": 0 },
               { "type": "enemy_appeared", "enemy": { "name": "cave rat", "hp": 10, "maxHp": 10, "boss": false } } ],
   "actions": [ { "cmd": "fight" } ],
   "state": { "v": 1, "seed": "demo", "rng": { "s": 189795653 }, "acts": ["…"],

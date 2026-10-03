@@ -6,6 +6,8 @@ import {
 } from "./types";
 
 export const ACTS = 3;
+/** Act 1 always opens on this kind: the run starts at the shop, never at the devil's table (kbph, 3 Oct). */
+export const START_KIND: Kind = "village";
 const MAX_WIDTH = 3;
 const EXTRA_EDGE_P = 0.25;
 const pick = <T>(rng: Rng, xs: readonly T[]): T => xs[Math.floor(rng() * xs.length)];
@@ -37,7 +39,7 @@ function buildShape(rng: Rng, actIndex: number, alternate: boolean): MapNode[][]
   return layers;
 }
 
-function assignKinds(layers: MapNode[][], rng: Rng, alternate: boolean, mods: Modifiers): void {
+function assignKinds(layers: MapNode[][], rng: Rng, alternate: boolean, mods: Modifiers, actIndex: number): void {
   const banned = new Set(mods.banKinds ?? []);
   const playable: Kind[] = [...GOOD_KINDS, ...BAD_KINDS.filter((k) => k !== "boss")];
   // Bans are dropped for a polarity only if they would leave it empty.
@@ -60,7 +62,8 @@ function assignKinds(layers: MapNode[][], rng: Rng, alternate: boolean, mods: Mo
     }
   }
   const root = layers[0][0];
-  root.kind = pick(rng, pool("good"));
+  root.kind = pick(rng, pool("good")); // drawn even for act 1, so the rest of the act is the same as before the start rule
+  if (actIndex === 0) root.kind = START_KIND; // like the exit boss, this ignores modifiers
   for (const n of middle) if (!forced.has(n.id)) n.kind = pick(rng, pool(polFor(n.layer)));
   layers[layers.length - 1][0].kind = "boss";
 }
@@ -74,7 +77,7 @@ export function generateAct(runSeed: Seed, actIndex: number, modifiers: Modifier
   const alternate = opts.alternate ?? true;
   const rng = mulberry32(hashSeed(`${runSeed}:${actIndex}`));
   const layers = buildShape(rng, actIndex, alternate);
-  assignKinds(layers, rng, alternate, modifiers);
+  assignKinds(layers, rng, alternate, modifiers, actIndex);
   const nodes = layers.flat();
   const exit = layers[layers.length - 1][0];
   const act: Act = { index: actIndex, runSeed, alternate, nodes, entry: nodes[0].id, exit: exit.id, changes: [], visited: [] };

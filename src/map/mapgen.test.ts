@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import {
-  ACTS, KINDS, generateAct, markVisited, mulberry32, polarity, rewriteNode,
+  ACTS, KINDS, START_KIND, generateAct, markVisited, mulberry32, polarity, rewriteNode,
   type Act, type Kind, type Modifiers,
 } from "./index";
 
@@ -52,6 +52,17 @@ test("node count is 6-8 and all three sizes occur", () => {
 
 test("structure: single root/leaf, reachability, boss exit, alternation (both option values)", () => {
   for (const alternate of [true, false]) for (let a = 0; a < ACTS; a++) checkInvariants(generateAct("seed", a, {}, { alternate }));
+});
+
+test("act 1 always starts on the village (the shop); later acts start on any good kind", () => {
+  assert.equal(START_KIND, "village");
+  const later = new Set<Kind>();
+  for (let s = 0; s < 1000; s++) {
+    for (const alternate of [true, false]) assert.equal(generateAct(`start-${s}`, 0, {}, { alternate }).nodes[0].kind, "village");
+    later.add(generateAct(`start-${s}`, 1).nodes[0].kind);
+  }
+  assert.equal(generateAct(1, 0, { banKinds: ["village"] }).nodes[0].kind, "village", "like the boss, the start ignores modifiers");
+  assert.ok(later.size > 1, `act 2 entries: ${[...later]}`);
 });
 
 test("alternation is the default", () => {
