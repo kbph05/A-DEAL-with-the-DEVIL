@@ -1,5 +1,5 @@
 /** Pure helpers for the test UI: which buttons make sense, and how to style events. No DOM here, so tests can import it. */
-import type { Deal, GameEvent, Observation } from "../game";
+import type { Deal, GameEvent, MapView, Observation } from "../game";
 import type { EnemyView, Exit } from "../game/events";
 import { WARES } from "../game/run";
 import type { Kind } from "../map";
@@ -53,6 +53,26 @@ export function eventClass(e: GameEvent): string {
 const KIND_WORD: Record<Kind, string> = { campfire: "Campfire", village: "Village", well: "Well", deal: "Deal", fight: "Fight", boss: "Boss", final: "Final door" };
 /** "Act 2 · Village": where the player is, in words. `act` is 0-based as in the engine. */
 export const nodeTitle = (act: number, kind: Kind): string => `Act ${act + 1} · ${KIND_WORD[kind]}`;
+
+/**
+ * Exit button labels that tell same-kind exits apart: "Go → fight · then deal" vs "Go → fight · then campfire".
+ * Uses the current act's map (where each exit leads next); falls back to left/middle/right if that's identical too.
+ */
+export function exitLabels(o: Observation, map: MapView): string[] {
+  const nodes = new Map(map.layers.flatMap((l) => l.nodes).map((n) => [n.id, n]));
+  const here = nodes.get(o.nodeId);
+  const hints = o.exits.map((x) => {
+    const target = here && x.kind !== "stairs" && x.kind !== "gate" ? nodes.get(here.next[x.n - 1]) : undefined;
+    const after = target ? [...new Set(target.next.map((id) => nodes.get(id)?.kind ?? "?"))] : [];
+    return after.length ? ` · then ${after.join(" / ")}` : "";
+  });
+  const side = (i: number, n: number) => (n === 2 ? ["left", "right"][i] : n === 3 ? ["left", "middle", "right"][i] : `#${i + 1}`);
+  return o.exits.map((x, i) => {
+    const twins = o.exits.map((y, j) => (y.kind === x.kind && hints[j] === hints[i] ? j : -1)).filter((j) => j >= 0);
+    const where = twins.length > 1 ? ` (${side(twins.indexOf(i), twins.length)})` : "";
+    return exitLabel(x) + hints[i] + where;
+  });
+}
 
 /** Label of an exit button: "Go → fight". Stairs and the final gate get a plain-words hint. */
 export function exitLabel(x: Exit): string {

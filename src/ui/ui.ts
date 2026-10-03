@@ -67,7 +67,7 @@ export function mountUI(root: HTMLElement, session: Session): { layout: HTMLElem
       banner.append(h("b", { text: END[o.ending][0] }), " ", END[o.ending][1], " ", again);
     }
     renderSituation(sit.body, o, blurbOf(looked, describe(looked)), looked.curses);
-    choices.render(o, A, busy);
+    choices.render(o, A, busy, g.map());
     renderOutcome(outBox, outcome);
     history.update(log);
     if (refocus && !A.locked) {

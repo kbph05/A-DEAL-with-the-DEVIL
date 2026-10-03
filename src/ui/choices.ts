@@ -1,10 +1,10 @@
 /** "Your choices": only the currently sensible actions, as big buttons, plus the devil's offer card. */
-import type { Command, Observation } from "../game";
+import type { Command, MapView, Observation } from "../game";
 import { fmtDeltas } from "../game/events";
 import { chip, h } from "./dom";
-import { buyLabel, curseText, effectChips, exitLabel, fightLabel, lockReason, type Actions } from "./logic";
+import { buyLabel, curseText, effectChips, exitLabel, exitLabels, fightLabel, lockReason, type Actions } from "./logic";
 
-export interface Choices { render(o: Observation, A: Actions, busy: boolean): void }
+export interface Choices { render(o: Observation, A: Actions, busy: boolean, map?: MapView): void }
 
 /** `send` runs a command; the wish input is read at click time, so it stays current. */
 export function mountChoices(el: HTMLElement, send: (c: Command) => void): Choices {
@@ -23,7 +23,7 @@ export function mountChoices(el: HTMLElement, send: (c: Command) => void): Choic
   };
 
   return {
-    render(o, A, busy) {
+    render(o, A, busy, map) {
       const why = lockReason(o, busy);
       const list = h("div", { class: "choice-list" });
       if (A.fight && o.enemy) list.append(btn(fightLabel(o.enemy), { cmd: "fight" }, A.locked, "choice primary"));
@@ -32,7 +32,8 @@ export function mountChoices(el: HTMLElement, send: (c: Command) => void): Choic
         const l = buyLabel(w, o.state.gold);
         list.append(btn(l.label, { cmd: "buy", item: w.item }, A.locked || !w.affordable));
       }
-      for (const x of A.exits) list.append(btn(exitLabel(x), { cmd: "go", n: x.n }, A.locked));
+      const labels = map ? exitLabels(o, map) : A.exits.map(exitLabel);
+      A.exits.forEach((x, i) => list.append(btn(labels[i], { cmd: "go", n: x.n }, A.locked)));
 
       const kids: Node[] = [];
       if (why) kids.push(h("p", { class: o.ending ? "muted" : "wait", text: why }));

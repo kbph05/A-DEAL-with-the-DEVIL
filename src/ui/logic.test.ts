@@ -1,7 +1,8 @@
 import { test } from "node:test";
+import type { MapView, Observation } from "../game";
 import assert from "node:assert/strict";
 import { createGame, describe } from "../game";
-import { availableActions, blurbOf, buyLabel, curseText, effectChips, eventClass, exitLabel, fightLabel, lockReason, nodeTitle, outcomeEvents, pct } from "./logic";
+import { availableActions, blurbOf, buyLabel, curseText, effectChips, eventClass, exitLabel, exitLabels, fightLabel, lockReason, nodeTitle, outcomeEvents, pct } from "./logic";
 import { diffDeal } from "./dealDiff";
 import { sanitizeDeal } from "../game/deal";
 
@@ -66,4 +67,18 @@ test("pct is safe, and the description is pulled out of look()", () => {
   const text = describe(l), blurb = blurbOf(l, text);
   assert.ok(blurb.length > 10 && !blurb.includes("\n") && !blurb.startsWith("[Act") && text.includes(blurb), blurb);
   assert.deepEqual(outcomeEvents([l, { type: "deal_refused" }]), [{ type: "deal_refused" }]);
+});
+
+test("exitLabels tells same-kind exits apart by where they lead", () => {
+  const o = { nodeId: "a", exits: [{ n: 1, kind: "fight" }, { n: 2, kind: "fight" }] } as unknown as Observation;
+  const map = { act: 0, changes: [], layers: [
+    { layer: 0, nodes: [{ id: "a", kind: "deal", visited: true, current: true, rewritten: false, next: ["b", "c"] }] },
+    { layer: 1, nodes: [{ id: "b", kind: "fight", visited: false, current: false, rewritten: false, next: ["d"] },
+                        { id: "c", kind: "fight", visited: false, current: false, rewritten: false, next: ["e"] }] },
+    { layer: 2, nodes: [{ id: "d", kind: "deal", visited: false, current: false, rewritten: false, next: [] },
+                        { id: "e", kind: "campfire", visited: false, current: false, rewritten: false, next: [] }] },
+  ] } as unknown as MapView;
+  assert.deepEqual(exitLabels(o, map), ["Go → fight · then deal", "Go → fight · then campfire"]);
+  const same = structuredClone(map); same.layers[2].nodes[1].kind = "deal";
+  assert.deepEqual(exitLabels(o, same), ["Go → fight · then deal (left)", "Go → fight · then deal (right)"]);
 });
