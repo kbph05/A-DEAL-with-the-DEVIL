@@ -11,7 +11,7 @@
  *        or {"ok":false,"error":"..."} for unparseable input. Text commands still work and answer in JSON.
  */
 import { createInterface } from "node:readline/promises";
-import { stdin, stdout, argv } from "node:process";
+import { stdin, stdout, argv, exit } from "node:process";
 import { execute, type Command } from "./autoplay";
 import { describe, type Result } from "./events";
 import { createGame } from "./run";
@@ -76,7 +76,7 @@ for await (const raw of rl) {
       const error = e instanceof Error ? e.message : String(e);
       console.log(JSON_MODE ? JSON.stringify({ ok: false, error }) : `  ${error}`);
     }
-    if (input?.cmd === "quit") { rl.close(); break; }
+    if (input?.cmd === "quit") { rl.close(); exit(0); }
     else if (input?.cmd === "help") console.log(JSON_MODE ? JSON.stringify({ ok: true, help: HELP }) : HELP);
     else if (input?.cmd === "map") showMap();
     else if (input?.cmd === "new") {
