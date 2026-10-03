@@ -31,7 +31,10 @@ export type GameEvent =
   | { type: "won" }
   | { type: "hell" }
   | { type: "lost"; cause: string }
-  | { type: "rejected"; reason: string };
+  | { type: "rejected"; reason: string }
+  /** Sync points: the player stepped onto / off a deal node (the devil's table). */
+  | { type: "devil_stage_entered"; nodeId: string }
+  | { type: "devil_stage_left"; nodeId: string };
 
 /** What every command returns. `ok: false` always carries exactly one `rejected` event and changes nothing. */
 export interface Result { ok: boolean; events: GameEvent[]; state: PlayerState }
@@ -88,5 +91,7 @@ export function describe(e: GameEvent): string {
     case "hell": return "You win. But you sold your soul: the devil collects. HELL ending.";
     case "lost": return `You died (${e.cause}). The devil keeps the change.`;
     case "rejected": return `(${e.reason})`;
+    case "devil_stage_entered": return "You sit down at the devil's table.";
+    case "devil_stage_left": return "You leave the devil's table.";
   }
 }

@@ -1,11 +1,10 @@
 /** Headless automated play: runs a policy against the engine. Works in Node tests and in the browser console. */
 import type { Devil } from "./devil";
 import type { Ending, GameEvent, Result } from "./events";
+import type { Command } from "./gameState";
 import { createGame, type Game, type Observation } from "./run";
 
-export type Command =
-  | { cmd: "look" } | { cmd: "go"; n: number } | { cmd: "fight" } | { cmd: "rest" }
-  | { cmd: "buy"; item?: string } | { cmd: "deal"; text?: string } | { cmd: "accept" } | { cmd: "refuse" };
+export type { Command } from "./gameState";
 /** A policy is a pure function of what it can see. Return null to give up (counts as a stall). */
 export type Policy = (obs: Observation) => Command | null;
 export type Outcome = Ending | "timeout";
@@ -22,6 +21,7 @@ export async function execute(g: Game, c: Command): Promise<Result> {
     case "deal": return g.deal(c.text);
     case "accept": return g.accept();
     case "refuse": return g.refuse();
+    case "devil_reply": return g.devilReply(c.deal);
   }
 }
 

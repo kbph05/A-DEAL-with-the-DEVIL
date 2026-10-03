@@ -1,7 +1,7 @@
 /** Pure helpers for the test UI: which buttons make sense, and how to style events. No DOM here, so tests can import it. */
 import type { Deal, GameEvent, MapView, Observation } from "../game";
 import type { EnemyView, Exit } from "../game/events";
-import { WARES } from "../game/run";
+import { WARES } from "../game/gameState";
 import type { Kind } from "../map";
 
 export type Ware = keyof typeof WARES;
