@@ -88,7 +88,7 @@ const OFFERS: Offer[] = [
     make: () => ({ dialogue: "Gold is only blood that has been polite. Pay in the original currency.", effects: { hp: -5, gold: 40 } }),
   },
   {
-    id: "fineprint", hint: /luck|safe|strong|fortune/i, eligible: () => true,
+    id: "fineprint", hint: /luck|safe|fortune|protect/i, eligible: () => true,
     make: () => ({
       dialogue: "More life in you, friend! Of course the first beast you meet might be a touch less friendly toward your sword arm.",
       effects: { max_hp: 8 }, curse: { trigger: "on_fight", effect: { attack: -1 } },
@@ -132,8 +132,11 @@ export class StubDevil implements Devil {
   async offer(state: Readonly<PlayerState>, context: DevilContext, playerText?: string): Promise<Deal> {
     const text = playerText ?? "";
     const rng: Rng = mulberry32(hashSeed(`devil:${context.seed}:${context.askIndex}`));
-    const pool = OFFERS.filter((o) => o.eligible(state, context));
-    const weights = pool.map((o) => (o.hint?.test(text) ? 5 : 1));
+    const eligible = OFFERS.filter((o) => o.eligible(state, context));
+    // He listens: if the wish names a theme (gold, strength, healing, the road...), he only offers deals on it.
+    const heard = eligible.filter((o) => o.hint?.test(text));
+    const pool = heard.length ? heard : eligible;
+    const weights = pool.map(() => 1);
     let r = rng() * weights.reduce((a, b) => a + b, 0);
     let chosen = pool[pool.length - 1];
     for (let i = 0; i < pool.length; i++) if ((r -= weights[i]) < 0) { chosen = pool[i]; break; }

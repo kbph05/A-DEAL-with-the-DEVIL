@@ -162,7 +162,7 @@ export function replShapes(extraArgs: string[] = [], prefix = "repl", extraLines
   const lines = [...extraLines,
     '{"cmd":"look"}', '{"cmd":"map"}', '{"cmd":"help"}', "not a command", '{"cmd":"go"}', '{"nope":1}',
     ...Array.from({ length: 6 }, () => ['{"cmd":"fight"}', '{"cmd":"rest"}', '{"cmd":"buy","item":"blessing"}', '{"cmd":"buy","item":"heal"}',
-      '{"cmd":"deal","text":"gold"}', '{"cmd":"deal"}', '{"cmd":"accept"}', '{"cmd":"refuse"}', '{"cmd":"go","n":1}', "fight", "go 2", "buy blade", "deal soul", "accept"]).flat(),
+      '{"cmd":"deal","text":"gold"}', '{"cmd":"deal"}', '{"cmd":"accept"}', '{"cmd":"refuse"}', '{"cmd":"go","n":1}', "fight", "go 2", "buy blade", "deal gold", "accept"]).flat(),
     '{"cmd":"new","seed":"contract-b"}', "new contract-c", '{"cmd":"quit"}',
   ];
   const r = spawnSync(process.execPath, ["--import", "tsx", "src/game/repl.ts", "--json", ...extraArgs, "contract-a"], { input: lines.join("\n") + "\n", encoding: "utf8", cwd: new URL("../../..", import.meta.url).pathname });
