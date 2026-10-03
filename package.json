@@ -11,7 +11,8 @@
     "preview:test": "vite preview --outDir dist-test",
     "mock:devil": "tsx scripts/mock-devil-server.ts",
     "test": "tsx --test src/**/*.test.ts",
-    "play": "tsx src/game/repl.ts"
+    "play": "tsx src/game/repl.ts",
+    "fixtures": "tsx src/game/__fixtures__/generate.ts"
   },
   "devDependencies": {
     "@types/node": "^20.19.43",

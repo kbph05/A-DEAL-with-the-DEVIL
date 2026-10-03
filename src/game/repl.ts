@@ -59,7 +59,7 @@ function parse(line: string): Input {
 function report(cmd: Input | string, r: Result) {
   if (JSON_MODE) {
     const gs = game.gameState;
-    console.log(JSON.stringify({ cmd, ok: r.ok, text: r.events.map(describe), events: r.events, state: r.state,
+    console.log(JSON.stringify({ cmd, ok: r.ok, text: r.events.filter((e) => !isSyncMarker(e)).map(describe), events: r.events, state: r.state,
       observation: game.observe(), map: game.map(), ending: game.ending, actions: legalActions(gs),
       ...(gs.pending ? { awaiting: { devil: gs.pending } } : {}), ...(WITH_STATE ? { game_state: gs } : {}) }));
   } else {
