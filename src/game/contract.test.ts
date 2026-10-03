@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
-import { contractShapes } from "./__fixtures__/harness";
+import { contractShapes, replShapes } from "./__fixtures__/harness";
 
 /**
  * JSON contract: every external JSON shape (Command, PlayerState, Observation, MapView, Result, every GameEvent type,
@@ -16,4 +16,12 @@ test("JSON contract: changes are additive only (no field removed, renamed or ret
     .filter(([path, types]) => JSON.stringify(now[path]) !== JSON.stringify(types))
     .map(([path, types]) => `${path}: was ${types.join("|")}, now ${now[path]?.join("|") ?? "missing"}`);
   assert.deepEqual(broken, []);
+});
+
+test("JSON contract: REPL --state only adds game_state (a full, JSON-safe GameState) to the same lines", async () => {
+  const now = replShapes(["--state"]);
+  const broken = Object.entries(recorded).filter(([p]) => p.startsWith("repl:"))
+    .filter(([path, types]) => JSON.stringify(now[path]) !== JSON.stringify(types)).map(([p]) => p);
+  assert.deepEqual(broken, []);
+  for (const k of ["repl:report.game_state.seed", "repl:report.game_state.rng.s", "repl:report.game_state.acts[]", "repl:report.actions[]"]) assert.ok(now[k], k);
 });
