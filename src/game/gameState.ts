@@ -10,6 +10,8 @@ import { newPlayer, normalize, type PlayerState } from "./state";
 
 export const MAX_CURSES = 5;
 export const MAX_ASKS = 3;
+/** Attack gained by training at a campfire (the alternative to resting there). */
+export const TRAIN_ATTACK = 1;
 export const WARES = { heal: { cost: 10 }, blade: { cost: 15 }, blessing: { cost: 8 } } as const;
 export const FOES = [["cave rat", "drowned monk", "ash hound"], ["bone mason", "glass wolf", "hollow knight"], ["choir of moths", "gilded wretch", "the unlit"]];
 export const BOSSES = ["the Gatekeeper", "the Cartographer of Ruin", "the Devil's Left Hand"];
@@ -17,9 +19,12 @@ export const BOSSES = ["the Gatekeeper", "the Cartographer of Ruin", "the Devil'
 /** An enemy as the engine keeps it (`power` is hidden from the player). */
 export interface Enemy extends EnemyView { power: number }
 
-/** Every input the engine accepts. `devil_reply` answers a pending devil request (see StepResult.awaiting). */
+/**
+ * Every input the engine accepts. `devil_reply` answers a pending devil request (see StepResult.awaiting).
+ * At a campfire, `rest` (heal) and `train` (+1 attack) are alternatives: either one spends the fire.
+ */
 export type Command =
-  | { cmd: "look" } | { cmd: "go"; n: number } | { cmd: "fight" } | { cmd: "rest" }
+  | { cmd: "look" } | { cmd: "go"; n: number } | { cmd: "fight" } | { cmd: "rest" } | { cmd: "train" }
   | { cmd: "buy"; item?: string } | { cmd: "deal"; text?: string } | { cmd: "accept" } | { cmd: "refuse" }
   | { cmd: "devil_reply"; deal: unknown };
 
@@ -38,7 +43,7 @@ export interface GameState {
   player: PlayerState;
   curses: Curse[];
   enemy: Enemy | null;
-  /** The current node's one-shot action is used up (campfire rested, well drunk, enemy slain, deal decided). */
+  /** The current node's one-shot action is used up (campfire rested or trained at, well drunk, enemy slain, deal decided). */
   resolved: boolean;
   offer: Deal | null;
   /** Asks at the current deal node (max MAX_ASKS). */

@@ -19,6 +19,8 @@ export type GameEvent =
   | { type: "enemy_slain"; name: string; gold: number; boss: boolean }
   | { type: "damaged"; amount: number; source: string; hp: number }
   | { type: "healed"; amount: number; source: string; hp: number }
+  /** Trained at a campfire (instead of resting): attack gained and the new attack. */
+  | { type: "trained"; amount: number; attack: number }
   | { type: "bought"; item: string; cost: number; changes: Deltas }
   | { type: "deal_offered"; deal: Deal }
   | { type: "deal_applied"; deal: Deal; changes: Deltas }
@@ -76,6 +78,7 @@ export function describe(e: GameEvent): string {
     case "enemy_slain": return `${e.name} falls. +${e.gold} gold.`;
     case "damaged": return `You take ${e.amount} damage from ${e.source}. HP ${e.hp}.`;
     case "healed": return `You heal ${e.amount} (${e.source}). HP ${e.hp}.`;
+    case "trained": return `You train by the fire instead of resting: Attack +${e.amount}, now ${e.attack}. The embers die.`;
     case "bought": return `Bought ${e.item} for ${e.cost}g: ${fmtDeltas(e.changes)}.`;
     case "deal_offered": {
       const d = e.deal;

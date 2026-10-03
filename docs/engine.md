@@ -28,7 +28,7 @@ One JSON-serializable object with everything the engine needs to continue a run 
 
 `step(state, command) → { ok, state, events, actions, awaiting? }` is pure and synchronous. It never mutates its input, does no I/O, and reads no clock or `Math.random`.
 
-- **Commands:** the existing `Command` objects (`{"cmd":"go","n":1}`, `fight`, `rest`, `buy` with an `item`, `deal` with optional `text`, `accept`, `refuse`, `look`), plus `{"cmd":"devil_reply","deal":...}`.
+- **Commands:** the existing `Command` objects (`{"cmd":"go","n":1}`, `fight`, `rest`, `train` (campfire: one or the other with `rest`), `buy` with an `item`, `deal` with optional `text`, `accept`, `refuse`, `look`), plus `{"cmd":"devil_reply","deal":...}`.
 - **Rejection:** a rejected command returns `ok: false`, the input state itself (unchanged), and exactly one `rejected` event. The reasons are the same strings as before.
 - **`look`:** always accepted, including after the run ends and while the devil is pending. It changes nothing.
 
@@ -38,10 +38,11 @@ Every step result carries `actions`: the exact legal next commands, computed by 
 
 1. `fight`
 2. `rest`
-3. affordable `buy`s
-4. `deal` (while asks remain)
-5. `accept` and `refuse` (when an offer stands)
-6. `go n` (one per exit)
+3. `train`
+4. affordable `buy`s
+5. `deal` (while asks remain)
+6. `accept` and `refuse` (when an offer stands)
+7. `go n` (one per exit)
 
 Three special cases:
 

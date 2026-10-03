@@ -38,7 +38,7 @@ async function* randomPlay(seed: string, maxSteps = 300): AsyncGenerator<{ befor
 
 const PLAUSIBLE: Command[] = [
   { cmd: "go", n: 0 }, { cmd: "go", n: 1 }, { cmd: "go", n: 2 }, { cmd: "go", n: 3 }, { cmd: "go", n: 4 }, { cmd: "go", n: "" as unknown as number },
-  { cmd: "fight" }, { cmd: "rest" }, { cmd: "buy", item: "heal" }, { cmd: "buy", item: "blade" }, { cmd: "buy", item: "blessing" },
+  { cmd: "fight" }, { cmd: "rest" }, { cmd: "train" }, { cmd: "buy", item: "heal" }, { cmd: "buy", item: "blade" }, { cmd: "buy", item: "blessing" },
   { cmd: "buy", item: "sword" }, { cmd: "buy" }, { cmd: "deal" }, { cmd: "accept" }, { cmd: "refuse" }, { cmd: "devil_reply", deal: null },
   { cmd: "dance" } as unknown as Command,
 ];
@@ -96,6 +96,28 @@ test("act 1 always opens on the village (the shop), never at the devil's table",
     assert.equal(v.kind, "village");
     assert.ok(v.actions.some((c) => c.cmd === "buy"), "the starting gold buys something");
   }
+});
+
+test("campfire: rest OR train, never both; train is +1 attack for good, capped, and only at a fire", () => {
+  const atFire = (seed: string): GameState => { const s = initialState(seed); s.acts[0].nodes[0].kind = "campfire"; return s; };
+  const s = atFire("fire");
+  s.player.hp = 10;
+  assert.deepEqual(legalActions(s).slice(0, 2), [{ cmd: "rest" }, { cmd: "train" }], "listed right after fight, before buys");
+  const t = step(s, { cmd: "train" });
+  assert.ok(t.ok);
+  assert.deepEqual(t.events, [{ type: "trained", amount: 1, attack: s.player.attack + 1 }]);
+  assert.equal(t.state.player.attack, s.player.attack + 1);
+  assert.equal(t.state.player.hp, 10, "training does not heal");
+  assert.ok(t.state.resolved);
+  for (const c of [{ cmd: "rest" }, { cmd: "train" }] as Command[]) assert.deepEqual(step(t.state, c).events, [{ type: "rejected", reason: "the embers are spent" }]);
+  assert.ok(!t.actions.some((c) => c.cmd === "rest" || c.cmd === "train"));
+  const r = step(s, { cmd: "rest" });
+  assert.ok(r.ok && r.state.resolved && r.state.player.hp > 10 && r.state.player.attack === s.player.attack);
+  assert.equal(step(r.state, { cmd: "train" }).ok, false, "rested: no training after");
+  const capped = atFire("fire"); capped.player.attack = 12;
+  assert.match((step(capped, { cmd: "train" }).events[0] as { reason: string }).reason, /peak \(12\)/);
+  assert.ok(legalActions(capped).some((c) => c.cmd === "rest") && !legalActions(capped).some((c) => c.cmd === "train"));
+  assert.deepEqual(step(initialState("fire"), { cmd: "train" }).events, [{ type: "rejected", reason: "there is no fire here" }]);
 });
 
 test("deal awaits the devil with the HttpDevil request shape; only devil_reply (or look) continues", () => {

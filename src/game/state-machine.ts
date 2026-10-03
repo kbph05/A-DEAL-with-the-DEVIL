@@ -15,10 +15,10 @@ import { sanitizeDeal } from "./deal";
 import type { Curse } from "./devil";
 import type { Deltas, GameEvent } from "./events";
 import {
-  BOSSES, FOES, MAX_ASKS, MAX_CURSES, WARES, currentAct, currentNode, devilContext, enemyView, exitsOf,
+  BOSSES, FOES, MAX_ASKS, MAX_CURSES, TRAIN_ATTACK, WARES, currentAct, currentNode, devilContext, enemyView, exitsOf,
   type Command, type Enemy, type GameState, type StepResult,
 } from "./gameState";
-import { addGold, applyEffects, heal, hurt, note, settle, snapshot, spend } from "./state";
+import { STAT_RANGE, addGold, applyEffects, heal, hurt, note, settle, snapshot, spend } from "./state";
 
 const clone = <T>(x: T): T => structuredClone(x);
 
@@ -37,10 +37,11 @@ export function rejection(s: GameState, cmd: Command): string | null {
       return null;
     }
     case "fight": return over ?? (s.enemy ? null : "nothing here to fight");
-    case "rest": {
+    case "rest": case "train": {
       if (over) return over;
       if (currentNode(s).kind !== "campfire") return "there is no fire here";
-      return s.resolved ? "the embers are spent" : null;
+      if (s.resolved) return "the embers are spent";
+      return cmd.cmd === "train" && s.player.attack >= STAT_RANGE.attack[1] ? `your attack is already at its peak (${STAT_RANGE.attack[1]})` : null;
     }
     case "buy": {
       if (over) return over;
@@ -82,6 +83,13 @@ export function step(state: GameState, cmd: Command): StepResult {
       d.resolved = true;
       healBy(d, ev, Math.ceil(d.player.maxHp * 0.4), "the campfire");
       break;
+    case "train": { // the campfire's other choice: spends the fire just like rest
+      d.resolved = true;
+      const amount = applyEffects(d.player, { attack: TRAIN_ATTACK }).attack ?? 0;
+      ev.push({ type: "trained", amount, attack: d.player.attack });
+      note(d.player, `trained by the fire: attack ${d.player.attack}`);
+      break;
+    }
     case "buy": buy(d, ev, wareName(cmd.item)); break;
     case "deal":
       d.asks++; d.totalAsks++;

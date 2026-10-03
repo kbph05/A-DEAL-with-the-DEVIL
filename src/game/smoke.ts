@@ -12,7 +12,7 @@ const MAX = Number((globalThis as { process?: { argv: string[] } }).process?.arg
 for (let i = 0; i < MAX && !g.ending; i++) {
   const o = g.observe();
   if (o.enemy) { say("fight()", g.fight()); continue; }
-  if (o.kind === "campfire" && !o.resolved) { say("rest()", g.rest()); continue; }
+  if (o.kind === "campfire" && !o.resolved) { if (o.state.hp >= 0.7 * o.state.maxHp) say("train()", g.train()); else say("rest()", g.rest()); continue; }
   if (o.kind === "village" && o.state.gold >= 15 && !o.resolved) { say('buy("blade")', g.buy("blade")); continue; }
   if (o.kind === "well" && !o.resolved) { say('buy("blessing")', g.buy("blessing")); continue; }
   if (o.kind === "deal" && !o.resolved) {

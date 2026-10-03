@@ -56,6 +56,8 @@ export class Game {
   go(n: number | string): Result { return this.run({ cmd: "go", n: n as number }); }
   fight(): Result { return this.run({ cmd: "fight" }); }
   rest(): Result { return this.run({ cmd: "rest" }); }
+  /** Campfire: +1 attack instead of resting (one or the other). */
+  train(): Result { return this.run({ cmd: "train" }); }
   buy(item?: string): Result { return this.run({ cmd: "buy", item }); }
   accept(): Result { return this.run({ cmd: "accept" }); }
   refuse(): Result { return this.run({ cmd: "refuse" }); }

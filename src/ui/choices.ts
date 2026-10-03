@@ -9,10 +9,10 @@ import { chip, h } from "./dom";
 import { mountDag } from "./dag";
 import {
   chooseCards, curseText, dagModel, DEVIL_END_TEXT, devilPhase, effectChips, fightLabel, haggleText, lockReason, PANEL_TITLE, panelKinds, shopItems,
-  type Actions, type ChooseCard, type DealEnd, type PanelKind, type ShopItem,
+  type Actions, type ChooseCard, type DealEnd, type FireChoice, type PanelKind, type ShopItem,
 } from "./logic";
 
-export interface Choices { render(v: View, A: Actions, busy: boolean, end: DealEnd): void }
+export interface Choices { render(v: View, A: Actions, busy: boolean, end: DealEnd, fire?: FireChoice): void }
 
 /** `send` runs a command; the wish input is read at click time, so it stays current. */
 export function mountChoices(el: HTMLElement, send: (c: Command) => void): Choices {
@@ -75,15 +75,15 @@ export function mountChoices(el: HTMLElement, send: (c: Command) => void): Choic
       h("ul", { class: "shop-grid" }, ...shopItems(o, A).map(card)));
   }
 
-  function choosePanel(o: View, A: Actions): HTMLElement {
-    const cards = chooseCards(o, A);
-    const done = cards.some((c) => c.state === "chosen");
+  function choosePanel(o: View, A: Actions, fire: FireChoice): HTMLElement {
+    const cards = chooseCards(o, A, fire);
+    const done = o.resolved;
     const card = (c: ChooseCard) => {
       const b = h("button", { class: `choose-card ${c.state}` },
         h("span", { class: "radio", aria: { hidden: "true" }, text: c.state === "chosen" ? "●" : "○" }),
         h("span", { class: "choose-ico", text: c.icon, aria: { hidden: "true" } }),
         h("span", { class: "choose-text" }, h("b", { text: c.title }), h("span", { text: c.effect }),
-          h("span", { class: "choose-note", text: c.state === "chosen" ? "✓ Chosen" : c.note ?? "" })));
+          h("span", { class: "choose-note", text: c.state === "chosen" ? "✓ Chosen" : c.state === "closed" ? "Closed" : c.note ?? "" })));
       b.type = "button";
       b.disabled = A.locked || c.state !== "available";
       b.setAttribute("aria-pressed", String(c.state === "chosen"));
@@ -91,7 +91,9 @@ export function mountChoices(el: HTMLElement, send: (c: Command) => void): Choic
       return b;
     };
     return panel("choose",
-      h("p", { class: "muted", text: done ? "You made your choice here. The rest is closed." : "Only one. Once you take it, it is gone. Or skip it and move on." }),
+      h("p", { class: "muted", text: done ? "You made your choice here. The rest is closed."
+        : o.kind === "campfire" ? "Rest or train: one or the other. Either one spends the fire. Or skip it and move on."
+        : "Only one. Once you take it, it is gone. Or skip it and move on." }),
       h("div", { class: "choose-list" }, ...cards.map(card)));
   }
 
@@ -103,9 +105,9 @@ export function mountChoices(el: HTMLElement, send: (c: Command) => void): Choic
   const dag = mountDag(send);
 
   return {
-    render(o, A, busy, end) {
+    render(o, A, busy, end, fire = null) {
       const why = lockReason(o, busy);
-      const panels = panelKinds(o).map((k) => k === "devil" ? devilPanel(o, A, end) : k === "shop" ? shopPanel(o, A) : k === "choose" ? choosePanel(o, A) : fightPanel(o, A));
+      const panels = panelKinds(o).map((k) => k === "devil" ? devilPanel(o, A, end) : k === "shop" ? shopPanel(o, A) : k === "choose" ? choosePanel(o, A, fire) : fightPanel(o, A));
       if (!panels.length) panels.push(h("p", { class: "muted", text: o.ending ? "Nothing more to do." : "Nothing to do here. Pick where to go next." }));
       const kids: Node[] = [];
       if (why) kids.push(h("p", { class: o.ending ? "muted" : "wait", text: why }));

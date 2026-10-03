@@ -3,6 +3,7 @@ import type { Devil } from "./devil";
 import type { Ending, GameEvent, Result } from "./events";
 import type { Command } from "./gameState";
 import { createGame, type Game, type Observation } from "./run";
+import { STAT_RANGE } from "./state";
 
 export type { Command } from "./gameState";
 /** A policy is a pure function of what it can see. Return null to give up (counts as a stall). */
@@ -17,6 +18,7 @@ export async function execute(g: Game, c: Command): Promise<Result> {
     case "go": return g.go(c.n);
     case "fight": return g.fight();
     case "rest": return g.rest();
+    case "train": return g.train();
     case "buy": return g.buy(c.item);
     case "deal": return g.deal(c.text);
     case "accept": return g.accept();
@@ -26,14 +28,16 @@ export async function execute(g: Game, c: Command): Promise<Result> {
 }
 
 /**
- * Default bot: fights, rests at fires, spends gold on healing (when hurt) or blades, drinks from wells,
+ * Default bot: fights; at a fire trains when HP is at least 70% of max (and attack is below its cap), else rests; spends gold on healing (when hurt) or blades, drinks from wells,
  * alternates refusing and accepting deals (refuse first), and otherwise takes the first exit.
  */
 export const botPolicy: Policy = (o) => {
   if (o.enemy) return { cmd: "fight" };
   const { hp, maxHp, gold } = o.state;
   switch (o.kind) {
-    case "campfire": if (!o.resolved) return { cmd: "rest" }; break;
+    case "campfire":
+      if (!o.resolved) return { cmd: hp >= 0.7 * maxHp && o.state.attack < STAT_RANGE.attack[1] ? "train" : "rest" };
+      break;
     case "village":
       if (hp <= maxHp - 12 && gold >= 10) return { cmd: "buy", item: "heal" };
       if (gold >= 15) return { cmd: "buy", item: "blade" };

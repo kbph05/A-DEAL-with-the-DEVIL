@@ -2,8 +2,8 @@ import { test } from "node:test";
 import type { MapView, Observation } from "../game";
 import assert from "node:assert/strict";
 import { createGame, describe } from "../game";
-import type { Command } from "../game";
-import { availableActions, blurbOf, chooseCards, dealEnd, devilPhase, haggleText, panelKinds, shopItems, buyLabel, curseText, effectChips, eventClass, afterKinds, dagModel, exitNumber, fightLabel, lockReason, moveLock, nodeState, nodeTitle, outcomeEvents, pct, STAIRS_ID, topId } from "./logic";
+import type { Command, GameEvent } from "../game";
+import { availableActions, blurbOf, chooseCards, fireChoice, type FireChoice, dealEnd, devilPhase, haggleText, panelKinds, shopItems, buyLabel, curseText, effectChips, eventClass, afterKinds, dagModel, exitNumber, fightLabel, lockReason, moveLock, nodeState, nodeTitle, outcomeEvents, pct, STAIRS_ID, topId } from "./logic";
 import { diffDeal } from "./dealDiff";
 import { sanitizeDeal } from "../game/deal";
 
@@ -301,8 +301,13 @@ test("shop lists price tags at the village only; the well's blessing is a single
   assert.deepEqual([c.state, c.note], ["short", "need 3 more gold"]);
   assert.deepEqual(chooseCards({ ...well, resolved: true }, availableActions({ ...well, resolved: true })).map((c) => c.state), ["chosen"]);
   const camp = { ...o, kind: "campfire" as const, resolved: false };
-  assert.deepEqual(chooseCards(camp, availableActions(camp)).map((c) => [c.key, c.state]), [["rest", "available"]]);
-  assert.deepEqual(chooseCards({ ...camp, resolved: true }, availableActions({ ...camp, resolved: true })).map((c) => c.state), ["chosen"]);
+  assert.deepEqual(chooseCards(camp, availableActions(camp)).map((c) => [c.key, c.state]), [["rest", "available"], ["train", "available"]]);
+  const spent = { ...camp, resolved: true }, cards = (f: FireChoice) => chooseCards(spent, availableActions(spent), f).map((c) => c.state);
+  assert.deepEqual(cards("rest"), ["chosen", "closed"]);
+  assert.deepEqual(cards("train"), ["closed", "chosen"]);
+  assert.deepEqual(cards(null), ["closed", "closed"], "a resumed run cannot say which");
+  const strong = { ...camp, state: { ...camp.state, attack: 12 } };
+  assert.deepEqual(chooseCards(strong, availableActions(strong)).map((c) => [c.key, c.state, c.note]), [["rest", "available", null], ["train", "short", "Attack is already at its peak (12)"]]);
   assert.deepEqual(chooseCards(village, availableActions(village)), []);
 });
 
@@ -316,10 +321,15 @@ test("real engine: one pick resolves campfire and well; the village keeps sellin
       if (v.ending) break;
       const A = availableActions(v, false, v.actions);
       if (v.kind === "campfire" && !v.resolved) {
-        assert.equal(chooseCards(v, A)[0].state, "available");
-        g.rest(); const after = g.view();
-        assert.equal(chooseCards(after, availableActions(after, false, after.actions))[0].state, "chosen");
-        assert.ok(!after.actions.some((c) => c.cmd === "rest"));
+        assert.deepEqual(chooseCards(v, A).map((c) => c.state), ["available", "available"]);
+        assert.ok(A.rest && A.train);
+        const pick = seen.has("campfire") ? "train" : "rest"; // try both across the walk
+        const r = pick === "train" ? g.train() : g.rest(); const after = g.view();
+        const log = [...r.events].reverse(), Aft = availableActions(after, false, after.actions);
+        assert.equal(fireChoice([...log, { type: "moved", from: "x", to: v.nodeId, kind: "campfire", act: v.act }]), pick);
+        assert.deepEqual(chooseCards(after, Aft, pick).map((c) => c.state), pick === "rest" ? ["chosen", "closed"] : ["closed", "chosen"]);
+        assert.ok(!after.actions.some((c) => c.cmd === "rest" || c.cmd === "train"), "one or the other, never both");
+        if (pick === "train") { assert.equal(after.state.attack, v.state.attack + 1); seen.add("train"); }
         seen.add("campfire");
       }
       if (v.kind === "village" && v.state.gold >= 10) {
@@ -337,7 +347,17 @@ test("real engine: one pick resolves campfire and well; the village keeps sellin
       if (v.enemy) g.fight(); else if (v.exits.length) g.go(1); else break;
     }
   }
-  assert.ok(seen.has("campfire"), `saw ${[...seen]}`);
+  assert.ok(seen.has("campfire") && seen.has("train"), `saw ${[...seen]}`);
+});
+
+test("fireChoice reads what was done at this campfire from the log (newest first)", () => {
+  const moved: GameEvent = { type: "moved", from: "a", to: "b", kind: "campfire", act: 0 };
+  assert.equal(fireChoice([{ type: "trained", amount: 1, attack: 4 }, moved]), "train");
+  assert.equal(fireChoice([{ type: "healed", amount: 5, source: "the campfire", hp: 30 }, moved]), "rest");
+  assert.equal(fireChoice([moved]), "rest", "rested at full HP: no healed event, still a rest");
+  assert.equal(fireChoice([{ type: "started", seed: "x" }]), null);
+  assert.equal(fireChoice([]), null);
+  assert.equal(eventClass({ type: "trained", amount: 1, attack: 4 }), "ev-good");
 });
 
 test("planarOrder: removes avoidable crossings; real acts lay out with no crossings when possible", async () => {

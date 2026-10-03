@@ -1,7 +1,8 @@
 /** Pure helpers for the test UI: which buttons make sense, and how to style events. No DOM here, so tests can import it. */
 import { isSyncMarker, type Command, type Deal, type GameEvent, type MapView, type Observation } from "../game";
 import type { EnemyView } from "../game/events";
-import { WARES } from "../game/gameState";
+import { TRAIN_ATTACK, WARES } from "../game/gameState";
+import { STAT_RANGE } from "../game/state";
 import type { Kind } from "../map";
 
 export type Ware = keyof typeof WARES;
@@ -11,6 +12,8 @@ export interface Actions {
   exits: Observation["exits"];
   fight: boolean;
   rest: boolean;
+  /** Campfire: train (+1 attack) instead of resting. */
+  train: boolean;
   buy: Array<{ item: Ware; cost: number; affordable: boolean }>;
   /** Show the "ask the devil" row (wish input + button); `again` means an offer is already on the table (haggle); `enabled` is false once the devil is done haggling. */
   ask: { again: boolean; enabled: boolean } | null;
@@ -33,6 +36,7 @@ export function availableActions(o: Observation, busy = false, legal?: readonly 
     exits: o.exits,
     fight: legal ? has(legal, (c) => c.cmd === "fight") : o.enemy !== null,
     rest: legal ? has(legal, (c) => c.cmd === "rest") : o.kind === "campfire" && !o.resolved,
+    train: legal ? has(legal, (c) => c.cmd === "train") : o.kind === "campfire" && !o.resolved && o.state.attack < STAT_RANGE.attack[1],
     buy: wares.map((item) => ({ item, cost: WARES[item].cost,
       affordable: legal ? has(legal, (c) => c.cmd === "buy" && c.item === item) : o.state.gold >= WARES[item].cost })),
     ask: showAsk ? { again: o.offer !== null, enabled: legal ? has(legal, (c) => c.cmd === "deal") : true } : null,
@@ -47,7 +51,7 @@ export function eventClass(e: GameEvent): string {
     case "curse_added": case "curse_fired": return "ev-curse";
     case "deal_offered": case "deal_applied": case "deal_refused": return "ev-devil";
     case "damaged": case "lost": case "hell": return "ev-bad";
-    case "healed": case "enemy_slain": case "won": case "revived": return "ev-good";
+    case "healed": case "trained": case "enemy_slain": case "won": case "revived": return "ev-good";
     case "rejected": return "ev-reject";
     case "started": case "act_advanced": return "ev-head";
     default: return "ev";
@@ -333,19 +337,41 @@ export interface ChooseCard {
   key: string; icon: string; title: string; effect: string;
   /** What clicking it sends. */
   cmd: Command;
-  /** available = pick it; chosen = this is what you took (node resolved); short = cannot pay yet. */
-  state: "available" | "chosen" | "short";
+  /**
+   * available = pick it; chosen = this is what you took (node resolved); closed = the node is spent on the other choice
+   * (or the log cannot say which); short = cannot take it right now (no gold, or attack already at its cap).
+   */
+  state: "available" | "chosen" | "closed" | "short";
   /** Gold shortfall note, or null. */
   note: string | null;
 }
+/** What was done at the (spent) campfire you are standing on, read from the log (newest first); null if the log cannot say. */
+export type FireChoice = "rest" | "train" | null;
+export function fireChoice(log: readonly GameEvent[]): FireChoice {
+  for (const e of log) {
+    if (e.type === "trained") return "train";
+    if (e.type === "healed" && e.source === "the campfire") return "rest";
+    if (e.type === "moved") return "rest"; // arrived here and it is spent, without training: rested (at full HP no `healed`)
+    if (e.type === "started") return null;
+  }
+  return null;
+}
+
 /**
- * The single-use choices of a campfire or well. Once the node is resolved (the engine's `resolved`, and no rest / blessing
- * in `actions`) the card shows as chosen and nothing can be clicked: you only ever get one.
+ * The single-use choices of a campfire (Rest or Train: one or the other) or a well. Once the node is resolved (the
+ * engine's `resolved`, and no rest / train / blessing in `actions`) the card taken shows as chosen, the other as closed,
+ * and nothing can be clicked: you only ever get one. `fire` says which campfire card was taken (see `fireChoice`).
  */
-export function chooseCards(o: Pick<Observation, "kind" | "resolved" | "state">, A: Pick<Actions, "rest" | "buy">): ChooseCard[] {
+export function chooseCards(o: Pick<Observation, "kind" | "resolved" | "state">, A: Pick<Actions, "rest" | "buy"> & Partial<Pick<Actions, "train">>, fire: FireChoice = null): ChooseCard[] {
   if (o.kind === "campfire") {
-    const heal = Math.ceil(o.state.maxHp * 0.4);
-    return [{ key: "rest", icon: "🔥", title: "Rest at the campfire", effect: `Heal up to ${heal} HP`, cmd: { cmd: "rest" }, state: o.resolved ? "chosen" : "available", note: null }];
+    const heal = Math.ceil(o.state.maxHp * 0.4), cap = STAT_RANGE.attack[1];
+    const spent = (key: "rest" | "train"): ChooseCard["state"] => (fire === key ? "chosen" : "closed");
+    const trainable = A.train ?? o.state.attack < cap;
+    return [
+      { key: "rest", icon: "🔥", title: "Rest", effect: `Heal up to ${heal} HP`, cmd: { cmd: "rest" }, state: o.resolved ? spent("rest") : "available", note: null },
+      { key: "train", icon: "🗡️", title: "Train", effect: `+${TRAIN_ATTACK} Attack, for the rest of the run`, cmd: { cmd: "train" },
+        state: o.resolved ? spent("train") : trainable ? "available" : "short", note: !o.resolved && !trainable ? `Attack is already at its peak (${cap})` : null },
+    ];
   }
   if (o.kind === "well") {
     const w = A.buy.find((b) => b.item === "blessing");
