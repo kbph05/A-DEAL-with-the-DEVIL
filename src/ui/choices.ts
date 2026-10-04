@@ -5,6 +5,7 @@
  */
 import type { Command, View } from "../game";
 import { fmtDeltas } from "../game/events";
+import { MAX_ASKS } from "../game/gameState";
 import { chip, h } from "./dom";
 import { mountDag } from "./dag";
 import {
@@ -95,7 +96,7 @@ export function mountChoices(el: HTMLElement, send: (c: Command) => void, fight?
 
   function choosePanel(o: View, A: Actions, fire: FireChoice): HTMLElement {
     const cards = chooseCards(o, A, fire);
-    const done = o.resolved;
+    const done = o.resolved || (o.kind === "campfire" && o.devilPresent && o.asksLeft < MAX_ASKS); // at a fire, the first ask is the choice
     const card = (c: ChooseCard) => {
       const b = h("button", { class: `choose-card ${c.state}` },
         h("span", { class: "radio", aria: { hidden: "true" }, text: c.state === "chosen" ? "●" : "○" }),
@@ -110,7 +111,7 @@ export function mountChoices(el: HTMLElement, send: (c: Command) => void, fight?
     };
     return panel("choose",
       h("p", { class: "muted", text: done ? "You made your choice here. The rest is closed."
-        : o.kind === "campfire" ? "Rest or train: one or the other. Either one spends the fire. Or skip it and move on."
+        : o.kind === "campfire" ? "Rest, sharpen your weapon, or deal with the devil: one of the three. The first one spends the fire (asking the devil counts). Or skip it and move on."
         : "Only one. Once you take it, it is gone. Or skip it and move on." }),
       h("div", { class: "choose-list" }, ...cards.map(card)));
   }

@@ -48,6 +48,8 @@ export interface Modifiers {
 export interface GenOptions {
   /** Layers alternate good/bad so no edge joins same-polarity nodes. Default true. */
   alternate?: boolean;
+  /** How often deal nodes come up, relative to a uniform draw over the kinds: 0..1, default DEAL_NODE_RATE (1/3); 1 = the odds before 4 Oct. */
+  dealRate?: number;
 }
 
 export interface RewriteChange {

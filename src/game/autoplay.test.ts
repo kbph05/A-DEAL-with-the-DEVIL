@@ -66,3 +66,27 @@ test("hell ending when winning soulless; win when the soul is kept", async () =>
     assert.equal(g.ending, want);
   }
 });
+
+test("the bot deals at wells where the devil sits and at campfires once rest and train are no use; never past the caps", async () => {
+  const where = { deal: 0, campfire: 0, well: 0 };
+  for (let i = 0; i < 200; i++) {
+    const g = createGame(`devil-bot-${i}`);
+    for (let n = 0; !g.ending && n < 1000; n++) {
+      const o = g.observe(), c = botPolicy(o)!;
+      if (c.cmd === "deal") {
+        assert.ok(o.devilPresent && o.asksLeft > 0 && o.questionsLeft > 0, "only asks when the engine listens");
+        assert.equal(c.text, undefined, "no text: the StubDevil stays deterministic");
+        if (o.kind === "campfire") assert.ok(o.state.attack >= 12 || o.asksLeft < 3, "at a fire only when training is capped");
+        where[o.kind as keyof typeof where]++;
+      }
+      assert.ok((await execute(g, c)).ok, `${JSON.stringify(c)} rejected`);
+    }
+  }
+  assert.ok(where.deal > 0 && where.well > 0, JSON.stringify(where)); // fires: rarely, the bot seldom reaches the attack cap
+  const fire = { ...createGame("fire").observe(), kind: "campfire" as const, devilPresent: true, asksLeft: 3, resolved: false };
+  assert.deepEqual(botPolicy({ ...fire, state: { ...fire.state, attack: 12 } }), { cmd: "deal" }, "capped and healthy: the devil");
+  assert.deepEqual(botPolicy({ ...fire, state: { ...fire.state, attack: 12, hp: 10 } }), { cmd: "rest" }, "capped but hurt: rest");
+  assert.deepEqual(botPolicy(fire), { cmd: "train" }, "otherwise as before");
+  assert.deepEqual(botPolicy({ ...fire, asksLeft: 2 }), { cmd: "deal" }, "already talking to him: keep at it");
+  assert.deepEqual(botPolicy({ ...fire, asksLeft: 2, questionsLeft: 0 })?.cmd, "go", "no questions left: move on");
+});

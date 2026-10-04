@@ -7,6 +7,8 @@ import { availableActions, blurbOf, chooseCards, fireChoice, type FireChoice, de
 import { diffDeal } from "./dealDiff";
 import { lastStrike, STRIKE_HEAD } from "./logic";
 import { sanitizeDeal } from "../game/deal";
+import { initialState } from "../game/gameState";
+import { restoreGame } from "../game/run";
 
 test("actions follow the observation", () => {
   const g = createGame("ui-1");
@@ -266,6 +268,13 @@ test("panelKinds: devil at deals, shop only at the village, single-use choices a
   assert.deepEqual(k("village"), ["shop"]);
   assert.deepEqual(k("campfire"), ["choose"]);
   assert.deepEqual(k("well"), ["choose"]); // single use, so not a shop
+  // The devil's table beside the choices while he is there and listening (or an offer stands).
+  const d = (kind: Observation["kind"], over: Partial<Observation>) => panelKinds({ kind, enemy: null, devilPresent: true, asksLeft: 3, offer: null, ...over });
+  assert.deepEqual(d("campfire", {}), ["choose", "devil"]);
+  assert.deepEqual(d("campfire", { asksLeft: 0 }), ["choose"], "rested, trained or decided");
+  assert.deepEqual(d("well", {}), ["choose", "devil"]);
+  assert.deepEqual(d("well", { asksLeft: 0, offer: { dialogue: "x", effects: {} } }), ["choose", "devil"], "haggled out, offer still standing");
+  assert.deepEqual(d("well", { devilPresent: false, asksLeft: 0 }), ["choose"], "no devil at this well");
   assert.deepEqual(k("fight"), []);
   assert.deepEqual(k("final"), []);
   const foe = { name: "cave rat", hp: 3, maxHp: 3, boss: false };
@@ -309,14 +318,19 @@ test("shop lists price tags at the village only; the well's blessing is a single
   const [c] = chooseCards(broke, availableActions(broke));
   assert.deepEqual([c.state, c.note], ["short", "need 3 more gold"]);
   assert.deepEqual(chooseCards({ ...well, resolved: true }, availableActions({ ...well, resolved: true })).map((c) => c.state), ["chosen"]);
-  const camp = { ...o, kind: "campfire" as const, resolved: false };
-  assert.deepEqual(chooseCards(camp, availableActions(camp)).map((c) => [c.key, c.state]), [["rest", "available"], ["train", "available"]]);
+  const camp = { ...o, kind: "campfire" as const, resolved: false, devilPresent: true, asksLeft: 3 };
+  assert.deepEqual(chooseCards(camp, availableActions(camp)).map((c) => [c.key, c.state]), [["rest", "available"], ["train", "available"], ["deal", "available"]]);
   const spent = { ...camp, resolved: true }, cards = (f: FireChoice) => chooseCards(spent, availableActions(spent), f).map((c) => c.state);
-  assert.deepEqual(cards("rest"), ["chosen", "closed"]);
-  assert.deepEqual(cards("train"), ["closed", "chosen"]);
-  assert.deepEqual(cards(null), ["closed", "closed"], "a resumed run cannot say which");
+  assert.deepEqual(cards("rest"), ["chosen", "closed", "closed"]);
+  assert.deepEqual(cards("train"), ["closed", "chosen", "closed"]);
+  assert.deepEqual(cards("deal"), ["closed", "closed", "chosen"]);
+  assert.deepEqual(cards(null), ["closed", "closed", "closed"], "a resumed run cannot say which");
+  const talking = { ...camp, asksLeft: 2 };
+  assert.deepEqual(chooseCards(talking, availableActions(talking)).map((c) => c.state), ["closed", "closed", "chosen"], "the first ask spends the fire");
+  const mute = { ...camp, questionsLeft: 0 };
+  assert.deepEqual(chooseCards(mute, availableActions(mute)).map((c) => [c.state, c.note])[2], ["short", "The devil has heard enough from you this run."]);
   const strong = { ...camp, state: { ...camp.state, attack: 12 } };
-  assert.deepEqual(chooseCards(strong, availableActions(strong)).map((c) => [c.key, c.state, c.note]), [["rest", "available", null], ["train", "short", "Attack is already at its peak (12)"]]);
+  assert.deepEqual(chooseCards(strong, availableActions(strong)).map((c) => [c.key, c.state, c.note]).slice(0, 2), [["rest", "available", null], ["train", "short", "Attack is already at its peak (12)"]]);
   assert.deepEqual(chooseCards(village, availableActions(village)), []);
 });
 
@@ -330,14 +344,16 @@ test("real engine: one pick resolves campfire and well; the village keeps sellin
       if (v.ending) break;
       const A = availableActions(v, false, v.actions);
       if (v.kind === "campfire" && !v.resolved) {
-        assert.deepEqual(chooseCards(v, A).map((c) => c.state), ["available", "available"]);
+        assert.deepEqual(chooseCards(v, A).map((c) => c.state), ["available", "available", "available"]);
+        assert.deepEqual(panelKinds(v), ["choose", "devil"]);
         assert.ok(A.rest && A.train);
         const pick = seen.has("campfire") ? "train" : "rest"; // try both across the walk
         const r = pick === "train" ? g.train() : g.rest(); const after = g.view();
         const log = [...r.events].reverse(), Aft = availableActions(after, false, after.actions);
         assert.equal(fireChoice([...log, { type: "moved", from: "x", to: v.nodeId, kind: "campfire", act: v.act }]), pick);
-        assert.deepEqual(chooseCards(after, Aft, pick).map((c) => c.state), pick === "rest" ? ["chosen", "closed"] : ["closed", "chosen"]);
-        assert.ok(!after.actions.some((c) => c.cmd === "rest" || c.cmd === "train"), "one or the other, never both");
+        assert.deepEqual(chooseCards(after, Aft, pick).map((c) => c.state), pick === "rest" ? ["chosen", "closed", "closed"] : ["closed", "chosen", "closed"]);
+        assert.ok(!after.actions.some((c) => c.cmd === "rest" || c.cmd === "train" || c.cmd === "deal"), "one of the three, never two");
+        assert.deepEqual(panelKinds(after), ["choose"], "the devil leaves a spent fire");
         if (pick === "train") { assert.equal(after.state.attack, v.state.attack + 1); seen.add("train"); }
         seen.add("campfire");
       }
@@ -351,6 +367,9 @@ test("real engine: one pick resolves campfire and well; the village keeps sellin
         g.buy("blessing"); const after = g.view();
         assert.ok(after.resolved && !after.actions.some((c) => c.cmd === "buy"));
         assert.equal(chooseCards(after, availableActions(after, false, after.actions))[0].state, "chosen");
+        assert.equal(after.actions.some((c) => c.cmd === "deal"), after.devilPresent, "the blessing leaves the devil's deal open");
+        assert.equal(availableActions(after, false, after.actions).ask !== null, after.devilPresent);
+        if (after.devilPresent) assert.equal(devilPhase(after, null), "ask", "a drunk well is not a settled deal");
         seen.add("well");
       }
       if (v.enemy) g.fight(); else if (v.exits.length) g.go(1); else break;
@@ -430,4 +449,24 @@ test("eventText: the Outcome speaks to the player, with no console commands or n
   assert.ok(text.includes("You take −3 HP") && text.includes("You reach the final door."), text);
   const g = createGame("demo"), l = g.look().events[0];
   assert.equal(eventText(l), describe(l), "other events keep describe()'s wording");
+});
+
+test("real engine: a deal at the campfire shows on the choice cards and the devil's table, then spends the fire", async () => {
+  const s = initialState("ui-fire");
+  s.acts[0].nodes[0].kind = "campfire";
+  const g = restoreGame(s);
+  const v = g.view(), A = availableActions(v, false, v.actions);
+  assert.ok(A.ask && A.ask.enabled && !A.ask.again);
+  const r = await g.deal("gold");
+  const mid = g.view(), log = [...r.events].reverse(), Am = availableActions(mid, false, mid.actions);
+  assert.equal(fireChoice(log), "deal");
+  assert.deepEqual(chooseCards(mid, Am, fireChoice(log)).map((c) => c.state), ["closed", "closed", "chosen"]);
+  assert.deepEqual(panelKinds(mid), ["choose", "devil"]);
+  assert.equal(devilPhase(mid, dealEnd(log)), "offer");
+  assert.ok(!Am.rest && !Am.train && Am.offer);
+  const end = g.refuse(), after = g.view(), log2 = [...[...end.events].reverse(), ...log];
+  assert.equal(fireChoice(log2), "deal");
+  assert.deepEqual(chooseCards(after, availableActions(after, false, after.actions), fireChoice(log2)).map((c) => c.state), ["closed", "closed", "chosen"]);
+  assert.deepEqual(panelKinds(after), ["choose"]);
+  assert.ok(!after.actions.some((c) => ["rest", "train", "deal"].includes(c.cmd)), "refusing still spent the fire");
 });

@@ -1,7 +1,7 @@
 /** Headless automated play: runs a policy against the engine. Works in Node tests and in the browser console. */
 import type { Devil } from "./devil";
 import type { Ending, GameEvent, Result } from "./events";
-import type { Command } from "./gameState";
+import { MAX_ASKS, type Command } from "./gameState";
 import { createGame, type Game, type Observation } from "./run";
 import { STAT_RANGE } from "./state";
 
@@ -29,26 +29,34 @@ export async function execute(g: Game, c: Command): Promise<Result> {
 }
 
 /**
- * Default bot: fights; at a fire trains when HP is at least 70% of max (and attack is below its cap), else rests; spends gold on healing (when hurt) or blades, drinks from wells,
- * alternates refusing and accepting deals (refuse first), and otherwise takes the first exit.
+ * Default bot: fights; at a fire trains when HP is at least 70% of max (and attack is below its cap), else rests, but takes
+ * the devil's deal instead when neither would do anything (attack at its cap and HP at least 90%); spends gold on healing
+ * (when hurt) or blades, drinks from wells and then hears out the devil if he is sitting there; alternates refusing and
+ * accepting deals (refuse first) wherever they are; and otherwise takes the first exit. It never sends text, so the
+ * StubDevil stays deterministic, and it only asks while the engine would listen (`asksLeft`, `questionsLeft`).
  */
 export const botPolicy: Policy = (o) => {
   if (o.enemy) return { cmd: "fight" };
   const { hp, maxHp, gold } = o.state;
+  const canAsk = o.asksLeft > 0 && o.questionsLeft > 0;
+  // An offer on the table (deal node, campfire or well): decide it.
+  if (o.offer) return { cmd: o.dealsDecided % 2 === 0 ? "refuse" : "accept" };
   switch (o.kind) {
     case "campfire":
-      if (!o.resolved) return { cmd: hp >= 0.7 * maxHp && o.state.attack < STAT_RANGE.attack[1] ? "train" : "rest" };
-      break;
+      if (o.resolved) break;
+      if (o.asksLeft < MAX_ASKS) { if (canAsk) return { cmd: "deal" }; break; } // asked here already: the fire is the devil's
+      if (canAsk && o.state.attack >= STAT_RANGE.attack[1] && hp >= 0.9 * maxHp) return { cmd: "deal" };
+      return { cmd: hp >= 0.7 * maxHp && o.state.attack < STAT_RANGE.attack[1] ? "train" : "rest" };
     case "village":
       if (hp <= maxHp - 12 && gold >= 10) return { cmd: "buy", item: "heal" };
       if (gold >= 15) return { cmd: "buy", item: "blade" };
       break;
-    case "well": if (!o.resolved && gold >= 8) return { cmd: "buy", item: "blessing" }; break;
+    case "well":
+      if (!o.resolved && gold >= 8) return { cmd: "buy", item: "blessing" };
+      if (canAsk) return { cmd: "deal" };
+      break;
     case "deal":
-      if (!o.resolved) {
-        if (!o.offer) return { cmd: "deal" };
-        return { cmd: o.dealsDecided % 2 === 0 ? "refuse" : "accept" };
-      }
+      if (canAsk) return { cmd: "deal" };
       break;
   }
   return o.exits.length ? { cmd: "go", n: 1 } : null;

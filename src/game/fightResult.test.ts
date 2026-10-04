@@ -4,6 +4,7 @@ import { FightSim, NO_CONTROLS, type FightControls } from "../fight/sim";
 import { dist, norm, sub } from "../fight/logic";
 import { legalActions } from "./actions";
 import { sanitizeFightResult, type FightRequest } from "./fightResult";
+import { generateAct } from "../map";
 import { initialState, type Command, type Enemy, type GameState } from "./gameState";
 import { step } from "./state-machine";
 import { view } from "./view";
@@ -52,8 +53,10 @@ test("realtime fight: awaits a FightRequest (no dice used); only fight_result or
   const r = step(s0, RT);
   assert.ok(r.ok);
   assert.deepEqual(r.events, []);
+  const layers = Math.max(...s0.acts[0].nodes.map((n) => n.layer)) + 1;
   assert.deepEqual(r.awaiting, { fight: {
     player: { hp: 30, maxHp: 30, attack: 3 }, enemy: { name: "cave rat", hp: 10, maxHp: 10, power: 2, boss: false }, seed: `rt:${s0.player.nodeId}:1`,
+    where: { act: 0, acts: 3, layer: 0, layers, kind: "village" }, // the test parks the rat on the entry
   } });
   assert.deepEqual(r.state.pendingFight, r.awaiting!.fight);
   assert.deepEqual(r.state.rng, s0.rng, "starting a realtime fight rolls no dice");
@@ -204,4 +207,26 @@ test("describe(fought): realtime bouts read as a whole fight; the turn-based wor
   assert.match(describe(f({ dealt: 2, enemyHp: 8, bout: bout("unfinished", 0, 0) })), /unfinished after 0\.0 s.*cave rat has 8 HP left/);
   assert.equal(describe(f({ dealt: 0, enemyHp: 4, taken: 30 })), "You hit for 0; it has 4 HP left, and strikes back for 30.");
   assert.equal(describe(f({ dealt: 5, enemyHp: 5 })), "You hit for 5; it has 5 HP left.");
+});
+
+test("FightRequest.where says where the fight is: act of acts, layer of layers, node kind (additive, optional)", () => {
+  const s0 = initialState("where");
+  for (let a = 0; a < 3; a++) {
+    s0.player.act = a;
+    s0.acts[a] ??= generateAct("where", a);
+    const act = s0.acts[a], layers = Math.max(...act.nodes.map((n) => n.layer)) + 1;
+    for (const node of act.nodes.filter((n) => n.kind === "fight" || n.kind === "boss")) {
+      const s = structuredClone(s0);
+      s.player.nodeId = node.id;
+      s.enemy = { ...(node.kind === "boss" ? BOSS : RAT) };
+      const { req } = start(s);
+      assert.deepEqual(req.where, { act: a, acts: 3, layer: node.layer, layers, kind: node.kind });
+      assert.equal(node.kind === "boss", req.where!.layer === layers - 1, "the boss is on the top layer");
+    }
+  }
+  const { s, req } = start(facing());
+  const { where: _, ...old } = req; // a request saved before `where` existed still sanitizes the same
+  const r = { won: true, hpLeft: 20, enemyHpLeft: 0, hitsTaken: 2, timeMs: 3000 };
+  assert.deepEqual(sanitizeFightResult(r, old), sanitizeFightResult(r, req));
+  assert.ok(step(s, result(r)).ok);
 });

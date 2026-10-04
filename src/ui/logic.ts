@@ -1,7 +1,7 @@
 /** Pure helpers for the test UI: which buttons make sense, and how to style events. No DOM here, so tests can import it. */
 import { describe, isSyncMarker, type Command, type Deal, type GameEvent, type MapView, type Observation } from "../game";
 import type { EnemyView } from "../game/events";
-import { TRAIN_ATTACK, WARES } from "../game/gameState";
+import { MAX_ASKS, TRAIN_ATTACK, WARES } from "../game/gameState";
 import { STAT_RANGE } from "../game/state";
 import type { Kind } from "../map";
 
@@ -30,7 +30,9 @@ const has = (legal: readonly Command[], pred: (c: Command) => boolean) => legal.
  */
 export function availableActions(o: Observation, busy = false, legal?: readonly Command[]): Actions {
   const wares: Ware[] = o.kind === "village" ? ["heal", "blade"] : o.kind === "well" && !o.resolved ? ["blessing"] : [];
-  const showAsk = o.kind === "deal" && !o.resolved && !o.enemy;
+  // The devil's row: at a deal node until it is decided; at a campfire or a well with the devil while he still listens
+  // (`asksLeft`) or an offer stands. A well's `resolved` is its blessing, independent of the devil.
+  const showAsk = !o.enemy && (o.kind === "deal" ? !o.resolved : devilOpen(o));
   return {
     locked: busy || o.pending || o.ending !== null,
     exits: o.exits,
@@ -44,12 +46,16 @@ export function availableActions(o: Observation, busy = false, legal?: readonly 
   };
 }
 
+/** Away from a deal node (campfire, well with the devil): he is here and still open for business. */
+const devilOpen = (o: Partial<Pick<Observation, "devilPresent" | "asksLeft" | "offer">>): boolean =>
+  o.devilPresent === true && ((o.asksLeft ?? 0) > 0 || !!o.offer);
+
 /** CSS class for a log line, so the devil's meddling stands out. */
 export function eventClass(e: GameEvent): string {
   switch (e.type) {
     case "node_rewritten": case "rewrite_failed": return "ev-rewrite";
     case "curse_added": case "curse_fired": return "ev-curse";
-    case "deal_offered": case "deal_applied": case "deal_refused": return "ev-devil";
+    case "deal_offered": case "deal_applied": case "deal_refused": case "devil_appears": return "ev-devil";
     case "damaged": case "lost": case "hell": case "devil_struck": return "ev-bad";
     case "healed": case "trained": case "enemy_slain": case "won": case "revived": return "ev-good";
     case "rejected": return "ev-reject";
@@ -307,14 +313,15 @@ export type PanelKind = "devil" | "shop" | "choose" | "fight";
  * Which panels to show at this node, in order. A blocking enemy means only the Fight panel (the engine refuses everything
  * else, and deal nodes hold no fights). Otherwise: deal node = the Devil's table (kept after the deal, to show how it
  * ended); village = Shop (buy as often as you can pay); campfire and well = Choose one (each is single-use: the engine sets
- * `resolved` after one action, and the well's blessing is not a shop). Anything else has no panel.
+ * `resolved` after one action, and the well's blessing is not a shop), plus the Devil's table while he is there and still
+ * listening (every campfire, where a deal is the third choice; a well where he turned up). Anything else has no panel.
  */
-export function panelKinds(o: Pick<Observation, "kind" | "enemy">): PanelKind[] {
+export function panelKinds(o: Pick<Observation, "kind" | "enemy"> & Partial<Pick<Observation, "devilPresent" | "asksLeft" | "offer">>): PanelKind[] {
   if (o.enemy) return ["fight"];
   switch (o.kind) {
     case "deal": return ["devil"];
     case "village": return ["shop"];
-    case "campfire": case "well": return ["choose"];
+    case "campfire": case "well": return devilOpen(o) ? ["choose", "devil"] : ["choose"];
     default: return [];
   }
 }
@@ -354,9 +361,9 @@ export function lastStrike(log: readonly GameEvent[]): DevilStrike | null {
 }
 
 export type DevilPhase = "ask" | "offer" | "struck" | "walked" | "settled";
-/** Where the deal at this node stands. `settled` = resolved, but the log cannot say how. */
-export function devilPhase(o: Pick<Observation, "resolved" | "offer">, end: DealEnd): DevilPhase {
-  if (o.resolved) return end ?? "settled";
+/** Where the deal at this node stands. `settled` = resolved, but the log cannot say how. (A well's `resolved` is its blessing.) */
+export function devilPhase(o: Pick<Observation, "resolved" | "offer"> & Partial<Pick<Observation, "kind">>, end: DealEnd): DevilPhase {
+  if (o.resolved && o.kind !== "well") return end ?? "settled";
   return o.offer ? "offer" : "ask";
 }
 export const DEVIL_END_TEXT: Record<"struck" | "walked" | "settled", { head: string; body: string }> = {
@@ -403,11 +410,12 @@ export interface ChooseCard {
   /** Gold shortfall note, or null. */
   note: string | null;
 }
-/** What was done at the (spent) campfire you are standing on, read from the log (newest first); null if the log cannot say. */
-export type FireChoice = "rest" | "train" | null;
+/** What was done at the campfire you are standing on, read from the log (newest first); null if the log cannot say. */
+export type FireChoice = "rest" | "train" | "deal" | null;
 export function fireChoice(log: readonly GameEvent[]): FireChoice {
   for (const e of log) {
     if (e.type === "trained") return "train";
+    if (e.type === "deal_offered" || e.type === "deal_applied" || e.type === "deal_refused" || e.type === "devil_struck") return "deal";
     if (e.type === "healed" && e.source === "the campfire") return "rest";
     if (e.type === "moved") return "rest"; // arrived here and it is spent, without training: rested (at full HP no `healed`)
     if (e.type === "started") return null;
@@ -416,19 +424,26 @@ export function fireChoice(log: readonly GameEvent[]): FireChoice {
 }
 
 /**
- * The single-use choices of a campfire (Rest or Sharpen Weapon: one or the other) or a well. Once the node is resolved (the
- * engine's `resolved`, and no rest / train / blessing in `actions`) the card taken shows as chosen, the other as closed,
- * and nothing can be clicked: you only ever get one. `fire` says which campfire card was taken (see `fireChoice`).
+ * The single-use choices of a campfire (Rest, Sharpen Weapon or a Deal with the devil: one of the three) or a well. Once the
+ * node is resolved (the engine's `resolved`, and no rest / train / blessing in `actions`) the card taken shows as chosen,
+ * the others as closed, and nothing can be clicked: you only ever get one. At a campfire the first ask already counts: the
+ * Deal card shows as chosen while you talk to him (`asksLeft` below MAX_ASKS). `fire` says which campfire card was taken
+ * (see `fireChoice`). The Deal card asks without a wish; the Devil's table beside it takes one.
  */
-export function chooseCards(o: Pick<Observation, "kind" | "resolved" | "state">, A: Pick<Actions, "rest" | "buy"> & Partial<Pick<Actions, "train">>, fire: FireChoice = null): ChooseCard[] {
+export function chooseCards(o: Pick<Observation, "kind" | "resolved" | "state"> & Partial<Pick<Observation, "asksLeft" | "questionsLeft" | "devilPresent">>, A: Pick<Actions, "rest" | "buy"> & Partial<Pick<Actions, "train" | "ask">>, fire: FireChoice = null): ChooseCard[] {
   if (o.kind === "campfire") {
     const heal = Math.ceil(o.state.maxHp * 0.4), cap = STAT_RANGE.attack[1];
-    const spent = (key: "rest" | "train"): ChooseCard["state"] => (fire === key ? "chosen" : "closed");
+    const talking = !o.resolved && o.devilPresent === true && o.asksLeft !== undefined && o.asksLeft < MAX_ASKS;
+    const spent = (key: "rest" | "train" | "deal"): ChooseCard["state"] => (talking ? (key === "deal" ? "chosen" : "closed") : fire === key ? "chosen" : "closed");
+    const done = o.resolved || talking;
     const trainable = A.train ?? o.state.attack < cap;
+    const dealable = (A.ask?.enabled ?? true) && (o.questionsLeft ?? 1) > 0;
     return [
-      { key: "rest", icon: "🔥", title: "Rest", effect: `Heal up to ${heal} HP`, cmd: { cmd: "rest" }, state: o.resolved ? spent("rest") : "available", note: null },
+      { key: "rest", icon: "🔥", title: "Rest", effect: `Heal up to ${heal} HP`, cmd: { cmd: "rest" }, state: done ? spent("rest") : "available", note: null },
       { key: "train", icon: "🗡️", title: "Sharpen Weapon", effect: `+${TRAIN_ATTACK} Attack, for the rest of the run`, cmd: { cmd: "train" },
-        state: o.resolved ? spent("train") : trainable ? "available" : "short", note: !o.resolved && !trainable ? `Attack is already at its peak (${cap})` : null },
+        state: done ? spent("train") : trainable ? "available" : "short", note: !done && !trainable ? `Attack is already at its peak (${cap})` : null },
+      { key: "deal", icon: "😈", title: "Deal with the devil", effect: "Hear his offer; asking spends the fire, even if you refuse", cmd: { cmd: "deal" },
+        state: done ? spent("deal") : dealable ? "available" : "short", note: !done && !dealable ? "The devil has heard enough from you this run." : null },
     ];
   }
   if (o.kind === "well") {

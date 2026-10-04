@@ -22,6 +22,11 @@ export interface DevilContext {
   seed: string;
   act: number;
   nodeId: string;
+  /**
+   * Where he is sitting: "deal" (his table), "campfire" or "well" (additive, 4 Oct; the engine always sends it, older
+   * callers may omit it). Lets a backend devil set the scene ("by the campfire...", "at the well...").
+   */
+  kind?: Kind;
   /** How many times the devil has been asked this run (including this one). */
   askIndex: number;
   /** Questions the player may still ask the devil this run, after this one (0 = this was the last; handy for taunts). */

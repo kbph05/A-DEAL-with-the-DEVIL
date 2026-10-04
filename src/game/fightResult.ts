@@ -4,7 +4,8 @@
  * trusted: `sanitizeFightResult` clamps every number against the pending request and makes the outcome consistent.
  * Pure; no Phaser here (src/fight/ consumes `FightRequest` as its `FightInput`, which has the same shape).
  */
-import type { Enemy, GameState } from "./gameState";
+import { ACTS } from "../map";
+import { currentAct, currentNode, type Enemy, type GameState } from "./gameState";
 import { clamp } from "./state";
 
 /** What the realtime fight needs: the engine's own numbers, plus a seed for the arena and the dice. */
@@ -13,6 +14,12 @@ export interface FightRequest {
   enemy: { name: string; hp: number; maxHp: number; power: number; boss: boolean };
   /** `${run seed}:${nodeId}:${n}`, n = 1, 2, ... per enemy (a fresh one after a revival or an unfinished fight). */
   seed: string;
+  /**
+   * Where the fight is (additive, 4 Oct; kbph: fights get harder up the map): `act` of `acts` (0-based), the node's
+   * `layer` of the act's `layers` (0 = the act's entry, `layers - 1` = its boss), and the node `kind` ("fight", "boss", ...).
+   * Optional: older saved requests lack it. Not used by `sanitizeFightResult`.
+   */
+  where?: { act: number; acts: number; layer: number; layers: number; kind: string };
 }
 
 /** What the client reports (src/fight's `FightResult`). Every field is untrusted input. */
@@ -35,10 +42,12 @@ export const MAX_FIGHT_MS = 60 * 60 * 1000;
 
 /** The request for a new realtime fight against `s.enemy` (which must be present), as the `n`th bout with it. */
 export function fightRequest(s: GameState, e: Enemy, n: number): FightRequest {
+  const node = currentNode(s);
   return {
     player: { hp: s.player.hp, maxHp: s.player.maxHp, attack: s.player.attack },
     enemy: { name: e.name, hp: e.hp, maxHp: e.maxHp, power: e.power, boss: e.boss },
     seed: `${s.seed}:${s.player.nodeId}:${n}`,
+    where: { act: s.player.act, acts: ACTS, layer: node.layer, layers: Math.max(...currentAct(s).nodes.map((m) => m.layer)) + 1, kind: node.kind },
   };
 }
 

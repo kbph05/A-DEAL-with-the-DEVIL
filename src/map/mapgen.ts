@@ -23,6 +23,26 @@ const LAYER_COUNTS = { alternate: [6, 8], free: [6, 7, 8] } as const;
 /** Width walks tried per act before settling for the one closest to MIN_NODES..MAX_NODES (see buildShape). */
 const WIDTH_TRIES = 256;
 const pick = <T>(rng: Rng, xs: readonly T[]): T => xs[Math.floor(rng() * xs.length)];
+/**
+ * How likely a deal node is, relative to a uniform draw (kbph and Big Chungus, 4 Oct: the devil now also sits at every
+ * campfire and at some wells, so deal nodes are a third as common as before). Applies to every kind draw except forced
+ * kinds; `GenOptions.dealRate` overrides it (1 = the old uniform odds).
+ */
+export const DEAL_NODE_RATE = 1 / 3;
+
+/**
+ * One kind from `pool`, uniform except that "deal" comes up `rate` times as often as it would under a uniform draw (the
+ * other kinds share the rest equally). One `rng()` call per pick, like `pick`, so the stream is consumed the same way;
+ * with rate 1 it is exactly `pick`. Deal weight w against n - 1 others at weight 1: w / (w + n - 1) = rate / n.
+ */
+function pickKind(rng: Rng, pool: readonly Kind[], rate: number): Kind {
+  const n = pool.length;
+  if (rate === 1 || n < 2 || !pool.includes("deal")) return pick(rng, pool);
+  const w = (rate * (n - 1)) / (n - rate);
+  let r = rng() * (w + n - 1);
+  for (const k of pool) if ((r -= k === "deal" ? w : 1) < 0) return k;
+  return pool[n - 1];
+}
 const layerPolarity = (layer: number): Polarity => (layer % 2 === 0 ? "good" : "bad");
 
 /** Two edges between the same pair of layers cross, in slot order, iff their ends are in opposite order. */
@@ -98,7 +118,7 @@ function buildShape(rng: Rng, actIndex: number, alternate: boolean): MapNode[][]
   return layers;
 }
 
-function assignKinds(layers: MapNode[][], rng: Rng, alternate: boolean, mods: Modifiers, actIndex: number): void {
+function assignKinds(layers: MapNode[][], rng: Rng, alternate: boolean, mods: Modifiers, actIndex: number, dealRate: number): void {
   const banned = new Set(mods.banKinds ?? []);
   const playable: Kind[] = [...GOOD_KINDS, ...BAD_KINDS.filter((k) => k !== "boss")];
   // Bans are dropped for a polarity only if they would leave it empty.
@@ -121,14 +141,14 @@ function assignKinds(layers: MapNode[][], rng: Rng, alternate: boolean, mods: Mo
     }
   }
   const root = layers[0][0];
-  root.kind = pick(rng, pool("good")); // drawn even for act 1, so the rest of the act is the same as before the start rule
+  root.kind = pickKind(rng, pool("good"), dealRate); // drawn even for act 1, so the rest of the act is the same as before the start rule
   if (actIndex === 0) root.kind = START_KIND; // like the exit boss, this ignores modifiers
-  for (const n of middle) if (!forced.has(n.id)) n.kind = pick(rng, pool(polFor(n.layer)));
+  for (const n of middle) if (!forced.has(n.id)) n.kind = pickKind(rng, pool(polFor(n.layer)), dealRate);
   layers[layers.length - 1][0].kind = "boss";
 }
 
 /**
- * Deterministic in (runSeed, actIndex, modifiers, alternate). Modifiers only change kinds, never the
+ * Deterministic in (runSeed, actIndex, modifiers, alternate, dealRate). Modifiers only change kinds, never the
  * shape: the shape is drawn first from the seeded stream.
  */
 export function generateAct(runSeed: Seed, actIndex: number, modifiers: Modifiers = {}, opts: GenOptions = {}): Act {
@@ -136,7 +156,8 @@ export function generateAct(runSeed: Seed, actIndex: number, modifiers: Modifier
   const alternate = opts.alternate ?? true;
   const rng = mulberry32(hashSeed(`${runSeed}:${actIndex}`));
   const layers = buildShape(rng, actIndex, alternate);
-  assignKinds(layers, rng, alternate, modifiers, actIndex);
+  const r = opts.dealRate, dealRate = typeof r === "number" && r >= 0 && r <= 1 ? r : DEAL_NODE_RATE; // 0..1; junk = default
+  assignKinds(layers, rng, alternate, modifiers, actIndex, dealRate);
   const nodes = layers.flat();
   const exit = layers[layers.length - 1][0];
   const act: Act = { index: actIndex, runSeed, alternate, nodes, entry: nodes[0].id, exit: exit.id, changes: [], visited: [] };

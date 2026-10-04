@@ -2,7 +2,7 @@
  * The whole run as one plain JSON object, plus the read-only queries over it. `step` (state-machine.ts) is the only
  * thing that produces a new GameState; nothing here mutates its argument.
  */
-import { ACTS, generateAct, hashSeed, markVisited, rngState, type Act, type MapNode, type RngState } from "../map";
+import { ACTS, generateAct, hashSeed, markVisited, mulberry32, rngState, type Act, type MapNode, type RngState } from "../map";
 import type { Curse, Deal, DevilContext } from "./devil";
 import type { EnemyView, Ending, Exit, GameEvent } from "./events";
 import type { FightRequest } from "./fightResult";
@@ -20,6 +20,24 @@ export const MAX_ASKS = 3;
 export const MAX_DEVIL_QUERIES = 10;
 /** Questions the player may still put to the devil this run. */
 export const questionsLeft = (s: Pick<GameState, "totalAsks">): number => Math.max(0, MAX_DEVIL_QUERIES - s.totalAsks);
+/**
+ * Chance that the devil sits at a given well (kbph and Big Chungus, 4 Oct). Rolled per run seed and well node on its own
+ * hashed stream (`devilAtWell`), so neither the dice (`state.rng`) nor the map streams move.
+ */
+export const WELL_DEVIL_CHANCE = 0.5;
+/** Does the devil turn up at the well `nodeId` of run `seed`? Pure: the same answer every time, stored nowhere. */
+export const devilAtWell = (seed: string, nodeId: string): boolean =>
+  mulberry32(hashSeed(`well-devil:${seed}:${nodeId}`))() < WELL_DEVIL_CHANCE;
+/**
+ * Is the devil at the player's node? At every deal node and every campfire (where a deal is the third choice beside rest
+ * and train), and at the wells where he turned up (`devilAtWell`). Whether a `deal` is still legal there is `rejection`'s call.
+ */
+export function devilPresent(s: GameState): boolean {
+  const n = currentNode(s);
+  return n.kind === "deal" || n.kind === "campfire" || (n.kind === "well" && devilAtWell(s.seed, n.id));
+}
+/** Has the devil's business at this node ended (deal accepted or refused, or, at a campfire, the fire spent on rest or train)? */
+export const devilDone = (s: GameState): boolean => (currentNode(s).kind === "well" ? s.devilGone === true : s.resolved);
 /** Attack gained by training at a campfire (the alternative to resting there). */
 export const TRAIN_ATTACK = 1;
 export const WARES = { heal: { cost: 10 }, blade: { cost: 15 }, blessing: { cost: 8 } } as const;
@@ -35,7 +53,8 @@ export interface Enemy extends EnemyView {
 
 /**
  * Every input the engine accepts. `devil_reply` answers a pending devil request (see StepResult.awaiting).
- * At a campfire, `rest` (heal) and `train` (+1 attack) are alternatives: either one spends the fire.
+ * At a campfire, `rest` (heal), `train` (+1 attack) and `deal` are alternatives: the first of them spends the fire (the
+ * first `deal` ask counts, whatever follows: haggling, accepting, refusing, a strike or walking away).
  * `fight` is one round; `fight` with `realtime: true` instead asks the client to play a realtime fight (StepResult.awaiting
  * `fight`), answered by `fight_result` (untrusted; sanitized, see fightResult.ts).
  */
@@ -60,10 +79,15 @@ export interface GameState {
   player: PlayerState;
   curses: Curse[];
   enemy: Enemy | null;
-  /** The current node's one-shot action is used up (campfire rested or trained at, well drunk, enemy slain, deal decided). */
+  /** The current node's one-shot action is used up (campfire rested, trained at or dealt at, well drunk, enemy slain, deal decided). */
   resolved: boolean;
+  /**
+   * A well's deal is decided (accepted or refused) and the devil has left it. Wells keep `resolved` for the blessing, so the
+   * two stay independent. Reset on every move; absent elsewhere and in older saves.
+   */
+  devilGone?: boolean;
   offer: Deal | null;
-  /** Asks at the current deal node (max MAX_ASKS). */
+  /** Asks at the current node: a deal node, a campfire or a well with the devil (max MAX_ASKS). */
   asks: number;
   /** Asks this run (the devil's `askIndex`; capped at MAX_DEVIL_QUERIES). */
   totalAsks: number;
@@ -125,7 +149,7 @@ export function devilContext(s: GameState): DevilContext {
     stack.push(...(a.nodes.find((n) => n.id === id)?.next ?? []));
   }
   const rewritable = a.nodes.filter((n) => seen.has(n.id) && n.id !== a.exit && !a.visited.includes(n.id)).map((n) => ({ id: n.id, kind: n.kind }));
-  return { seed: s.seed, act: a.index, nodeId: s.player.nodeId, askIndex: s.totalAsks, questionsLeft: questionsLeft(s), rewritable, curses: s.curses.map((c) => ({ ...c })) };
+  return { seed: s.seed, act: a.index, nodeId: s.player.nodeId, kind: currentNode(s).kind, askIndex: s.totalAsks, questionsLeft: questionsLeft(s), rewritable, curses: s.curses.map((c) => ({ ...c })) };
 }
 
 /** Is `state` a valid-looking GameState? (Shallow check for restoring saved runs.) */

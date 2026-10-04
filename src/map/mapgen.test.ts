@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import {
-  ACTS, KINDS, MAX_NODES, MAX_WIDTH, MIN_NODES, MIN_WIDTH, START_KIND, generateAct, markVisited, mulberry32, polarity,
+  ACTS, DEAL_NODE_RATE, KINDS, MAX_NODES, MAX_WIDTH, MIN_NODES, MIN_WIDTH, START_KIND, generateAct, markVisited, mulberry32, polarity,
   rewriteNode, type Act, type Kind, type Modifiers,
 } from "./index";
 import { linkLayers } from "./mapgen";
@@ -261,4 +261,25 @@ test("1000 random seeds never violate invariants", () => {
     checkInvariants(generateAct(Math.floor(rng() * 2 ** 32), i % ACTS, mods, { alternate: some([true, true, false]) }));
   }
   for (let s = 0; s < 1000; s++) for (let a = 0; a < ACTS; a++) checkInvariants(generateAct(`run-${s}`, a));
+});
+
+test("deal nodes are a third as likely as before (DEAL_NODE_RATE); shapes and every other rule unchanged", () => {
+  assert.equal(DEAL_NODE_RATE, 1 / 3);
+  const shape = (a: Act) => a.nodes.map((n) => [n.id, n.layer, n.slot, n.next]);
+  for (const alternate of [true, false]) {
+    let before = 0, after = 0, goodBefore = 0, goodAfter = 0;
+    for (let s = 0; s < 1500; s++) for (let a = 0; a < ACTS; a++) {
+      const old = generateAct(`deal-${s}`, a, {}, { alternate, dealRate: 1 }), now = generateAct(`deal-${s}`, a, {}, { alternate });
+      checkInvariants(now);
+      assert.deepEqual(shape(now), shape(old), "the odds change kinds only, never the shape");
+      before += count(old, "deal"); after += count(now, "deal");
+      goodBefore += old.nodes.filter((n) => polarity(n.kind) === "good").length;
+      goodAfter += now.nodes.filter((n) => polarity(n.kind) === "good").length;
+    }
+    const ratio = after / before;
+    assert.ok(ratio > 0.3 && ratio < 0.37, `alternate ${alternate}: deal nodes ${before} -> ${after} (ratio ${ratio.toFixed(3)})`);
+    if (alternate) assert.equal(goodAfter, goodBefore, "alternating acts keep the same good/bad layout");
+  }
+  assert.equal(count(generateAct(8, 0, { forceKinds: { deal: 4 } }, { alternate: false }), "deal") >= 4, true, "forced deals are still honoured");
+  assert.deepEqual(generateAct("j", 1, {}, { dealRate: Number.NaN }), generateAct("j", 1), "a junk rate means the default");
 });

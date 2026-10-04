@@ -35,7 +35,7 @@ function chaosPolicy(rng: Rng): Policy {
   ];
   return (o) => {
     if (rng() < 0.55) return botPolicy(o);
-    if (o.kind === "deal" && rng() < 0.5) return { cmd: "deal", text: pick(TEXTS) };
+    if (o.devilPresent && rng() < 0.5) return { cmd: "deal", text: pick(TEXTS) }; // deal nodes, campfires, wells with the devil
     return pick(extra);
   };
 }
@@ -208,12 +208,14 @@ export async function contractShapes(opts: { includeNew?: boolean } = {}): Promi
 
 /**
  * The REPL's `--json` output lines, driven through a real child process. The scripted walk on "contract-a" must reach a
- * deal node and accept an offer (offer, curse and log shapes); 8 rounds do on the 4 Oct map (6 did on the old one).
+ * deal node and accept an offer (offer, curse and log shapes): 6 rounds did on the first map, 8 on the 4 Oct map, 12 once
+ * deal nodes became a third as likely (4 Oct, later). Steering the walk to the devil was tried: it changes the
+ * --manual-devil lines' other shapes (the map line no longer comes mid-fight), so the walk stays fixed.
  */
 export function replShapes(extraArgs: string[] = [], prefix = "repl", extraLines: string[] = []): Record<string, string[]> {
   const lines = [...extraLines,
     '{"cmd":"look"}', '{"cmd":"map"}', '{"cmd":"help"}', "not a command", '{"cmd":"go"}', '{"nope":1}',
-    ...Array.from({ length: 8 }, () => ['{"cmd":"fight"}', '{"cmd":"rest"}', '{"cmd":"buy","item":"blessing"}', '{"cmd":"buy","item":"heal"}',
+    ...Array.from({ length: 12 }, () => ['{"cmd":"fight"}', '{"cmd":"rest"}', '{"cmd":"buy","item":"blessing"}', '{"cmd":"buy","item":"heal"}',
       '{"cmd":"deal","text":"gold"}', '{"cmd":"deal"}', '{"cmd":"accept"}', '{"cmd":"refuse"}', '{"cmd":"go","n":1}', "fight", "go 2", "buy blade", "deal gold", "accept"]).flat(),
     '{"cmd":"new","seed":"contract-b"}', "new contract-c", '{"cmd":"quit"}',
   ];

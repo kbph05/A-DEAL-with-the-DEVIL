@@ -6,7 +6,7 @@ import type { Kind, MapNode, RewriteChange } from "../map";
 import { legalActions } from "./actions";
 import type { Curse, Deal } from "./devil";
 import type { EnemyView, Ending, Exit } from "./events";
-import { MAX_ASKS, currentAct, currentNode, enemyView, exitsOf, questionsLeft, type Command, type GameState } from "./gameState";
+import { MAX_ASKS, currentAct, currentNode, devilDone, devilPresent, enemyView, exitsOf, questionsLeft, type Command, type GameState } from "./gameState";
 import { snapshot, type PlayerState } from "./state";
 
 export interface MapViewNode { id: string; kind: Kind; visited: boolean; current: boolean; rewritten: boolean; next: string[] }
@@ -19,8 +19,13 @@ export interface Observation {
   offer: Deal | null; resolved: boolean; pending: boolean; dealsDecided: number; ending: Ending | null;
   /** Curses on the player (each fires once on its trigger). */
   curses: Curse[];
-  /** How many more times `deal` may be asked here (0 unless on an undecided deal node). */
+  /** How many more times `deal` may be asked here (0 unless the devil is here and his business is open: see `devilPresent`). */
   asksLeft: number;
+  /**
+   * The devil is at this node: every deal node and campfire, and the wells where he turned up (additive, 4 Oct). Static per
+   * node; whether you may still ask him is `asksLeft` (and `actions`).
+   */
+  devilPresent: boolean;
   /** How many more questions (asks and haggles) the devil will hear this run, at any deal node (MAX_DEVIL_QUERIES minus asks so far). */
   questionsLeft: number;
 }
@@ -29,13 +34,14 @@ export interface Observation {
 export interface View extends Observation { seed: string; map: MapView; actions: Command[] }
 
 export function observation(s: GameState): Observation {
-  const kind = currentNode(s).kind;
+  const kind = currentNode(s).kind, here = devilPresent(s);
   return {
     state: snapshot(s.player), nodeId: s.player.nodeId, kind, act: s.player.act,
     enemy: s.enemy && enemyView(s.enemy), exits: exitsOf(s), offer: s.offer, resolved: s.resolved,
     pending: s.pending !== null, dealsDecided: s.dealsDecided, ending: s.ending,
     curses: s.curses.map((c) => ({ ...c, effect: { ...c.effect } })),
-    asksLeft: kind === "deal" && !s.resolved && !s.ending ? Math.max(0, MAX_ASKS - s.asks) : 0,
+    asksLeft: here && !devilDone(s) && !s.ending ? Math.max(0, MAX_ASKS - s.asks) : 0,
+    devilPresent: here,
     questionsLeft: questionsLeft(s),
   };
 }

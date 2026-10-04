@@ -20,7 +20,8 @@ import type { Curse, Deal } from "./devil";
 import type { Deltas, GameEvent } from "./events";
 import { fightRequest, sanitizeFightResult } from "./fightResult";
 import {
-  BOSSES, FOES, MAX_ASKS, MAX_CURSES, MAX_DEVIL_QUERIES, TRAIN_ATTACK, WARES, currentAct, currentNode, devilContext, enemyView, exitsOf,
+  BOSSES, FOES, MAX_ASKS, MAX_CURSES, MAX_DEVIL_QUERIES, TRAIN_ATTACK, WARES, currentAct, currentNode, devilAtWell, devilContext, devilDone,
+  devilPresent, enemyView, exitsOf,
   type Command, type Enemy, type GameState, type StepResult,
 } from "./gameState";
 import { STAT_RANGE, addGold, applyEffects, heal, hurt, note, settle, snapshot, spend } from "./state";
@@ -49,6 +50,7 @@ export function rejection(s: GameState, cmd: Command): string | null {
       if (over) return over;
       if (currentNode(s).kind !== "campfire") return "there is no fire here";
       if (s.resolved) return "the embers are spent";
+      if (s.asks > 0) return "you chose the devil at this fire"; // the first ask spends the fire's choice
       return cmd.cmd === "train" && s.player.attack >= STAT_RANGE.attack[1] ? `your attack is already at its peak (${STAT_RANGE.attack[1]})` : null;
     }
     case "buy": {
@@ -64,8 +66,9 @@ export function rejection(s: GameState, cmd: Command): string | null {
     }
     case "deal": {
       if (over) return over;
-      if (currentNode(s).kind !== "deal") return "the devil does not sit here";
-      if (s.resolved) return "the devil has already gone";
+      if (!devilPresent(s)) return "the devil does not sit here";
+      if (currentNode(s).kind === "campfire" && s.resolved && s.asks === 0) return "the embers are spent"; // rested or trained
+      if (devilDone(s)) return "the devil has already gone";
       if (s.enemy) return "not while something is trying to kill you";
       if (s.totalAsks >= MAX_DEVIL_QUERIES) return "The devil has heard enough from you this run.";
       return s.asks >= MAX_ASKS ? "he is done haggling: accept() or refuse()" : null;
@@ -127,7 +130,7 @@ export function step(state: GameState, cmd: Command): StepResult {
       break;
     case "accept": accept(d, ev); break;
     case "refuse":
-      d.offer = null; d.resolved = true; d.dealsDecided++;
+      decided(d);
       ev.push({ type: "deal_refused" });
       break;
   }
@@ -183,6 +186,7 @@ function enter(d: GameState, ev: GameEvent[], id: string, from: string, fromDeal
   const a = currentAct(d);
   d.player.nodeId = id;
   d.resolved = false; d.offer = null; d.asks = 0; d.enemy = null;
+  delete d.devilGone;
   if (fromDeal) ev.push({ type: "devil_stage_left", nodeId: from });
   if (id === "final" && a.final) {
     ev.push({ type: "moved", from, to: id, kind: "final", act: a.index });
@@ -194,6 +198,7 @@ function enter(d: GameState, ev: GameEvent[], id: string, from: string, fromDeal
   const node = a.nodes.find((n) => n.id === id)!;
   ev.push({ type: "moved", from, to: id, kind: node.kind, act: a.index });
   if (node.kind === "deal") ev.push({ type: "devil_stage_entered", nodeId: id });
+  if (node.kind === "well" && devilAtWell(d.seed, id)) ev.push({ type: "devil_appears", nodeId: id, kind: node.kind });
   fire(d, ev, "on_enter");
   if (d.ending) return;
   if (node.kind === "fight" || node.kind === "boss") {
@@ -296,9 +301,16 @@ function strike(d: GameState, ev: GameEvent[], deal: Deal): void {
   settleHp(d, ev, "the devil's wrath");
 }
 
+/** A deal accepted or refused: it spends a deal node or a campfire (`resolved`); at a well only the devil leaves (the blessing stays). */
+function decided(d: GameState): void {
+  d.offer = null; d.dealsDecided++;
+  if (currentNode(d).kind === "well") d.devilGone = true;
+  else d.resolved = true;
+}
+
 function accept(d: GameState, ev: GameEvent[]): void {
   const deal = d.offer!;
-  d.offer = null; d.resolved = true; d.dealsDecided++;
+  decided(d);
   const changes = applyEffects(d.player, deal.effects);
   ev.push({ type: "deal_applied", deal, changes });
   note(d.player, `deal accepted: ${deal.dialogue.slice(0, 60)}`);
