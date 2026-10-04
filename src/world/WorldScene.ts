@@ -236,7 +236,7 @@ export class WorldScene extends Phaser.Scene {
     const bx = Math.min(0, (worldW - viewW) / 2);
     const by = Math.min(0, (worldH - viewH) / 2);
     cam.setZoom(L.zoom).setBounds(bx, by, Math.max(worldW, viewW), Math.max(worldH, viewH)).setRoundPixels(true);
-    cam.startFollow(this.player, true, 0.2, 0.2);
+    cam.startFollow(this.player, true, 1, 1); // no follow lag: a lagging camera reads as a slow start
     cam.centerOn(this.player.x, this.player.y);
     this.ui = this.add.graphics().setDepth(10);
     const font = { fontFamily: "system-ui, sans-serif", fontSize: "18px", color: "#ddd", stroke: "#000", strokeThickness: 4 };

@@ -2,7 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { FloatingStick } from "../input/stick";
 import { generateWorld } from "./gen";
-import { WALK, facingOf, stepVelocity, worldLayout } from "./logic";
+import { WORLD_SPEED, facingOf, stepVelocity, worldLayout } from "./logic";
 import { fromTiled, loadMapJson } from "./tiled";
 import { T, TILES, isBlocked, parseWorldMap, reachable, tileAt, tileCenter, toTile, type WorldMap } from "./tiles";
 
@@ -66,17 +66,17 @@ test("generator: walled in, walkable spawn, every door reachable (300 seeds, two
   }
 });
 
-test("stepVelocity: smooth start and stop, diagonals not faster, no overshoot", () => {
+test("stepVelocity: full speed from frame 1, constant while held, diagonals not faster, stops dead", () => {
+  assert.equal(WORLD_SPEED, 80);
   let v = { x: 0, y: 0 };
-  v = stepVelocity(v, { x: 1, y: 0 }, 1 / 60);
-  assert.ok(v.x > 0 && v.x < WALK.speed, "accelerates, not instantly at top speed");
-  for (let i = 0; i < 60; i++) v = stepVelocity(v, { x: 1, y: 0 }, 1 / 60);
-  assert.deepEqual(v, { x: WALK.speed, y: 0 }, "reaches top speed exactly");
-  for (let i = 0; i < 60; i++) v = stepVelocity(v, { x: 1, y: 1 }, 1 / 60);
-  assert.ok(Math.abs(Math.hypot(v.x, v.y) - WALK.speed) < 1e-9, "diagonal: same speed");
-  for (let i = 0; i < 60; i++) v = stepVelocity(v, { x: 0, y: 0 }, 1 / 60);
-  assert.deepEqual(v, { x: 0, y: 0 }, "stops");
-  assert.deepEqual(stepVelocity({ x: 3, y: 0 }, { x: 0, y: 0 }, -1), { x: 3, y: 0 }, "negative dt does nothing");
+  for (let i = 0; i < 120; i++) {
+    v = stepVelocity(v, { x: 1, y: 0 }, i === 0 ? 1 / 60 : 1 / 30);
+    assert.deepEqual(v, { x: WORLD_SPEED, y: 0 }, `frame ${i + 1}: already full speed`);
+  }
+  for (const dir of [{ x: 1, y: 1 }, { x: -1, y: 1 }, { x: 0, y: -1 }]) {
+    assert.ok(Math.abs(Math.hypot(...Object.values(stepVelocity({ x: 0, y: 0 }, dir, 1 / 60))) - WORLD_SPEED) < 1e-9, "same speed any way");
+  }
+  assert.deepEqual(stepVelocity({ x: 80, y: 0 }, { x: 0, y: 0 }, 1 / 60), { x: 0, y: 0 }, "stops");
 });
 
 test("facingOf: 4-way, keeps facing when idle and on exact diagonals", () => {

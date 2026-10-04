@@ -40,16 +40,21 @@ export const STEP_MS = 1000 / 60;
 /** The arena is a square room of this many units; the scene draws it 1:1. */
 export const ARENA = 720;
 
+/** Fight walking speed, units/s (was 230: it felt slow next to the village). The forest scales units to px by 1/3. */
+export const FIGHT_WALK_SPEED = 280;
+/** Shift (dash) speed as a multiple of the walking speed: 2.3 x 280 = 644, the dash's old 640. */
+export const FIGHT_SPRINT_MULT = 2.3;
+
 export const PLAYER = {
   radius: 16,
-  speed: 230, // units/s
+  speed: FIGHT_WALK_SPEED, // units/s
   swingSpeedFactor: 0.6, // slower while swinging
   attackCdMs: 420,
   swingMs: 120,
   swingRange: 46, // beyond the player's edge
   swingHalfAngle: Math.PI / 3, // 120 degree arc
   dashMs: 160,
-  dashSpeed: 640,
+  dashSpeed: FIGHT_WALK_SPEED * FIGHT_SPRINT_MULT, // units/s
   dashCdMs: 800,
   dashInvulnMs: 220, // the dash plus a little grace
   hurtIframesMs: 800,

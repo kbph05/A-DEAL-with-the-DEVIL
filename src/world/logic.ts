@@ -5,12 +5,11 @@
 import { norm, type Vec } from "../input/dir";
 import { TILE_SIZE } from "./tiles";
 
+/** Village walking speed, px/s (5 placeholder tiles a second). Constant while a direction is held: no ramp, no walk-then-run. */
+export const WORLD_SPEED = 5 * TILE_SIZE;
+
 export const WALK = {
-  /** Top speed: 80 px/s (5 placeholder tiles a second). */
-  speed: 5 * TILE_SIZE,
-  /** Speeding up and slowing down (px/s²): full speed in about 0.1 s, a stop in about 0.07 s. */
-  accel: 800,
-  decel: 1200,
+  speed: WORLD_SPEED,
   /** Below this speed (px/s) the walk animation stops. */
   animMin: 8,
 };
@@ -19,19 +18,12 @@ export const WALK = {
 export const FEET = { w: 10, h: 6, x: 3, y: 10 };
 
 /**
- * Move velocity `v` toward the target `dir * speed` by at most `accel * dt` (or `decel * dt` when letting go):
- * smooth starts and stops, no overshoot. `dir` is normalised first, so diagonals are not faster.
+ * The player's velocity for this frame: `dir * speed`, at once. `dir` is normalised first, so diagonals are not faster
+ * and a full push is full speed from the first frame (a touch stick is already an 8-way unit vector). Releasing stops dead.
  */
-export function stepVelocity(v: Vec, dir: Vec, dt: number, p = WALK): Vec {
+export function stepVelocity(_v: Vec, dir: Vec, _dt: number, p: { speed: number } = WALK): Vec {
   const d = norm(dir);
-  const target = { x: d.x * p.speed, y: d.y * p.speed };
-  const idle = d.x === 0 && d.y === 0;
-  const max = (idle ? p.decel : p.accel) * Math.max(0, dt);
-  const dx = target.x - v.x;
-  const dy = target.y - v.y;
-  const l = Math.hypot(dx, dy);
-  if (l <= max || l < 1e-9) return target;
-  return { x: v.x + (dx / l) * max, y: v.y + (dy / l) * max };
+  return { x: d.x * p.speed, y: d.y * p.speed };
 }
 
 export type Facing = "down" | "up" | "left" | "right";
