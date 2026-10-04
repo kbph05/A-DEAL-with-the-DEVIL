@@ -2,7 +2,7 @@
 
 ## Scene art
 
-Devil, forest, well and village art by Armand (Big Chungus).
+Devil, forest, well and village art by Armand Baril (Big Chungus).
 
 ## Sprite packs
 
