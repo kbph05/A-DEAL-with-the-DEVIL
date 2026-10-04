@@ -9,17 +9,22 @@
  *
  * | Role | Character | Size |
  * | --- | --- | --- |
- * | the player | Soldier (Tiny RPG pack 01) | the world hero's height |
- * | orc (every regular enemy) | Orc (pack 01) | the Soldier's scale: as the artist drew it |
- * | miniboss1, miniboss2 | Demon_A (pack 02) | the Soldier's scale × 1.25 |
- * | final_boss | WarriorCh (WarriorChAnimation) | the final boss placeholder's height |
- * | demon (lab only now) | Demon_A | the Soldier's scale |
+ * | the player | Soldier (Tiny RPG pack 01) | PIXEL_SCALE |
+ * | orc (every regular enemy) | Orc (pack 01) | PIXEL_SCALE |
+ * | miniboss1, miniboss2 | Demon_A (pack 02) | PIXEL_SCALE × 1.25 |
+ * | final_boss | WarriorCh (WarriorChAnimation) | PIXEL_SCALE |
+ * | demon (lab only now) | Demon_A | PIXEL_SCALE |
+ *
+ * Sizes (Big Chungus, 4 Oct: "make sure pixel sizes are standardized"): every sheet is drawn at PIXEL_SCALE world
+ * pixels per sheet pixel, the same as the scene backgrounds (src/render/pixelScale.ts), so the artist's relative sizes
+ * hold and a sprite's pixels match the ground's. No fitting to a target height any more.
  * | slime, skeleton archer | none: generated art (they are out of the encounter tables) | |
  *
  * Frame sizes are NOT hard-coded: they are worked out from each loaded image (`detectFrames`), with an override table
  * (`FRAME_OVERRIDES`) for a sheet that turns out to differ. UNVERIFIED against the real files (built without the key).
  */
 import type { EnemyId } from "../fight/enemies";
+import { PIXEL_SCALE } from "./pixelScale";
 
 // ---------------------------------------------------------------------------------------------------------------
 // The sheets
@@ -108,24 +113,18 @@ export type RoleId = "player" | EnemyId;
 
 export interface RoleArt {
   character: CharacterId;
-  /** Target height of the visible figure, world pixels (the generated art's height), used when `like` can't be. */
-  height: number;
-  /** Draw at this character's scale (times `mult`), so the pack's characters keep the artist's relative sizes. */
-  like?: CharacterId;
+  /** A boss's size multiplier on top of PIXEL_SCALE (minibosses: 1.25). Default 1. */
   mult?: number;
 }
 
-/** The world hero is 16 px; the generated final boss is 40 px tall (horns and all). */
-export const HERO_HEIGHT = 16;
-
 /** Role → sheet. A role that is missing (slime, skeleton archer) keeps its generated art. */
 export const ROLES: Readonly<Partial<Record<RoleId, RoleArt>>> = {
-  player: { character: "soldier", height: HERO_HEIGHT },
-  orc: { character: "orc", height: HERO_HEIGHT, like: "soldier", mult: 1 },
-  demon: { character: "demon_a", height: 18, like: "soldier", mult: 1 },
-  miniboss1: { character: "demon_a", height: 24, like: "soldier", mult: 1.25 },
-  miniboss2: { character: "demon_a", height: 24, like: "soldier", mult: 1.25 },
-  final_boss: { character: "warrior", height: 36 },
+  player: { character: "soldier" },
+  orc: { character: "orc" },
+  demon: { character: "demon_a" },
+  miniboss1: { character: "demon_a", mult: 1.25 },
+  miniboss2: { character: "demon_a", mult: 1.25 },
+  final_boss: { character: "warrior" },
 };
 
 export const roleArt = (role: RoleId): RoleArt | null => ROLES[role] ?? null;
@@ -277,19 +276,8 @@ export function feetOrigin(fig: Box, fw: number, fh: number, flipped: boolean): 
 export const fitScale = (figureH: number, targetH: number): number =>
   figureH > 0 && targetH > 0 ? Math.min(4, Math.max(0.1, targetH / figureH)) : 1;
 
-/**
- * A role's scale, given each loaded character's figure height: the `like` character's own fit (times `mult`) when
- * that one loaded, so the Tiny RPG characters keep their relative sizes; else a fit to the role's own height.
- */
-export function roleScale(role: RoleArt, figureHeight: (c: CharacterId) => number | null): number {
-  if (role.like) {
-    const likeRole = Object.values(ROLES).find((r) => r?.character === role.like && !r.like);
-    const h = figureHeight(role.like);
-    if (likeRole && h) return fitScale(h, likeRole.height) * (role.mult ?? 1);
-  }
-  const own = figureHeight(role.character);
-  return own ? fitScale(own, role.height) : 1;
-}
+/** A role's scale, world pixels per sheet pixel: PIXEL_SCALE, times a boss's `mult`. */
+export const roleScale = (role: RoleArt): number => PIXEL_SCALE * (role.mult ?? 1);
 
 // ---------------------------------------------------------------------------------------------------------------
 // Which animation plays

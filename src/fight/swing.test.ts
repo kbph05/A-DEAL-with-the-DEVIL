@@ -15,7 +15,7 @@ import { FightSim, NO_CONTROLS } from "./sim";
 const near = (a: number, b: number) => Math.abs(a - b) < 1e-9;
 
 test("swingArc: the hitbox sits on the facing side, for all 8 facings", () => {
-  const o = { x: 100, y: 200 }, r = 12, reach = r + PLAYER.swingRange, s = Math.SQRT1_2;
+  const o = { x: 100, y: 200 }, r = 12, reach = r + PLAYER.swingRange * (r / PLAYER.radius), s = Math.SQRT1_2;
   const facings: Array<[string, Vec, Vec]> = [
     ["right", { x: 1, y: 0 }, { x: 1, y: 0 }], ["left", { x: -1, y: 0 }, { x: -1, y: 0 }],
     ["up", { x: 0, y: -1 }, { x: 0, y: -1 }], ["down", { x: 0, y: 1 }, { x: 0, y: 1 }],

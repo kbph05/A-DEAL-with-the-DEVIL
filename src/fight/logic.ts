@@ -119,7 +119,7 @@ export interface SwingArc {
   origin: Vec;
   /** Unit direction the blade swings toward: the player's facing at the swing. */
   dir: Vec;
-  /** Sector radius: the player's radius plus PLAYER.swingRange. */
+  /** Sector radius: the player's radius plus PLAYER.swingRange (scaled with the radius, see `swingArc`). */
   reach: number;
   /** Angle of `dir` and the sector's two edges (radians, screen coordinates: y down). */
   angle: number; from: number; to: number;
@@ -128,14 +128,16 @@ export interface SwingArc {
 }
 
 /**
- * The swing's hitbox: a sector of radius `playerRadius + PLAYER.swingRange`, ±PLAYER.swingHalfAngle around `dir`. `dir` is
+ * The swing's hitbox: a sector of radius `playerRadius + PLAYER.swingRange`, ±PLAYER.swingHalfAngle around `dir`; a body
+ * bigger than PLAYER.radius (the forest's, drawn at PIXEL_SCALE) scales the range with it, so the blade reaches as far
+ * past the figure as it did on the small one. `dir` is
  * the player's facing: the last non-zero move (keys or stick, 8 ways), or toward the pointer on a mouse click. The sim
  * hits with it (`hitBySwing`) and both scenes draw it, so the arc on screen is the hitbox. A zero `dir` faces right.
  */
 export function swingArc(origin: Vec, dir: Vec, playerRadius: number): SwingArc {
   const d = norm(dir);
   const u = d.x === 0 && d.y === 0 ? { x: 1, y: 0 } : d;
-  const reach = playerRadius + PLAYER.swingRange, angle = Math.atan2(u.y, u.x);
+  const reach = playerRadius + PLAYER.swingRange * (playerRadius / PLAYER.radius), angle = Math.atan2(u.y, u.x);
   return {
     origin: { ...origin }, dir: u, reach, angle, from: angle - PLAYER.swingHalfAngle, to: angle + PLAYER.swingHalfAngle,
     tip: { x: origin.x + u.x * reach, y: origin.y + u.y * reach },

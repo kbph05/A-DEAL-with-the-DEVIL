@@ -3,19 +3,28 @@
  * (encounters.ts) become a `SimWorld` for `FightSim`, and the screen layout for any container size. No Phaser;
  * tested in node (forest.test.ts). The Phaser side is ForestScene.ts; the public API is `runForestFight` in index.ts.
  *
- * Units: the scene is in world pixels (16 px tiles, the hero is 16 px), the sim in fight units (the player has radius
- * 16 and walks 230 units/s). One world pixel is `UNITS_PER_PX` units, so the rules stay exactly the arena's.
+ * Units: the scene is in world pixels (backgrounds and sprites at PIXEL_SCALE world pixels per art pixel), the sim in
+ * fight units. One world pixel is `UNITS_PER_PX` units; bodies are scaled by `BODY_SCALE` to match the bigger figures.
  */
+import { PIXEL_SCALE } from "../render/pixelScale";
 import type { Rect, SceneDef } from "../world/scene";
 import type { Encounter } from "./encounters";
-import { clampToRect, type Circle, type Vec } from "./logic";
+import { PLAYER, clampToRect, type Circle, type Vec } from "./logic";
 import type { SimEnemySpawn, SimWorld } from "./sim";
 
 /**
- * Fight units per world pixel. 3 makes the sim's player (radius 16, 230 units/s) about the world hero's size and
- * pace (feet box 10 px wide, 80 px/s): radius 5.3 px, 77 px/s.
+ * Fight units per world pixel. 3 makes the sim's player (280 units/s) about the world hero's pace (80 px/s): 93 px/s.
+ * Unchanged by PIXEL_SCALE: the backgrounds didn't change scale, so crossing the scene takes as long as before.
  */
 export const UNITS_PER_PX = 3;
+
+/**
+ * Body sizes in the forest (Big Chungus, 4 Oct: "make sure pixel sizes are standardized"). The sim's radii were tuned
+ * to figures drawn at about one world pixel per sheet pixel (the 16 px hero); every figure is now drawn at PIXEL_SCALE
+ * (src/render/pixelScale.ts), so every body radius (player and enemies) is scaled by it, and the sword's reach with
+ * the player's (`swingArc`). Player: radius 16 -> 32 units (5.3 -> 10.7 px), reach 62 -> 124 units (21 -> 41 px).
+ */
+export const BODY_SCALE = PIXEL_SCALE;
 
 const K = UNITS_PER_PX;
 const toUnits = (r: Rect): Rect => ({ x: r.x * K, y: r.y * K, w: r.w * K, h: r.h * K });
@@ -91,14 +100,18 @@ export function forestWorld(def: SceneDef, enc: Encounter): SimWorld {
       const e = enc.enemies[i];
       const o = PACK_OFFSETS[k % PACK_OFFSETS.length];
       const pos = { x: (at.x + o.x) * K, y: (at.y + o.y) * K };
+      const params = { ...e.params, radius: e.params.radius * BODY_SCALE };
       enemies.push({
-        kind: e.id, name: e.name, boss: e.boss, hp: e.hp, maxHp: e.maxHp, power: e.power, params: e.params,
-        pos: e.params.behaviour === "archer" ? clampToRect(pos, e.params.radius, band) : pos, // archers start on the path too
+        kind: e.id, name: e.name, boss: e.boss, hp: e.hp, maxHp: e.maxHp, power: e.power, params,
+        pos: params.behaviour === "archer" ? clampToRect(pos, params.radius, band) : pos, // archers start on the path too
       });
     }
   });
   const exit = (def.zones ?? []).find((z) => z.kind === "exit");
-  return { bounds: toUnits(def.bounds), band, playerSpawn: { x: def.spawn.x * K, y: def.spawn.y * K }, enemies, alarm: exit ? toUnits(exit) : undefined };
+  return {
+    bounds: toUnits(def.bounds), band, playerSpawn: { x: def.spawn.x * K, y: def.spawn.y * K }, enemies, alarm: exit ? toUnits(exit) : undefined,
+    playerRadius: PLAYER.radius * BODY_SCALE,
+  };
 }
 
 /** Sim units to world pixels (positions and lengths). */

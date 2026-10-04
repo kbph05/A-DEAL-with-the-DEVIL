@@ -13,7 +13,8 @@ import { NPC_SCALE, counterRows, npcOffset } from "./npc";
 import { npcArtKey, npcArtUrl } from "./npcArt";
 import { HERO_COLS, HERO_ROWS, HERO_SIZE, PLACEHOLDER_HERO, ensurePlaceholderTextures } from "./textures";
 import { buildCharacter, preloadCharacters, type CharacterArt } from "../render/spriteArt";
-import { fitScale, roleArt } from "../render/sprites";
+import { roleArt, roleScale } from "../render/sprites";
+import { PIXEL_SCALE } from "../render/pixelScale";
 
 /**
  * Where a texture came from: a private file, the team's bundled band (bandArt.ts; backgrounds only), a URL in the def,
@@ -217,7 +218,7 @@ export class WorldScene extends Phaser.Scene {
     const spec = this.privatePlayer
       ? { key: KEY.idle, fw: PRIVATE_PLAYER.frameWidth, fh: PRIVATE_PLAYER.frameHeight, feet: PRIVATE_PLAYER.feet, scale: PRIVATE_PLAYER.scale }
       : this.soldier ? this.soldierSpec(this.soldier)
-      : { key: PLACEHOLDER_HERO, fw: HERO_SIZE, fh: HERO_SIZE, feet: FEET, scale: 1 };
+      : { key: PLACEHOLDER_HERO, fw: HERO_SIZE, fh: HERO_SIZE, feet: FEET, scale: PIXEL_SCALE };
     const half = { x: (spec.scale * spec.feet.w) / 2, y: (spec.scale * spec.feet.h) / 2 };
     const start = clampToBounds(def.spawn, def.bounds, half);
     const fx = spec.scale * (spec.feet.x + spec.feet.w / 2 - spec.fw / 2);
@@ -304,13 +305,14 @@ export class WorldScene extends Phaser.Scene {
   }
 
   /**
-   * The Soldier's spec, like PRIVATE_PLAYER's: its idle frame, a feet box as wide as the generated hero's (in world
-   * pixels) under the visible figure, and the scale that makes the figure the hero's height.
+   * The Soldier's spec, like PRIVATE_PLAYER's: its idle frame, the generated hero's feet box (in sheet pixels, so the
+   * same size at the same PIXEL_SCALE) under the visible figure, and PIXEL_SCALE (src/render/pixelScale.ts).
    */
   private soldierSpec(art: CharacterArt): { key: string; fw: number; fh: number; feet: { w: number; h: number; x: number; y: number }; scale: number } {
     const fig = art.idle.fig, fw = art.idle.fw, fh = art.idle.fh;
-    const scale = fitScale(fig.h, roleArt("player")?.height ?? HERO_SIZE);
-    const w = Math.max(1, Math.round(FEET.w / scale)), h = Math.max(1, Math.round(FEET.h / scale));
+    const role = roleArt("player");
+    const scale = role ? roleScale(role) : PIXEL_SCALE;
+    const w = FEET.w, h = FEET.h;
     const cx = fig.x + fig.w / 2, feet = fig.y + fig.h;
     this.soldierFeet = { w, h, cx, feet, fw, fh };
     // The start position below assumes origin x 0.5; the figure's own centre is used instead (setOrigin after), so the

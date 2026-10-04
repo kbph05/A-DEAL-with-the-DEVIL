@@ -69,6 +69,8 @@ export interface SimWorld {
   alarm?: Rect;
   /** An enemy that wakes also wakes the idle ones within this range of it, units. Default PACK_RANGE. */
   packRange?: number;
+  /** The player's body radius, units (forest.ts scales it with the sprite). Default PLAYER.radius. */
+  playerRadius?: number;
 }
 
 /** Forest mode: an enemy that wakes wakes its idle neighbours within this many units (centre to centre). */
@@ -136,7 +138,7 @@ export class FightSim {
       spawns = [{ kind, name: inp.enemy.name, boss: inp.enemy.boss, pos: ENEMY_SPAWN, hp: inp.enemy.hp, maxHp: inp.enemy.maxHp, power: inp.enemy.power, params }];
     }
     this.player = {
-      pos: this.collide({ ...start }, PLAYER.radius), knock: { x: 0, y: 0 }, facing: { x: 0, y: -1 }, radius: PLAYER.radius,
+      pos: this.collide({ ...start }, world?.playerRadius ?? PLAYER.radius), knock: { x: 0, y: 0 }, facing: { x: 0, y: -1 }, radius: world?.playerRadius ?? PLAYER.radius,
       hp: inp.player.hp, maxHp: inp.player.maxHp, attack: inp.player.attack,
       attackCdMs: 0, swingMs: 0, swingDir: { x: 0, y: -1 },
       dashMs: 0, dashCdMs: 0, dashDir: { x: 0, y: -1 }, dashInvulnMs: 0, iframesMs: 0, stunMs: 0,

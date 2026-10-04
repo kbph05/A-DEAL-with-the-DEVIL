@@ -13,8 +13,9 @@ import { encounterSummary, type Encounter } from "./encounters";
 import { UNITS_PER_PX, footPx, forestLayout, playerFeetPx, toPx, type ForestLayout } from "./forest";
 import { PLAYER, STEP_MS, aimAtPointer, moveDir, swingArc, swingDrawOrigin, type FightInput, type FightResult, type Vec } from "./logic";
 import { FightSim, type EnemyBody, type FightControls, type SimWorld } from "./sim";
-import { ActorSprite, buildCharacter, figureHeight, preloadCharacters, type CharacterArt } from "../render/spriteArt";
+import { ActorSprite, buildCharacter, preloadCharacters, type CharacterArt } from "../render/spriteArt";
 import { enemyAnim, playerAnim, roleArt, roleScale, type CharacterId } from "../render/sprites";
+import { PIXEL_SCALE } from "../render/pixelScale";
 
 /** Live, read-only view of the forest scene for the lab and smoke tests (the sim itself comes via `onDebug` too). */
 export interface ForestView {
@@ -141,7 +142,7 @@ export class ForestScene extends Phaser.Scene {
     const ids: CharacterId[] = ["soldier"];
     for (const e of this.cfg.encounter.enemies) {
       const r = roleArt(e.id);
-      if (r) ids.push(r.character, ...(r.like ? [r.like] : []));
+      if (r) ids.push(r.character);
     }
     return [...new Set(ids)];
   }
@@ -185,13 +186,12 @@ export class ForestScene extends Phaser.Scene {
     // The licensed sprites, where loaded (src/render/sprites.ts); a role whose sheets are missing keeps generated art.
     const arts = new Map<CharacterId, CharacterArt | null>();
     for (const id of this.characters()) arts.set(id, buildCharacter(this, id));
-    const heightOf = (c: CharacterId) => figureHeight(arts.get(c));
     const label = { fontFamily: "system-ui, sans-serif", fontSize: "6px", color: "#ffe9b0", stroke: "#000", strokeThickness: 2 };
     for (const body of this.sim.enemies) {
       const role = roleArt(body.kind);
       const art = role ? arts.get(role.character) : null;
-      const actor = role && art ? new ActorSprite(this, art, roleScale(role, heightOf)) : null;
-      const sprite = actor ? actor.sprite : this.add.image(0, 0, enemyTextureKey(body.kind)).setOrigin(0.5, 1);
+      const actor = role && art ? new ActorSprite(this, art, roleScale(role)) : null;
+      const sprite = actor ? actor.sprite : this.add.image(0, 0, enemyTextureKey(body.kind)).setOrigin(0.5, 1).setScale(PIXEL_SCALE);
       const name = this.add.text(0, 0, body.name, label).setOrigin(0.5, 1).setResolution(6).setDepth(OV + 2);
       this.foes.push({ body, sprite, art: actor, name, last: { ...body.pos } });
       world.push(sprite, name);
@@ -204,9 +204,9 @@ export class ForestScene extends Phaser.Scene {
     const soldier = arts.get("soldier");
     const playerRole = roleArt("player");
     if (soldier && playerRole) {
-      this.hero = new ActorSprite(this, soldier, roleScale(playerRole, heightOf));
+      this.hero = new ActorSprite(this, soldier, roleScale(playerRole));
       this.player = this.hero.sprite;
-    } else this.player = this.add.sprite(0, 0, PLACEHOLDER_HERO, 0).setOrigin(0.5, 1);
+    } else this.player = this.add.sprite(0, 0, PLACEHOLDER_HERO, 0).setOrigin(0.5, 1).setScale(PIXEL_SCALE);
     world.push(this.player);
     this.fxg = this.add.graphics().setDepth(OV - 1);
     world.push(this.fxg);
@@ -375,7 +375,7 @@ export class ForestScene extends Phaser.Scene {
     const p = s.player;
     const blink = Math.floor(s.timeMs / 80) % 2 === 0;
     // The figure is centred on the sim's centre (the hitbox's and the arc's origin), horizontally and vertically.
-    const px = toPx(p.pos.x), pf = playerFeetPx(p.pos, this.hero ? this.hero.figureH : HERO_SIZE);
+    const px = toPx(p.pos.x), pf = playerFeetPx(p.pos, this.hero ? this.hero.figureH : HERO_SIZE * PIXEL_SCALE);
     const moved = Math.hypot(p.pos.x - this.lastPos.x, p.pos.y - this.lastPos.y) > 0.5;
     this.lastPos = { ...p.pos };
     this.facing = facingOf(p.facing, this.facing);
@@ -441,7 +441,7 @@ export class ForestScene extends Phaser.Scene {
       }
       // A sprite keeps its last facing while it lies dead; the generated art always faces you.
       if (art) art.place(ex, ef, e.hp > 0 ? p.pos.x < e.pos.x : art.flipped, e.hp > 0 ? scale : 1);
-      else sprite.setPosition(ex, ef).setScale(scale / squash, scale * squash).setFlipX(p.pos.x < e.pos.x);
+      else sprite.setPosition(ex, ef).setScale((PIXEL_SCALE * scale) / squash, PIXEL_SCALE * scale * squash).setFlipX(p.pos.x < e.pos.x);
       sprite.setDepth(actorDepth(ef));
       return sprite.depth;
     });
@@ -477,7 +477,7 @@ export class ForestScene extends Phaser.Scene {
       }
       // The top of the visible figure (a sprite's frame is mostly empty space around it).
       const top = art ? art.top : sprite.y - sprite.displayHeight;
-      if (b.mode === "recover" || e.stunMs > 0) f.lineStyle(1, 0xffffff, 0.6).strokeEllipse(ex, top - 2, (art ? art.figureW : ENEMY_ART_SIZE[e.kind].w) * 0.6, 3);
+      if (b.mode === "recover" || e.stunMs > 0) f.lineStyle(1, 0xffffff, 0.6).strokeEllipse(ex, top - 2, (art ? art.figureW : ENEMY_ART_SIZE[e.kind].w * PIXEL_SCALE) * 0.6, 3);
       // HP bar and name above the canopy, so the trees never hide them.
       const bw = e.boss ? 30 : 16;
       bar(bars, ex - bw / 2, top - 5, bw, 2.5, e.hp / e.maxHp, COL.hpEnemy, 0.5);

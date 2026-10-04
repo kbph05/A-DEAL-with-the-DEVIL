@@ -224,11 +224,11 @@ Big Chungus (4 Oct): "use soldier as the player, warrior as the final boss, and 
 
 | Role | Sheet | Size on screen |
 | --- | --- | --- |
-| Player | Soldier (Tiny RPG pack 01): idle, walk, Attack01 to 03 in turn (one per swing, toward the swing), hurt, death | the visible figure fitted to the world hero's 16 px |
-| `orc` | Orc (pack 01): idle, walk, Attack01/02, hurt, death | the Soldier's scale (as the artist drew them) |
-| `miniboss1`, `miniboss2` | Demon_A (pack 02), same set | the Soldier's scale × 1.25; miniboss 2 is tougher by its numbers, not its size |
-| `final_boss` | WarriorCh: idle, walk (HRun when it moves fast), Attack/Attack2/Attack3, and Heavy for the burst's charge (the telegraphed big hit) | its figure fitted to 36 px |
-| `demon` (lab only) | Demon_A | the Soldier's scale |
+| Player | Soldier (Tiny RPG pack 01): idle, walk, Attack01 to 03 in turn (one per swing, toward the swing), hurt, death | `PIXEL_SCALE` (2 world px per sheet px, as the backgrounds) |
+| `orc` | Orc (pack 01): idle, walk, Attack01/02, hurt, death | `PIXEL_SCALE` (as the artist drew them) |
+| `miniboss1`, `miniboss2` | Demon_A (pack 02), same set | `PIXEL_SCALE` × 1.25; miniboss 2 is tougher by its numbers, not its size |
+| `final_boss` | WarriorCh: idle, walk (HRun when it moves fast), Attack/Attack2/Attack3, and Heavy for the burst's charge (the telegraphed big hit) | `PIXEL_SCALE` |
+| `demon` (lab only) | Demon_A | `PIXEL_SCALE` |
 | `slime`, `skeleton_archer` | none: generated art | |
 
 - **Only with the key.** A sheet is requested only when the build lists it (`__PRIVATE_ASSETS__`, which has the decrypted paths when `ASSET_KEY` is set). Without the key, or if a role's idle sheet fails to load, that role keeps the generated art (`enemyArt.ts`, the generated hero), so CI and anyone without the key play exactly as before. Another sheet that fails just loses that animation (a missing walk shows idle). The orc's generated fallback is the slime's drawing.
@@ -244,9 +244,9 @@ Measured with a bot that walks at the nearest enemy swinging and never dodges (2
 
 ### On the path
 
-- **The scene** is `src/world/scenes/forest.json` (1280×560), drawn on the designer's forest band (`assets/forest.png`, Big Chungus, 4 Oct: trees on top, a dirt path across the middle, bushes at the bottom; docs/world.md, "Art"). The bounds (y 312 to 424, 112 px tall) lie on the band's dirt path, with an exit zone at the far end and six `spawns` along it. With the band there is no canopy overlay: the trees are in the picture. If the band fails to load, the generated placeholder (a dirt path through grass, canopy rows over both edges) comes back.
+- **The scene** is `src/world/scenes/forest.json` (1280×512, the band at exactly 2×, `PIXEL_SCALE`), drawn on the designer's forest band (`assets/forest.png`, Big Chungus, 4 Oct: trees on top, a dirt path across the middle, bushes at the bottom; docs/world.md, "Art"). The bounds (y 285 to 388, 103 px tall) lie on the band's dirt path, with an exit zone at the far end and six `spawns` along it. With the band there is no canopy overlay: the trees are in the picture. If the band fails to load, the generated placeholder (a dirt path through grass, canopy rows over both edges) comes back.
 - **Archers keep to the path band** (`pathBand` in `forest.ts`): the bounds less 18 px at the bottom and 30 px at the top, which is the dirt path's core on the band (the strips under the placeholder's canopy rows, plus room for an archer's head). They spawn in it, and backing off from you stops at its edge (`SimWorld.band`), so they never stand in the tree line. Everyone else, you included, uses the full bounds.
-- **Units:** the scene is in world pixels, the sim in fight units, at 3 units per pixel (`UNITS_PER_PX`). That makes the sim's player about the size and pace of the world's hero.
+- **Units:** the scene is in world pixels, the sim in fight units, at 3 units per pixel (`UNITS_PER_PX`). That makes the sim's player about the pace of the world's hero (93 vs 80 px/s). **Bodies scale with the sprites** (`BODY_SCALE = PIXEL_SCALE`, 4 Oct): every figure is drawn at 2 world px per art pixel, so every body radius in the forest is doubled (player 16 -> 32 units, 5.3 -> 10.7 px; orc 18 -> 36; bosses 34 -> 68), and the sword's reach scales with the player's radius (`swingArc`: 62 -> 124 units, 21 -> 41 px). Speeds, aggro and pack ranges are unchanged (the backgrounds didn't change scale). The arena keeps its numbers.
 - **Placement** (`forestWorld`): one or two enemies stand apart, met one at a time. Three or more come as two packs, the first one bigger, each on a spawn point with the members around it, the first pack on the nearest spawn.
 - **Aggro (the choice):** an enemy wakes when the gap between you and it drops below its aggro range: slime 230, demon 260, archer 380, bosses 300 units (about 75 to 125 px). There is no timeout: an enemy you haven't reached waits. When one wakes, the idle ones within 240 units of it wake too (`PACK_RANGE`), so a pack fights together. Hitting an enemy wakes it. Stepping into the exit zone wakes everyone left, so you can't slip past.
 - **It ends** when every enemy is down (banner PATH CLEAR) or you are at 0 HP (DEFEATED). The result comes about 1.1 s later, as in the arena.

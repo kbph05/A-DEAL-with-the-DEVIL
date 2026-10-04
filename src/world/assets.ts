@@ -6,6 +6,8 @@
  * vite.config.ts lists that folder at startup into __PRIVATE_ASSETS__, so only files that exist are requested
  * (no 404s in the console). A file that fails to load still falls back to the placeholder.
  */
+import { PIXEL_SCALE } from "../render/pixelScale";
+
 declare const __PRIVATE_ASSETS__: string[];
 
 /** File names found in public/assets/private/ when the dev server or build started. */
@@ -32,7 +34,7 @@ export interface PlayerSheetSpec {
   walk: SheetAnim;
   /** The feet collision box inside one frame, in sheet pixels. Keep it centred left to right (mirroring). */
   feet: { w: number; h: number; x: number; y: number };
-  /** World pixels per sheet pixel (a tile is 16 world pixels). */
+  /** World pixels per sheet pixel: PIXEL_SCALE, the backgrounds' scale (src/render/pixelScale.ts). */
   scale: number;
 }
 
@@ -48,7 +50,7 @@ export const PRIVATE_PLAYER: PlayerSheetSpec = {
   idle: { file: "player-idle.png", frames: 6, fps: 8 },
   walk: { file: "player-walk.png", frames: 8, fps: 12 },
   feet: { w: 10, h: 6, x: 45, y: 54 },
-  scale: 1,
+  scale: PIXEL_SCALE,
 };
 
 // Scene art (background, overlay, actors) needs no spec: it is found by path, scenes/<scene id>/background.png and

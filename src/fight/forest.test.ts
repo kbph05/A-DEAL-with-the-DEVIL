@@ -3,10 +3,11 @@ import assert from "node:assert/strict";
 import { sanitizeFightResult, type FightRequest } from "../game/fightResult";
 import { sceneById } from "../world/scenes";
 import { bandLayout, pointIn } from "../world/scene";
+import { PIXEL_SCALE } from "../render/pixelScale";
 import { encounterFor, type ForestRequest } from "./encounters";
 import { BAND_HEAD, CANOPY_REACH, UNITS_PER_PX, VIEW_SHORT, VIEW_SHORT_PORTRAIT, footPx, forestLayout, forestWorld, orderedSpawns, packSizes, pathBand, spawnSlots } from "./forest";
 import { overlayCanopies } from "../world/scenePlaceholders";
-import { dist, norm, sub, type Vec } from "./logic";
+import { PLAYER, dist, norm, sub, swingArc, type Vec } from "./logic";
 import { FightSim, NO_CONTROLS, PACK_RANGE, type FightControls } from "./sim";
 
 const forest = sceneById("forest")!;
@@ -207,6 +208,9 @@ test("the forest path lines up with the designer's band (assets/forest.png): bou
   // Measured rows of the 256×256 band: the dirt path runs from about row 144 to row 192 (its core 150 to 186).
   const L = bandLayout({ w: 256, h: 256 }, forest.size);
   assert.equal(L.scale, forest.size.h / 256, "scaled to fill the scene height");
+  assert.equal(L.scale, PIXEL_SCALE, "one pixel scale: the band at PIXEL_SCALE, like the village and every sprite");
+  const village = sceneById("village")!;
+  assert.equal(bandLayout({ w: 384, h: 256 }, village.size).scale, PIXEL_SCALE, "the village (384x256) at the same scale");
   assert.ok(L.copies * 256 * L.scale >= forest.size.w, "the copies cover the scene's width");
   const dirt = { top: 144 * L.scale, bottom: 192 * L.scale };
   const B = forest.bounds, band = pathBand(forest);
@@ -214,4 +218,14 @@ test("the forest path lines up with the designer's band (assets/forest.png): bou
   assert.ok(B.y >= dirt.top - 8 && B.y + B.h <= dirt.bottom + 8, "the bounds keep to the dirt path");
   assert.ok(band.y >= dirt.top && band.y + band.h <= dirt.bottom, "archers keep to the dirt");
   assert.ok(forest.spawn.y >= dirt.top && forest.spawn.y <= dirt.bottom, "you start on the dirt");
+});
+
+test("forest bodies scale with the sprites (PIXEL_SCALE): the player's radius, every enemy's, and the sword's reach", () => {
+  const enc = encounterFor(req(1, 3, "scale"));
+  const w = forestWorld(forest, enc);
+  assert.equal(w.playerRadius, PLAYER.radius * PIXEL_SCALE);
+  for (const [i, e] of w.enemies.entries()) assert.equal(e.params.radius, enc.enemies[i].params.radius * PIXEL_SCALE, e.kind);
+  const sim = new FightSim({ player: { hp: 30, maxHp: 30, attack: 3 }, enemy: { name: "orc", hp: 10, maxHp: 10, power: 3, boss: false }, seed: "scale" }, w);
+  assert.equal(sim.player.radius, PLAYER.radius * PIXEL_SCALE);
+  assert.equal(swingArc(sim.player.pos, { x: 1, y: 0 }, sim.player.radius).reach, (PLAYER.radius + PLAYER.swingRange) * PIXEL_SCALE);
 });

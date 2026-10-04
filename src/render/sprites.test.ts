@@ -1,3 +1,4 @@
+import { PIXEL_SCALE } from "./pixelScale";
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
@@ -90,7 +91,7 @@ test("role → sheet: Soldier the player, Orc every regular enemy, Demon_A the m
   assert.equal(roleArt("slime"), null, "no sprite: generated art");
   assert.equal(roleArt("skeleton_archer"), null, "no sprite: generated art");
   // The orc is not scaled up ("the orc is small"); the minibosses are slightly larger than the pack's scale.
-  assert.equal(ROLES.orc!.mult, 1);
+  assert.equal(roleScale(ROLES.orc!), PIXEL_SCALE);
   assert.ok(ROLES.miniboss1!.mult! > 1 && ROLES.miniboss1!.mult! <= 1.5);
   // Every enemy the encounter tables can produce, and every boss, has a sprite.
   for (const b of ENCOUNTER_BANDS) for (const id of [b.lead, ...Object.keys(b.mix)] as (typeof ENEMY_IDS[number])[]) assert.ok(roleArt(id), id);
@@ -119,16 +120,11 @@ test("private URLs are percent-encoded per segment (spaces, parentheses), and de
   assert.ok(!/ /.test(privateAssetUrl(f)));
 });
 
-test("roles scale with the Soldier, so the pack keeps the artist's relative sizes; else to their own height", () => {
-  const heights: Partial<Record<CharacterId, number>> = { soldier: 20, orc: 18, demon_a: 24, warrior: 44 };
-  const fig = (c: CharacterId) => heights[c] ?? null;
-  const player = roleScale(ROLES.player!, fig);
-  assert.equal(player, 16 / 20);
-  assert.equal(roleScale(ROLES.orc!, fig), player, "the orc at the Soldier's scale");
-  assert.equal(roleScale(ROLES.miniboss1!, fig), player * ROLES.miniboss1!.mult!);
-  assert.equal(roleScale(ROLES.final_boss!, fig), 36 / 44);
-  // The Soldier failed to load: fit the orc to its own height.
-  assert.equal(roleScale(ROLES.orc!, (c) => (c === "soldier" ? null : fig(c))), 16 / 18);
+test("roles draw at PIXEL_SCALE (the backgrounds' scale), minibosses x1.25 on top", () => {
+  assert.equal(PIXEL_SCALE, 2);
+  for (const r of ["player", "orc", "demon", "final_boss"] as const) assert.equal(roleScale(ROLES[r]!), PIXEL_SCALE, r);
+  assert.equal(roleScale(ROLES.miniboss1!), PIXEL_SCALE * 1.25);
+  assert.equal(roleScale(ROLES.miniboss2!), PIXEL_SCALE * 1.25);
 });
 
 test("animation state: death > hurt > heavy/attack > walk > idle, with fallbacks for missing sheets", () => {

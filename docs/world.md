@@ -61,7 +61,7 @@ A scene is plain JSON data (`SceneDef` in `src/world/scene.ts`). The example bel
 - an actor's `npc` is `"healer"` or `"smith"`; its `counterY` is a number not below its feet; its `zone` names a zone of the scene; `counterY` and `zone` need an `npc`;
 - enemy `spawns` lie inside `bounds`.
 
-**The samples** are in `src/world/scenes/`: `village.json` (768×512, the designer's 384×256 `assets/village.png` at exactly 2×, the default: the first entry of `SCENES`; see "The village and shop zones" below), and `forest.json` (1280×560, wider than the view, so the camera scrolls and clamps: the forest path the fights play on, drawn on the designer's band (see "Art"), with its bounds on the band's dirt path, six enemy `spawns` and an exit at the far end; the world lab can walk it too). There are only these two scenes. To add one, drop a JSON file there and list it in `scenes/index.ts`. The lab can also load any SceneDef JSON by URL (see below).
+**The samples** are in `src/world/scenes/`: `village.json` (768×512, the designer's 384×256 `assets/village.png` at exactly 2×, the default: the first entry of `SCENES`; see "The village and shop zones" below), and `forest.json` (1280×512, the 256 px band at exactly 2× like the village, wider than the view, so the camera scrolls and clamps: the forest path the fights play on, drawn on the designer's band (see "Art"), with its bounds on the band's dirt path, six enemy `spawns` and an exit at the far end; the world lab can walk it too). There are only these two scenes. To add one, drop a JSON file there and list it in `scenes/index.ts`. The lab can also load any SceneDef JSON by URL (see below).
 
 ## The village and shop zones
 
@@ -228,7 +228,8 @@ Other options:
 
 **The designer's art.** Big Chungus's first batch (4 Oct) is in `assets/` at the repo root. The forest scene uses `assets/forest.png`, a 256×256 pixel-art band (trees on top, a dirt path across the middle, bushes at the bottom), through `src/world/bandArt.ts`:
 
-- It is imported through Vite (a hashed file in builds) and scaled to fill the scene height (560 / 256, about 2.19×), nearest-neighbour.
+- It is imported through Vite (a hashed file in builds) and scaled to fill the scene height (512 / 256: exactly 2×, `PIXEL_SCALE`), nearest-neighbour.
+- **One pixel scale** (Big Chungus, 4 Oct: "make sure pixel sizes are standardized"): `PIXEL_SCALE = 2` in `src/render/pixelScale.ts` is world pixels per art pixel for everything: both backgrounds, the Soldier and every Tiny RPG sprite, WarriorCh, and the generated hero and enemies (minibosses ×1.25 on top). The village hero is therefore 32 world px tall (it was 16), with a feet box of 20×12 world px; the walking speed (80 px/s) is unchanged because the backgrounds did not change scale.
 - It is repeated along the path, **every other copy mirrored**. Its left and right edges don't match (a tree trunk and the dirt patches cut off at the join), so plain tiling showed a seam; mirrored, each join meets itself. The copies are drawn once into one texture, so there are no hairline gaps between them.
 - The pure layout is `bandLayout` in `scene.ts`. `forest.test.ts` checks that the bounds, the archers' band and the spawn sit on the band's dirt path (measured at rows 144 to 192 of the 256).
 - The band brings its own trees, so the placeholder canopy overlay is left out over it (`debug.art.overlay` is `"none"`; `art.background` is `"bundled"`).

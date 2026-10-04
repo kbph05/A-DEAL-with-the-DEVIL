@@ -1,19 +1,19 @@
 {
   "id": "forest",
-  "size": { "w": 1280, "h": 560 },
+  "size": { "w": 1280, "h": 512 },
   "background": "scene-forest-bg",
   "overlay": "scene-forest-overlay",
-  "bounds": { "x": 32, "y": 312, "w": 1216, "h": 112 },
-  "spawn": { "x": 64, "y": 368 },
+  "bounds": { "x": 32, "y": 285, "w": 1216, "h": 103 },
+  "spawn": { "x": 64, "y": 336 },
   "zones": [
-    { "id": "path-end", "x": 1216, "y": 328, "w": 32, "h": 80, "kind": "exit", "label": "The path goes on" }
+    { "id": "path-end", "x": 1216, "y": 300, "w": 32, "h": 73, "kind": "exit", "label": "The path goes on" }
   ],
   "spawns": [
-    { "x": 300, "y": 354 },
-    { "x": 450, "y": 390 },
-    { "x": 600, "y": 344 },
-    { "x": 750, "y": 398 },
-    { "x": 900, "y": 360 },
-    { "x": 1050, "y": 384 }
+    { "x": 300, "y": 324 },
+    { "x": 450, "y": 357 },
+    { "x": 600, "y": 318 },
+    { "x": 750, "y": 364 },
+    { "x": 900, "y": 329 },
+    { "x": 1050, "y": 351 }
   ]
 }
