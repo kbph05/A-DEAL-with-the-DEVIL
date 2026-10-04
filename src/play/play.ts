@@ -176,9 +176,12 @@ devil.addEventListener("focusout", (e) => { if (e.target instanceof HTMLInputEle
 
 function patch(p: Partial<Local>): void { local = setLocal(local, session.game().view().nodeId, p); render(); }
 
+const ARRIVAL_EVENTS = new Set<string>(["moved", "devil_appears", "enemy_appeared", "act_advanced", "looked", "started"]);
+
 function say(events: GameEvent[]): void {
   // The devil's own words are in his overlay; the toast carries everything else (and a lone rejection).
-  const shown = outcomeEvents(events).filter((e) => e.type !== "deal_offered" && e.type !== "devil_struck" && (e.type !== "rejected" || events.length === 1));
+  // No arrival popups (kbph): the scene itself says where you are and who's there.
+  const shown = outcomeEvents(events).filter((e) => !ARRIVAL_EVENTS.has(e.type) && e.type !== "deal_offered" && e.type !== "devil_struck" && (e.type !== "rejected" || events.length === 1));
   const kindOf = kindLookup(session.game().view().map);
   const text = shown.map((e) => eventText(e, kindOf)).filter(Boolean).join(" ");
   if (!text) return;
@@ -663,7 +666,9 @@ function renderTitle(): void {
 // ---- keys ----------------------------------------------------------------------------------------------------------
 window.addEventListener("keydown", (e) => {
   const t = e.target as HTMLElement | null;
-  if (t && (t.tagName === "INPUT" || t.tagName === "TEXTAREA" || t.isContentEditable)) return;
+  const typing = !!t && (t.tagName === "INPUT" || t.tagName === "TEXTAREA" || t.isContentEditable);
+  if (typing && e.key !== "Escape") return; // Esc pauses even from the devil's text box (it auto-focuses on desktop)
+  if (typing) t!.blur();
   const a = e.repeat ? null : pauseKey(ps, e.key, { map: current.map, typing: false, ending: current.screen === "ending", credits: !credits.hidden });
   if (a === "closeCredits") { hideCredits(); e.preventDefault(); return; }
   if (!credits.hidden) return; // the credits are on top: other keys wait
