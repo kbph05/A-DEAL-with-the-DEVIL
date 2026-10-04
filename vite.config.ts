@@ -4,8 +4,9 @@ import { defineConfig } from "vite";
 
 // The realtime fight (src/fight, with Phaser: about 1.2 MB) is part of the game and loads lazily on the first fight, as
 // its own chunk, so the page itself stays light; hence the higher chunk-size warning limit in both modes. Test builds
-// (mode "test": `npm run dev`, `npm run game`, `npm run build:test`) also ship the lab pages, fight.html and
-// world.html; the final build has the single entry index.html, so the labs are not in dist/ (nor are the dev tools:
+// (mode "test": `npm run dev`, `npm run game`, `npm run build:test`) also ship the lab pages (fight.html,
+// world.html, hud.html, map.html) and the play page, play.html (docs/play.md); the final build has the single entry
+// index.html, so the labs and the play page are not in dist/ (nor are the dev tools:
 // see src/main.ts).
 //
 // Private art hook (docs/world.md): the files in the gitignored public/assets/private/ (and its subfolders, e.g.
@@ -21,5 +22,5 @@ const define = { __PRIVATE_ASSETS__: JSON.stringify(privateAssets) };
 const phaserChunk = { codeSplitting: { groups: [{ name: "phaser", test: /[\\/]node_modules[\\/]phaser[\\/]/ }] } };
 
 export default defineConfig(({ mode }) => (mode === "test"
-  ? { define, build: { chunkSizeWarningLimit: 1400, rolldownOptions: { input: { index: "index.html", fight: "fight.html", world: "world.html", hud: "hud.html", map: "map.html" }, output: phaserChunk } } }
+  ? { define, build: { chunkSizeWarningLimit: 1400, rolldownOptions: { input: { index: "index.html", fight: "fight.html", world: "world.html", hud: "hud.html", map: "map.html", play: "play.html" }, output: phaserChunk } } }
   : { define, build: { chunkSizeWarningLimit: 1400 } }));
