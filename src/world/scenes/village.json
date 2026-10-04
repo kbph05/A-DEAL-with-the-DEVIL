@@ -1,21 +1,12 @@
 {
   "id": "village",
-  "size": { "w": 960, "h": 540 },
+  "size": { "w": 768, "h": 512 },
   "background": "scene-village-bg",
-  "overlay": "scene-village-overlay",
-  "bounds": { "x": 64, "y": 150, "w": 832, "h": 320 },
-  "spawn": { "x": 480, "y": 390 },
+  "bounds": { "x": 24, "y": 180, "w": 720, "h": 116 },
+  "spawn": { "x": 384, "y": 240 },
   "zones": [
-    { "id": "shop-heal", "x": 252, "y": 150, "w": 56, "h": 32, "kind": "shop", "item": "heal", "label": "Healer" },
-    { "id": "shop-blade", "x": 452, "y": 150, "w": 56, "h": 32, "kind": "shop", "item": "blade", "label": "Smith" },
-    { "id": "shop-blessing", "x": 652, "y": 150, "w": 56, "h": 32, "kind": "shop", "item": "blessing", "label": "Shrine" },
-    { "id": "leave", "x": 868, "y": 320, "w": 28, "h": 100, "kind": "exit", "label": "Leave the village" }
-  ],
-  "actors": [
-    { "id": "house-west", "x": 130, "y": 148 },
-    { "id": "stall-healer", "x": 280, "y": 148, "label": "Healer" },
-    { "id": "stall-smith", "x": 480, "y": 148, "label": "Smith" },
-    { "id": "stall-shrine", "x": 680, "y": 148, "label": "Shrine" },
-    { "id": "house-east", "x": 830, "y": 148 }
+    { "id": "shop-blade", "x": 236, "y": 180, "w": 128, "h": 32, "kind": "shop", "item": "blade", "label": "Smith" },
+    { "id": "shop-heal", "x": 548, "y": 180, "w": 120, "h": 32, "kind": "shop", "item": "heal", "label": "Healer" },
+    { "id": "leave", "x": 724, "y": 180, "w": 20, "h": 116, "kind": "exit", "label": "Leave the village" }
   ]
 }

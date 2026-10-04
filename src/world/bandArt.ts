@@ -1,16 +1,18 @@
 /**
  * The team's own scene backgrounds, bundled by Vite (Big Chungus, 4 Oct: assets/forest.png, a 256×256 pixel-art band:
- * trees on top, a dirt path across the middle, bushes at the bottom). Precedence: a private file
+ * trees on top, a dirt path across the middle, bushes at the bottom; assets/village.png, 384×256: shopfronts along the
+ * top, a path, a stream. The village scene is sized to it at exactly 2×, so it lays as one copy). Precedence: a private file
  * (scenes/<id>/background.png, docs/world.md) > this > the def's key or URL > the generated placeholder. A band
  * replaces the placeholder canopy overlay too: the trees are in the picture. Phaser-only (node can't import a PNG),
  * so the pure layout is `bandLayout` in scene.ts.
  */
 import Phaser from "phaser";
 import forest from "../../assets/forest.png";
+import village from "../../assets/village.png";
 import { applyGamma } from "../fight/gamma";
 import { bandLayout, type SceneDef } from "./scene";
 
-export const BUNDLED_BACKGROUNDS: Readonly<Record<string, string>> = { forest };
+export const BUNDLED_BACKGROUNDS: Readonly<Record<string, string>> = { forest, village };
 
 export const bundledKey = (sceneId: string): string => `bundled:${sceneId}:background`;
 
