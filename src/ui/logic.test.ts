@@ -3,7 +3,7 @@ import type { MapView, Observation } from "../game";
 import assert from "node:assert/strict";
 import { createGame, describe } from "../game";
 import type { Command, GameEvent } from "../game";
-import { availableActions, blurbOf, chooseCards, fireChoice, type FireChoice, dealEnd, devilPhase, askBlockReason, haggleText, questionsText, panelKinds, shopItems, buyLabel, curseText, effectChips, eventClass, afterKinds, dagModel, exitNumber, fightLabel, lockReason, moveLock, nodeState, nodeTitle, eventText, kindLookup, rejectedText, rewriteText, outcomeEvents, pct, STAIRS_ID, topId } from "./logic";
+import { availableActions, blurbOf, chooseCards, fireChoice, type FireChoice, dealEnd, devilPhase, askBlockReason, haggleText, questionsText, panelKinds, shopItems, buyLabel, curseText, effectChips, eventClass, afterKinds, dagModel, exitNumber, fightLabel, lockReason, moveLock, nodeState, nodeTitle, capitalize, eventText, kindLookup, rejectedText, rewriteText, outcomeEvents, pct, STAIRS_ID, topId } from "./logic";
 import { diffDeal } from "./dealDiff";
 import { lastStrike, STRIKE_HEAD } from "./logic";
 import { sanitizeDeal } from "../game/deal";
@@ -511,4 +511,24 @@ test("rejectedText drops console hints and ends with a full stop", () => {
   assert.equal(rejectedText("no exit 3; choose 1..2"), "That way is not open.");
   assert.equal(rejectedText("the embers are spent"), "the embers are spent.");
   assert.equal(rejectedText("fight()"), "That is not possible right now.");
+});
+
+test("capitalize: sentences start with a capital, quotes and the devil's words are left alone", () => {
+  assert.equal(capitalize("drowned monk falls. +4 gold."), "Drowned monk falls. +4 gold.");
+  assert.equal(capitalize("the unlit falls."), "The unlit falls.");
+  assert.equal(capitalize("(rat blocks the way)"), "(Rat blocks the way)");
+  assert.equal(capitalize("Already fine."), "Already fine.");
+  assert.equal(capitalize('  he gives: x\nthe price'), "  He gives: x\nThe price");
+  assert.equal(capitalize('The devil: "yes. perhaps."'), 'The devil: "yes. perhaps."');
+  assert.equal(capitalize("+4 gold"), "+4 gold");
+  assert.equal(capitalize(""), "");
+});
+
+test("eventText: the fight summary starts every sentence with a capital", () => {
+  const slain = eventText({ type: "enemy_slain", name: "drowned monk", gold: 4, boss: false });
+  assert.equal(slain, "Drowned monk falls. +4 gold.");
+  const bout = eventText({ type: "fought", dealt: 9, enemyHp: 0, taken: 0, bout: { timeMs: 20100, hits: 0, enemy: "drowned monk", outcome: "won" } });
+  assert.equal(bout, "After 20.1 s of fighting you dealt 9 and took no damage.");
+  assert.equal(eventText({ type: "rejected", reason: "the embers are spent" }), "The embers are spent.");
+  assert.equal(eventText({ type: "enemy_appeared", enemy: { name: "cave rat", hp: 6, maxHp: 6, boss: false } }), "An enemy appears: cave rat (6 HP).");
 });

@@ -314,7 +314,16 @@ export function rejectedText(reason: string): string {
  * mentions commands such as accept() and node ids); the UI words the events where that leaks, and falls back to
  * `describe()` for the rest. `kindOf` (see `kindLookup`) lets a devil's rewrite say what the node is. Never shows an id.
  */
-export function eventText(e: GameEvent, kindOf?: (id: string) => Kind | undefined): string {
+export const eventText = (e: GameEvent, kindOf?: (id: string) => Kind | undefined): string => capitalize(wordEvent(e, kindOf));
+
+/**
+ * Upper-cases the first letter of the text and of each of its lines, so a name the engine keeps lower-case ("drowned monk
+ * falls.") starts its sentence properly. A leading quote or bracket is skipped; the rest of the text is left alone (the
+ * devil's own words are not re-cased).
+ */
+export const capitalize = (text: string): string => text.replace(/^([\s"'“‘(\[]*)(\p{Ll})/gmu, (_m, lead: string, c: string) => lead + c.toUpperCase());
+
+function wordEvent(e: GameEvent, kindOf?: (id: string) => Kind | undefined): string {
   switch (e.type) {
     case "moved": return GO_TEXT[e.kind];
     case "deal_offered": {
