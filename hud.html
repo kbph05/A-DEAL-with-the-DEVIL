@@ -1,0 +1,39 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+    <title>HUD lab: A DEAL with the DEVIL</title>
+    <style>
+      html, body { margin: 0; height: 100%; background: #120a0a; color: #eee; font: 14px system-ui, sans-serif; }
+      body { display: flex; flex-direction: column; height: 100dvh; overflow: hidden; }
+      #bar { display: flex; flex-wrap: wrap; gap: 6px 8px; align-items: center; padding: 6px 10px; background: #1d1111; border-bottom: 1px solid #3a2222; }
+      #bar label { display: inline-flex; gap: 4px; align-items: center; }
+      #bar input { width: 6em; }
+      #bar input, #bar button { font: inherit; background: #2a1a1a; color: #eee; border: 1px solid #553333; border-radius: 6px; padding: 3px 8px; min-height: 44px; box-sizing: border-box; }
+      #bar button { background: #8a2020; border-color: #b33; font-weight: 600; }
+      #bar button:disabled { opacity: .5; }
+      #event { flex-basis: 100%; color: #a99; min-height: 1.3em; font-size: 13px; }
+      #stage { position: relative; flex: 1; min-height: 0; overflow: hidden; }
+      #scene { position: absolute; background: #555; outline: 1px solid #777; display: grid; place-items: center; color: #ccc; font: 13px ui-monospace, monospace; }
+      #stick { position: absolute; border: 2px dashed #ddd; border-radius: 50%; display: grid; place-items: center; color: #ddd; font: 11px ui-monospace, monospace; box-sizing: border-box; }
+    </style>
+  </head>
+  <body>
+    <div id="bar">
+      <strong>HUD lab</strong>
+      <label>Seed <input id="seed" type="text" placeholder="random" /></label>
+      <button id="new" type="button">New run</button>
+      <button id="step" type="button">Step (bot)</button>
+      <button id="fight" type="button">Take a hit</button>
+      <button id="buy" type="button">Buy</button>
+      <button id="deal" type="button">Deal</button>
+      <div id="event" aria-live="polite"></div>
+    </div>
+    <div id="stage">
+      <div id="scene">game scene placeholder<div id="stick">stick</div></div>
+    </div>
+    <script type="module" src="/src/hud/dev.ts"></script>
+  </body>
+</html>

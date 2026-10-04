@@ -466,6 +466,8 @@ A deliberately plain DOM page over the same `Session` (one `Game` plus an event 
   - *Autoplay to end:* runs the default bot on the current seed, with the installed devil, in a **separate** game, and prints one summary line (outcome, steps, event count). It does not move the on-screen run.
   - *Devil lab:* a Stub / HTTP-backend toggle with URL (saved to `localStorage` key `devil-lab.config`; "Apply and restart" starts a new run on the same seed with the chosen devil), a text box plus "Send test offer" that POSTs the **current game's real state and context** to the backend, a history of the last 10 exchanges (time, status, latency), and a three-column view: request, raw response (with HTTP status, ms and error), and the **sanitized deal** next to a list of what `sanitizeDeal` dropped, renamed, clamped or truncated (`src/ui/dealDiff.ts`), including a warning when the devil names a node that is not in `rewritable`. Lab requests report `askIndex` as asks so far (one less than a real in-game request).
 
+- **In-game HUD prototype** (`src/hud/`, [docs/hud.md](hud.md)): `hudModel(view)` (pure, unit-tested) and `mountHud(parent)`, a DOM overlay for the game scene with HP, gold, attack, optional speed, soul and revive, curses with tooltips, devil questions left, act and layer, and an item bar of the wares sold here (enabled from the legal `actions`). Not wired into the game yet; try it on `/hud.html` (test builds).
+
 ### 10.5 Autoplay, simulate, bot policy (`src/game/autoplay.ts`)
 
 - A **policy** is a function from an `Observation` to a `Command | null`. `null` gives up.
