@@ -4,7 +4,9 @@ Most of the art packs we want to use (for example zerie's Tiny RPG pack) may be 
 
 It sits on top of the existing private art hook (docs/world.md, "Dropping in real art") and doesn't change it. A file in the gitignored `public/assets/private/` still works exactly as before, and wins over an encrypted copy of the same path.
 
-**Status:** the tooling is in the repo, but no encrypted art is yet. Whether encrypted copies of a given pack may be committed to this public repo is a licence question for the team (see "Limits" below). Until the team says yes, keep `assets/encrypted/` local too.
+**Status (4 Oct):** e1960a9 committed 30 encrypted files: the Tiny RPG Character Asset Packs 01 and 02 (Soldier, Orc, Demon_A) and WarriorChAnimation, with their `attribution.txt`. The game uses them for the player and the enemies (docs/fight.md, "Sprites") and shows the attribution files on its Credits screen (docs/CREDITS.md). Paths have spaces and parentheses: the game percent-encodes each path segment (`privateAssetUrl`), and the plugin decodes it. `.txt` files are served but not listed in `__PRIVATE_ASSETS__`; the credits are fetched only for packs whose PNGs are listed.
+
+**Earlier status:** the tooling is in the repo, but no encrypted art is yet. Whether encrypted copies of a given pack may be committed to this public repo is a licence question for the team (see "Limits" below). Until the team says yes, keep `assets/encrypted/` local too.
 
 ## How it works
 

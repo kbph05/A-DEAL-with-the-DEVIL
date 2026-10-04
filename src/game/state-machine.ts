@@ -24,6 +24,7 @@ import {
   devilPresent, enemyView, exitsOf, isOpener, ONE_CHOICE, oneChoice,
   type Command, type Enemy, type GameState, type StepResult,
 } from "./gameState";
+import { BOSS, FOE, FREE_HEAL } from "./difficulty";
 import { BOSS_GOLD, KILL_GOLD } from "./economy";
 import { STAT_RANGE, addGold, applyEffects, heal, hurt, note, settle, snapshot, spend } from "./state";
 
@@ -219,9 +220,9 @@ function enter(d: GameState, ev: GameEvent[], id: string, from: string, fromDeal
   if (node.kind === "fight" || node.kind === "boss") {
     const boss = node.kind === "boss";
     const enemy: Enemy = boss
-      ? { name: BOSSES[a.index], hp: 18 + 8 * a.index, maxHp: 18 + 8 * a.index, power: 3 + a.index, boss }
-      : { name: FOES[a.index][roll(d, 3)], hp: 0, maxHp: 0, power: 2 + a.index, boss };
-    if (!boss) enemy.hp = enemy.maxHp = 8 + 4 * a.index + roll(d, 4);
+      ? { name: BOSSES[a.index], hp: BOSS.hp[a.index], maxHp: BOSS.hp[a.index], power: BOSS.power[a.index], boss }
+      : { name: FOES[a.index][roll(d, 3)], hp: 0, maxHp: 0, power: FOE.power[a.index], boss };
+    if (!boss) enemy.hp = enemy.maxHp = FOE.hp[a.index] + roll(d, FOE.hpSpread);
     d.enemy = enemy;
     ev.push({ type: "enemy_appeared", enemy: enemyView(enemy) });
     fire(d, ev, "on_fight");
@@ -239,7 +240,7 @@ function go(d: GameState, ev: GameEvent[], i: number): void {
     const next = generateAct(d.seed, d.player.act); // lazily, on arrival
     d.acts[d.player.act] = next;
     ev.push({ type: "act_advanced", act: d.player.act });
-    healBy(d, ev, 6, "the stairs");
+    healBy(d, ev, FREE_HEAL.stairs, "the stairs");
     enter(d, ev, next.entry, from, fromDeal);
   } else if (ex.kind === "gate") {
     enter(d, ev, "final", from, fromDeal);
@@ -257,7 +258,7 @@ function fight(d: GameState, ev: GameEvent[]): void {
     addGold(d.player, gold);
     d.enemy = null; d.resolved = true;
     ev.push({ type: "fought", dealt, enemyHp: 0, taken: 0 }, { type: "enemy_slain", name: e.name, gold, boss: e.boss });
-    if (e.boss) healBy(d, ev, 10, "victory");
+    if (e.boss) healBy(d, ev, FREE_HEAL.victory, "victory");
     return;
   }
   const taken = e.power + roll(d, 3);
@@ -291,7 +292,7 @@ function fightResult(d: GameState, ev: GameEvent[], report: unknown): void {
   addGold(d.player, gold);
   d.enemy = null; d.resolved = true;
   ev.push({ type: "enemy_slain", name: e.name, gold, boss: e.boss });
-  if (e.boss) healBy(d, ev, 10, "victory");
+  if (e.boss) healBy(d, ev, FREE_HEAL.victory, "victory");
 }
 
 function buy(d: GameState, ev: GameEvent[], name: string): void {

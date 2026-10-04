@@ -250,6 +250,8 @@ Real art replaces the placeholders automatically, with no code change. Put the f
   3. Restart the dev server, or rebuild. `vite.config.ts` lists that folder (and its subfolders) when it starts and bakes the paths in as `__PRIVATE_ASSETS__`. That way only files that exist are requested, and a clean checkout logs no 404s.
 - **Never commit real art.** Art the team owns and wants in the repo can go anywhere under `public/` and be referenced by URL in the SceneDef (`"background": "/scenes/village.png"`).
 
+**The Soldier** (4 Oct). With `ASSET_KEY` set (docs/assets.md), the village hero is the Tiny RPG pack's Soldier, from the encrypted sheets (`src/render/sprites.ts`, docs/fight.md "Sprites"): its frames and figure are measured from the images, the feet box sits under the figure and mirrors with it, and `__world.debug.art.player` is `"soldier"`. The local `player-idle.png` / `player-walk.png` hook below still wins when those files are there.
+
 **The player sheet** (this is for licensed art that can't be redistributed; the team is considering **zerie's Tiny RPG Character Asset Pack**: 100×100 frames, no redistribution, so it must never be committed to this public repo):
 
 - **`PRIVATE_PLAYER`** sets the frame size (default 100×100), the frames and fps per animation, and `layout`. Both files are needed.

@@ -30,6 +30,8 @@ export interface RunFightOptions {
   touch?: boolean;
   /** Test/dev hook: called once with the live simulation (read-only use: positions, timers, HP). */
   onDebug?: (sim: FightSim) => void;
+  /** Show the fight clock (the "3.6 s" readout). Default false: kbph (4 Oct) dropped it from the game; the fight lab shows it. */
+  clock?: boolean;
 }
 
 export function runFight(parent: HTMLElement, input: FightInput, options: RunFightOptions = {}): Promise<FightResult> {
@@ -40,7 +42,7 @@ export function runFight(parent: HTMLElement, input: FightInput, options: RunFig
   return new Promise((resolve) => {
     let ended = false;
     const scene = new FightScene({
-      input: clean, layout, touch, onDebug: options.onDebug,
+      input: clean, layout, touch, onDebug: options.onDebug, clock: options.clock,
       onEnd: (result) => {
         if (ended) return;
         ended = true;
@@ -102,6 +104,12 @@ export interface RunForestFightOptions {
   onEncounter?: (encounter: Encounter) => void;
   /** Lab: gamma for the forest background. Default: `FOREST_BG_GAMMA` (src/fight/art.ts). */
   gamma?: number;
+  /** Show the controls line at the bottom. Default true; the play page turns it off (its pause menu lists the controls). */
+  help?: boolean;
+  /** Show the fight clock (the "3.6 s" readout). Default false: kbph (4 Oct) dropped it from the game; the fight lab shows it. */
+  clock?: boolean;
+  /** Called once with the Phaser.Game, right after it is created (the play page pauses it, and destroys it on Quit). */
+  onGame?: (game: Phaser.Game) => void;
 }
 
 /**
@@ -122,7 +130,7 @@ export function runForestFight(parent: HTMLElement, request: ForestRequest, opti
   return new Promise((resolve) => {
     let ended = false;
     const scene = new ForestScene({
-      input: clean, scene: def, world, encounter, touch, onDebug: options.onDebug, gamma: options.gamma,
+      input: clean, scene: def, world, encounter, touch, onDebug: options.onDebug, gamma: options.gamma, help: options.help, clock: options.clock,
       onEnd: (result) => {
         if (ended) return;
         ended = true;
@@ -149,6 +157,7 @@ export function runForestFight(parent: HTMLElement, request: ForestRequest, opti
       scale: { mode: Phaser.Scale.RESIZE, width: Math.round(box.width || window.innerWidth), height: Math.round(box.height || window.innerHeight) },
       scene: [scene],
     });
+    options.onGame?.(game);
     // RESIZE mode follows window resizes and rotation by itself; this also catches the container changing size on
     // its own (the page around it reflowing). The scene re-lays out on the scale manager's resize event.
     let pending = 0;

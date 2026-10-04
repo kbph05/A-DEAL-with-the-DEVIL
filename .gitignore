@@ -1,6 +1,6 @@
 .DS_Store
 .vscode/
-node_modules/
+node_modules
 dist/
 dist-test/
 # Licensed art that must not be redistributed (e.g. zerie's Tiny RPG pack): local only, see docs/world.md

@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { initialState, MAX_DEVIL_QUERIES, step, view, type GameState } from "../game";
-import { announce, curseInfo, effectText, hudModel } from "./model";
+import { announce, curseInfo, effectText, hudModel, hudShown } from "./model";
 
 const deepFreeze = <T>(o: T): T => {
   if (typeof o === "object" && o !== null) { Object.values(o).forEach(deepFreeze); Object.freeze(o); }
@@ -103,4 +103,17 @@ test("hudModel: the Heal slot is disabled at full HP with the reason; the engine
   assert.deepEqual([hurt.usable, hurt.reason], [true, null]);
   const blade = hudModel({ ...full, player: { ...full.player, gold: 99 } }).items.find((i) => i.id === "blade")!;
   assert.equal(blade.usable, true, "the blade is not guarded");
+});
+
+test("hudShown: the play page drops the item bar, ATK, Soul and Revive; the labs keep everything; the model keeps every field", () => {
+  const fresh = initialState("shown");
+  const m = hudModel({ ...fresh, player: { ...fresh.player, hp: 20 } });
+  assert.equal(m.items.length, 2, "the model still lists the wares");
+  assert.equal(m.attack, 3); assert.equal(m.soul, "kept"); assert.equal(m.revive, "available");
+  assert.deepEqual(hudShown(m, "play"), { attack: false, speed: false, soul: false, revive: false, devil: false, curses: false, items: false });
+  assert.deepEqual(hudShown(m), { attack: true, speed: false, soul: true, revive: true, devil: false, curses: false, items: true });
+  const deal = hudModel({ ...view(initialState("shown-deal")), kind: "deal", asksLeft: 2, questionsLeft: 7, curses: [{ trigger: "on_hit", effect: { hp: -4 } }] });
+  const fast = { ...deal, speed: 1.5 };
+  assert.deepEqual(hudShown(fast, "play"), { attack: false, speed: true, soul: false, revive: false, devil: true, curses: true, items: false },
+    "devil questions, curses and speed still show on the play page");
 });

@@ -5,11 +5,13 @@
  * touches elsewhere reach the canvas (the touch stick). See docs/hud.md.
  */
 import "./hud.css";
-import { announce, type HudItem, type HudModel } from "./model";
+import { announce, hudShown, type HudItem, type HudModel, type HudVariant } from "./model";
 
 export interface HudOptions {
   /** Called with the item when its slot is pressed (only usable items are enabled). Send `item.command` to the engine. */
   onUseItem?: (item: HudItem) => void;
+  /** "full" (default, the labs): every field and the item bar. "play" (the play page): no item bar, ATK, Soul or Revive (`hudShown`). */
+  variant?: HudVariant;
 }
 
 export interface HudHandle {
@@ -44,7 +46,7 @@ function itemLabel(i: HudItem): string {
 
 export function mountHud(parent: HTMLElement, options: HudOptions = {}): HudHandle {
   const el = h("div", "hud");
-  el.dataset.hud = "";
+  el.dataset.hud = options.variant ?? "full";
 
   // Top-left stats strip.
   const stats = h("section", "hud-stats");
@@ -110,7 +112,7 @@ export function mountHud(parent: HTMLElement, options: HudOptions = {}): HudHand
   }
 
   function update(m: HudModel): void {
-    where.textContent = [`Act ${m.act}`, m.layer !== null ? `Layer ${m.layer}/${m.layers ?? "?"}` : m.kind === "final" ? "Final door" : "", m.kind && m.kind !== "final" ? m.kind : ""]
+    where.textContent = [`Act ${m.act}`, m.layer !== null ? (options.variant === "play" ? "" : `Layer ${m.layer}/${m.layers ?? "?"}`) : m.kind === "final" ? "Final door" : "", m.kind && m.kind !== "final" ? m.kind : ""]
       .filter(Boolean).join(" · ");
     const pct = Math.round((m.hp / m.maxHp) * 100);
     fill.style.width = `${pct}%`;
@@ -120,14 +122,18 @@ export function mountHud(parent: HTMLElement, options: HudOptions = {}): HudHand
     bar.setAttribute("aria-valuemax", String(m.maxHp));
     bar.setAttribute("aria-valuetext", `${m.hp} of ${m.maxHp}`);
     gold.value.textContent = String(m.gold);
+    const show = hudShown(m, options.variant);
+    atk.el.hidden = !show.attack;
+    soul.el.hidden = !show.soul;
+    revive.el.hidden = !show.revive;
     atk.value.textContent = String(m.attack);
-    spd.el.hidden = m.speed === null;
+    spd.el.hidden = !show.speed;
     spd.value.textContent = m.speed === null ? "" : String(m.speed);
     soul.value.textContent = SOUL_TEXT[m.soul];
     soul.el.classList.toggle("lost", m.soul !== "kept");
     revive.value.textContent = REVIVE_TEXT[m.revive];
     revive.el.classList.toggle("lost", m.revive !== "available");
-    devil.hidden = m.devil.asksLeft === null;
+    devil.hidden = !show.devil;
     devil.textContent = m.devil.asksLeft === null ? "" : `Devil: ${m.devil.asksLeft} ${m.devil.asksLeft === 1 ? "ask" : "asks"} here · ${m.devil.questionsLeft}/${m.devil.max} questions this run`;
     curses.replaceChildren(...m.curses.map((c) => {
       const li = h("li", "hud-curse");
@@ -135,11 +141,11 @@ export function mountHud(parent: HTMLElement, options: HudOptions = {}): HudHand
       li.append(h("span", "", c.label), h("span", "hud-sr", ` (${c.tooltip})`));
       return li;
     }));
-    curses.hidden = m.curses.length === 0;
+    curses.hidden = !show.curses;
     const st = m.ending === "win" ? "You won" : m.ending === "hell" ? "The devil collects" : m.ending === "lose" ? "You died" : m.busy === "devil" ? "The devil is speaking…" : m.busy === "fight" ? "Fighting…" : "";
     status.textContent = st;
     status.hidden = !st;
-    renderItems(m.items);
+    renderItems(show.items ? m.items : []);
     const say = announce(prev, m);
     if (say) live.textContent = say;
     prev = m;

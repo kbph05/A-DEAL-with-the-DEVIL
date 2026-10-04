@@ -10,6 +10,7 @@ export const enemyTextureKey = (id: EnemyId): string => `forest-enemy-${id}`;
 
 /** Texture size per enemy, world pixels. */
 export const ENEMY_ART_SIZE: Readonly<Record<EnemyId, { w: number; h: number }>> = {
+  orc: { w: 16, h: 12 },
   slime: { w: 16, h: 12 },
   demon: { w: 18, h: 22 },
   skeleton_archer: { w: 16, h: 24 },
@@ -175,7 +176,8 @@ function finalBoss(p: P): void {
   p(13, 1, 6, 2, "#c9a227"); // crown
 }
 
-const DRAW: Record<EnemyId, (p: P) => void> = { slime, demon, skeleton_archer: skeletonArcher, miniboss1, miniboss2, final_boss: finalBoss };
+/** The orc falls back to the slime's drawing: it is the slime's behaviour, and that was its art before the sprites. */
+const DRAW: Record<EnemyId, (p: P) => void> = { orc: slime, slime, demon, skeleton_archer: skeletonArcher, miniboss1, miniboss2, final_boss: finalBoss };
 
 /** Make the enemy textures once per game. */
 export function ensureEnemyTextures(scene: Phaser.Scene): void {

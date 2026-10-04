@@ -5,7 +5,11 @@ A prototype heads-up display for the game scene: HP, gold, attack, soul and revi
 Two parts:
 
 - `src/hud/model.ts`: `hudModel(viewOrGameState) → HudModel`, pure and unit-tested (`src/hud/model.test.ts`, network-free). No DOM.
-- `src/hud/hud.ts` + `src/hud/hud.css`: `mountHud(parent, { onUseItem? }) → { el, update(model), destroy() }`.
+- `src/hud/hud.ts` + `src/hud/hud.css`: `mountHud(parent, { onUseItem?, variant? }) → { el, update(model), destroy() }`.
+
+## Variants
+
+`variant: "full"` (the default; the HUD, world and map labs) shows everything below. `variant: "play"` is the play page's (kbph, 4 Oct: "remove the heal and blade buttons on the bottom right because we have shops in the village. also remove the 'soul kept', 'ATK' and 'revive ready'"): HP, gold, speed if present, curses, the devil's line at a deal node, act and layer, and no item bar, ATK, Soul or Revive. Only the view changes: `hudModel` still fills every field, for the labs and anything else that reads it. `hudShown(model, variant)` (in `model.ts`, pure, tested) says which parts show; the HUD's root carries `data-hud="full"` or `"play"`.
 
 Lab page: **`/hud.html`** in test builds (`npm run dev`, then open `/hud.html`; or `npm run build:test`). It is not in the final build.
 
@@ -55,7 +59,7 @@ refresh();               // once at start
 ```
 
 - The HUD is `position: absolute; inset: 0` inside `parent`, with `pointer-events: none` except on the item buttons and curse chips, so touches elsewhere still reach the canvas and the touch stick.
-- Layout: the stats strip sits top-left. The item bar sits bottom-right in landscape (the world scene's stick rests bottom-left) and stacks up the right edge in portrait (the stick rests bottom-centre); see `worldLayout` in `src/world/logic.ts`. The switch is a CSS container query on the HUD's own box, not the window, so it follows the stage size. Safe-area insets are respected.
+- Layout: the stats strip sits top-left. The item bar (full variant only) sits bottom-right in landscape (the world scene's stick rests bottom-left) and stacks up the right edge in portrait (the stick rests bottom-centre); see `worldLayout` in `src/world/logic.ts`. The switch is a CSS container query on the HUD's own box, not the window, so it follows the stage size. Safe-area insets are respected.
 - `update` is cheap and idempotent: the item buttons are rebuilt only when the items change, and the live region only speaks on HP or gold changes. Item buttons blur themselves after a press, so Space (attack in the fight) does not press them again.
 - Accessibility: the HP bar is a `role="meter"` with value text, item slots are `<button>`s with an `aria-label` such as "Buy Heal, +12 HP, 10 gold" or "Blade, +1 ATK, 12 gold. Unavailable: need 2g more", unusable ones are disabled and show the reason on the slot, curses carry their tooltip as hidden text too.
 

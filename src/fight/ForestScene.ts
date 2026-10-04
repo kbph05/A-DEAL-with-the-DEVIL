@@ -5,14 +5,16 @@ import { facingOf, type Facing } from "../world/logic";
 import { addBand, bundledKey, preloadBand, setBandGamma } from "../world/bandArt";
 import { BG_DEPTH, actorDepth, artSource, isUrl, overlayDepth, privateSceneFile, type SceneDef } from "../world/scene";
 import { backgroundPlaceholder, overlayPlaceholder } from "../world/scenePlaceholders";
-import { HERO_COLS, HERO_ROWS, PLACEHOLDER_HERO, ensurePlaceholderTextures } from "../world/textures";
+import { HERO_COLS, HERO_ROWS, HERO_SIZE, PLACEHOLDER_HERO, ensurePlaceholderTextures } from "../world/textures";
 import { FOREST_BG_GAMMA } from "./art";
 import { COL, bar, button, inCircle, lerpColor } from "./draw";
 import { ENEMY_ART_SIZE, enemyTextureKey, ensureEnemyTextures } from "./enemyArt";
 import { encounterSummary, type Encounter } from "./encounters";
-import { UNITS_PER_PX, footPx, forestLayout, toPx, type ForestLayout } from "./forest";
-import { PLAYER, STEP_MS, aimAtPointer, moveDir, swingArc, type FightInput, type FightResult, type Vec } from "./logic";
+import { UNITS_PER_PX, footPx, forestLayout, playerFeetPx, toPx, type ForestLayout } from "./forest";
+import { PLAYER, STEP_MS, aimAtPointer, moveDir, swingArc, swingDrawOrigin, type FightInput, type FightResult, type Vec } from "./logic";
 import { FightSim, type EnemyBody, type FightControls, type SimWorld } from "./sim";
+import { ActorSprite, buildCharacter, figureHeight, preloadCharacters, type CharacterArt } from "../render/spriteArt";
+import { enemyAnim, playerAnim, roleArt, roleScale, type CharacterId } from "../render/sprites";
 
 /** Live, read-only view of the forest scene for the lab and smoke tests (the sim itself comes via `onDebug` too). */
 export interface ForestView {
@@ -30,6 +32,11 @@ export interface ForestView {
   gamma: number;
   setGamma: (gamma: number) => void;
   art: { background: "file" | "bundled" | "key" | "placeholder"; overlay: "file" | "key" | "placeholder" | "none" };
+  /**
+   * The licensed sprites (src/render/sprites.ts): which character draws the player and each enemy (null: generated
+   * art), and the animation each is playing now.
+   */
+  sprites: { player: string | null; enemies: (string | null)[]; anims: { player: string | null; enemies: (string | null)[] } };
 }
 
 export interface ForestSceneConfig {
@@ -43,12 +50,21 @@ export interface ForestSceneConfig {
   onDebug?: (sim: FightSim, view: ForestView) => void;
   /** Gamma for the bundled forest background (default `FOREST_BG_GAMMA`; the lab passes its slider's value). */
   gamma?: number;
+  /** Show the controls line at the bottom (default true). */
+  help?: boolean;
+  /** Show the fight clock (the "3.6 s" readout). Default false: kbph (4 Oct) dropped it from the game; the fight lab shows it. */
+  clock?: boolean;
 }
 
 type KeyName = "W" | "A" | "S" | "D" | "UP" | "DOWN" | "LEFT" | "RIGHT" | "SPACE" | "SHIFT";
 type Texts = Record<"hp" | "title" | "foes" | "clock" | "help" | "banner" | "summary" | "attack" | "dash", Phaser.GameObjects.Text>;
 
 const K = UNITS_PER_PX;
+/** The Soldier's swing animation length (the sword's cooldown is 420 ms) and its flinch after a hit, ms. */
+const HERO_SWING_MS = 360;
+const HERO_HURT_MS = 300;
+/** An enemy this fast (units/s, after scaling) runs instead of walking, where it has a run (the warrior). */
+const WARRIOR_RUN_SPEED = 110;
 
 /**
  * Forest mode: the fight plays on a forest path scene (one background texture, the playable rect, a canopy overlay),
@@ -61,7 +77,12 @@ export class ForestScene extends Phaser.Scene {
   private sim!: FightSim;
   private L!: ForestLayout;
   private player!: Phaser.GameObjects.Sprite;
-  private foes: { body: EnemyBody; sprite: Phaser.GameObjects.Image; name: Phaser.GameObjects.Text }[] = [];
+  private foes: { body: EnemyBody; sprite: Phaser.GameObjects.Image | Phaser.GameObjects.Sprite; art: ActorSprite | null; name: Phaser.GameObjects.Text; last: Vec }[] = [];
+  /** The Soldier (src/render/sprites.ts) when its sheets loaded; null: the generated hero. */
+  private hero: ActorSprite | null = null;
+  /** Sim time of the last swing and the last hit taken (the Soldier's attack and hurt animations). */
+  private swingAt = -1e9;
+  private hurtAt = -1e9;
   private ground!: Phaser.GameObjects.Graphics;
   private fxg!: Phaser.GameObjects.Graphics;
   private bars!: Phaser.GameObjects.Graphics;
@@ -96,6 +117,7 @@ export class ForestScene extends Phaser.Scene {
       depth: { player: 0, enemies: [], overlay: overlayDepth(cfg.scene.size.h) },
       gamma: cfg.gamma ?? FOREST_BG_GAMMA, setGamma: () => {}, // setGamma is wired up when the bundled band is drawn
       art: { background: "placeholder", overlay: cfg.scene.overlay ? "placeholder" : "none" },
+      sprites: { player: null, enemies: [], anims: { player: null, enemies: [] } },
     };
   }
 
@@ -111,6 +133,17 @@ export class ForestScene extends Phaser.Scene {
       if (src && src.kind !== "key") this.load.image(this.partKey(name), src.url);
     }
     if (!privateSceneFile(privateFiles(), def.id, "background")) preloadBand(this, def);
+    preloadCharacters(this, this.characters());
+  }
+
+  /** The licensed characters this fight draws: the Soldier, and each enemy's (roles without one keep generated art). */
+  private characters(): CharacterId[] {
+    const ids: CharacterId[] = ["soldier"];
+    for (const e of this.cfg.encounter.enemies) {
+      const r = roleArt(e.id);
+      if (r) ids.push(r.character, ...(r.like ? [r.like] : []));
+    }
+    return [...new Set(ids)];
   }
 
   private resolve(name: string, value: string | undefined, draw: (key: string) => void): { key: string; art: "file" | "key" | "placeholder" } {
@@ -149,11 +182,18 @@ export class ForestScene extends Phaser.Scene {
     this.ground = this.add.graphics().setDepth(BG_DEPTH + 1);
     world.push(this.ground);
 
+    // The licensed sprites, where loaded (src/render/sprites.ts); a role whose sheets are missing keeps generated art.
+    const arts = new Map<CharacterId, CharacterArt | null>();
+    for (const id of this.characters()) arts.set(id, buildCharacter(this, id));
+    const heightOf = (c: CharacterId) => figureHeight(arts.get(c));
     const label = { fontFamily: "system-ui, sans-serif", fontSize: "6px", color: "#ffe9b0", stroke: "#000", strokeThickness: 2 };
     for (const body of this.sim.enemies) {
-      const sprite = this.add.image(0, 0, enemyTextureKey(body.kind)).setOrigin(0.5, 1);
+      const role = roleArt(body.kind);
+      const art = role ? arts.get(role.character) : null;
+      const actor = role && art ? new ActorSprite(this, art, roleScale(role, heightOf)) : null;
+      const sprite = actor ? actor.sprite : this.add.image(0, 0, enemyTextureKey(body.kind)).setOrigin(0.5, 1);
       const name = this.add.text(0, 0, body.name, label).setOrigin(0.5, 1).setResolution(6).setDepth(OV + 2);
-      this.foes.push({ body, sprite, name });
+      this.foes.push({ body, sprite, art: actor, name, last: { ...body.pos } });
       world.push(sprite, name);
     }
     for (const f of HERO_ROWS) {
@@ -161,7 +201,12 @@ export class ForestScene extends Phaser.Scene {
       const row = HERO_ROWS.indexOf(f) * HERO_COLS;
       if (!this.anims.exists(key)) this.anims.create({ key, frames: this.anims.generateFrameNumbers(PLACEHOLDER_HERO, { frames: [row + 1, row, row + 2, row] }), frameRate: 8, repeat: -1 });
     }
-    this.player = this.add.sprite(0, 0, PLACEHOLDER_HERO, 0).setOrigin(0.5, 1);
+    const soldier = arts.get("soldier");
+    const playerRole = roleArt("player");
+    if (soldier && playerRole) {
+      this.hero = new ActorSprite(this, soldier, roleScale(playerRole, heightOf));
+      this.player = this.hero.sprite;
+    } else this.player = this.add.sprite(0, 0, PLACEHOLDER_HERO, 0).setOrigin(0.5, 1);
     world.push(this.player);
     this.fxg = this.add.graphics().setDepth(OV - 1);
     world.push(this.fxg);
@@ -171,6 +216,8 @@ export class ForestScene extends Phaser.Scene {
       this.view.art.overlay = ov.art;
       world.push(this.add.image(0, 0, ov.key).setOrigin(0, 0).setDisplaySize(def.size.w, def.size.h).setDepth(OV));
     }
+    this.view.sprites.player = this.hero?.art.id ?? null;
+    this.view.sprites.enemies = this.foes.map((f) => f.art?.art.id ?? null);
     this.bars = this.add.graphics().setDepth(OV + 1);
     world.push(this.bars);
     this.syncSprites();
@@ -258,7 +305,8 @@ export class ForestScene extends Phaser.Scene {
         this.clickQueued = false;
         this.dashQueued = false;
         this.acc -= STEP_MS;
-        if (this.sim.fx.includes("hurt")) this.cameras.main.shake(140, 0.006);
+        if (this.sim.fx.includes("hurt")) { this.cameras.main.shake(140, 0.006); this.hurtAt = this.sim.timeMs; }
+        if (this.sim.fx.includes("swing")) { this.swingAt = this.sim.timeMs; this.hero?.play("attack", { restart: true, durationMs: HERO_SWING_MS }); }
         if (this.sim.fx.includes("burst")) this.cameras.main.shake(100, 0.003);
       }
       if (this.sim.over) this.end(this.sim.result!);
@@ -326,25 +374,52 @@ export class ForestScene extends Phaser.Scene {
     const s = this.sim;
     const p = s.player;
     const blink = Math.floor(s.timeMs / 80) % 2 === 0;
-    const px = toPx(p.pos.x), pf = footPx(p.pos, p.radius);
+    // The figure is centred on the sim's centre (the hitbox's and the arc's origin), horizontally and vertically.
+    const px = toPx(p.pos.x), pf = playerFeetPx(p.pos, this.hero ? this.hero.figureH : HERO_SIZE);
     const moved = Math.hypot(p.pos.x - this.lastPos.x, p.pos.y - this.lastPos.y) > 0.5;
     this.lastPos = { ...p.pos };
     this.facing = facingOf(p.facing, this.facing);
-    this.player.setPosition(px, pf).setDepth(actorDepth(pf));
-    if (moved && !s.over) this.player.anims.play(`ph-walk-${this.facing}`, true);
-    else { this.player.anims.stop(); this.player.setFrame(HERO_ROWS.indexOf(this.facing) * HERO_COLS); }
+    if (this.hero) {
+      // The Soldier: death, the flinch, the swing (Attack01 to 03 in turn, facing the swing), walking, idle.
+      const swinging = s.timeMs - this.swingAt < HERO_SWING_MS;
+      const anim = playerAnim({ dead: p.hp <= 0, hurt: s.timeMs - this.hurtAt < HERO_HURT_MS, swinging, moving: moved && !s.over }, this.hero.has);
+      if (anim !== "attack") this.hero.play(anim);
+      const dirX = swinging ? p.swingDir.x : p.facing.x;
+      const flip = Math.abs(dirX) > 0.01 ? dirX < 0 : this.hero.flipped;
+      this.hero.place(px, pf, flip);
+      this.player.setDepth(actorDepth(pf));
+    } else {
+      this.player.setPosition(px, pf).setDepth(actorDepth(pf));
+      if (moved && !s.over) this.player.anims.play(`ph-walk-${this.facing}`, true);
+      else { this.player.anims.stop(); this.player.setFrame(HERO_ROWS.indexOf(this.facing) * HERO_COLS); }
+    }
     this.player.setAlpha(p.iframesMs > 0 && blink ? 0.4 : 1);
     if (p.stunMs > 0) this.player.setTint(0xb8c4ff); else this.player.clearTint();
     this.view.depth.player = this.player.depth;
+    this.view.sprites.anims = { player: this.hero?.anim ?? null, enemies: this.foes.map((f) => f.art?.anim ?? null) };
 
-    this.view.depth.enemies = this.foes.map(({ body: e, sprite, name }) => {
+    this.view.depth.enemies = this.foes.map((foe) => {
+      const { body: e, sprite, name, art } = foe;
       const ex = toPx(e.pos.x), ef = footPx(e.pos, e.radius);
       const b = e.brain;
       let scale = 1, squash = 1;
       let tint: number | null = null;
+      const moving = Math.hypot(e.pos.x - foe.last.x, e.pos.y - foe.last.y) > 0.5;
+      foe.last = { ...e.pos };
+      if (art) {
+        // The sprite's animation: the telegraph and lunge are one attack, timed to last as long as they do; the boss
+        // burst's charge is the warrior's heavy hit.
+        const anim = enemyAnim({ dead: e.hp <= 0, hurt: e.hurtMs > 0, mode: b.mode, moving: moving && b.mode === "chase" }, art.has);
+        const durationMs = anim === "heavy" || (anim === "attack" && b.mode === "burstWindup") ? e.params.burstWindupMs
+          : anim === "attack" ? e.params.windupMs + e.params.lungeMs : undefined;
+        art.play(anim, { durationMs, run: e.params.speed >= WARRIOR_RUN_SPEED });
+      }
       if (e.hp <= 0) {
-        const k = Math.min(1, (s.timeMs - (e.diedAtMs ?? 0)) / 500);
-        sprite.setAlpha(1 - k).setVisible(k < 1).setTint(0x553333);
+        // With a death animation it plays, holds, then fades; without one it fades out as before.
+        const t = s.timeMs - (e.diedAtMs ?? 0);
+        const k = art?.has("death") ? Math.min(1, Math.max(0, (t - 700) / 400)) : Math.min(1, t / 500);
+        sprite.setAlpha(1 - k).setVisible(k < 1);
+        if (!art?.has("death")) sprite.setTint(0x553333); else sprite.clearTint();
         name.setVisible(false);
       } else {
         sprite.setAlpha(1).setVisible(true);
@@ -357,14 +432,17 @@ export class ForestScene extends Phaser.Scene {
         } else if (b.mode === "lunge") { tint = COL.telegraph; scale = 1.1; }
         else if (b.mode === "recover") tint = lerpColor(0x707070, 0xffffff, Math.min(1, b.modeMs / e.params.recoverMs));
         else if (b.mode === "burstWindup") tint = lerpColor(0xffffff, COL.bullet, Math.min(1, b.modeMs / e.params.burstWindupMs));
-        else if (b.mode === "chase" && e.kind === "slime") squash = 1 + 0.12 * Math.sin(s.timeMs / 70);
+        else if (b.mode === "chase" && !art && (e.kind === "slime" || e.kind === "orc")) squash = 1 + 0.12 * Math.sin(s.timeMs / 70);
         if (e.stunMs > 0) tint = 0xaab4ff;
         if (e.hurtMs > 0) tint = -1;
         if (tint === -1) sprite.setTintFill(0xffffff);
         else if (tint !== null) sprite.setTint(tint);
         else sprite.clearTint();
       }
-      sprite.setPosition(ex, ef).setScale(scale / squash, scale * squash).setFlipX(p.pos.x < e.pos.x).setDepth(actorDepth(ef));
+      // A sprite keeps its last facing while it lies dead; the generated art always faces you.
+      if (art) art.place(ex, ef, e.hp > 0 ? p.pos.x < e.pos.x : art.flipped, e.hp > 0 ? scale : 1);
+      else sprite.setPosition(ex, ef).setScale(scale / squash, scale * squash).setFlipX(p.pos.x < e.pos.x);
+      sprite.setDepth(actorDepth(ef));
       return sprite.depth;
     });
   }
@@ -378,7 +456,7 @@ export class ForestScene extends Phaser.Scene {
     const f = this.fxg.clear();
     const bars = this.bars.clear();
 
-    for (const { body: e, sprite, name } of this.foes) {
+    for (const { body: e, sprite, name, art } of this.foes) {
       if (e.hp <= 0) continue;
       const ex = toPx(e.pos.x), ey = toPx(e.pos.y), er = toPx(e.radius);
       const b = e.brain;
@@ -397,8 +475,9 @@ export class ForestScene extends Phaser.Scene {
         const k = Math.min(1, b.modeMs / e.params.burstWindupMs);
         f.lineStyle(1.5, COL.bullet, 0.3 + 0.5 * k).strokeCircle(ex, ey - er, er * (1 + 1.4 * k));
       }
-      const top = sprite.y - sprite.displayHeight;
-      if (b.mode === "recover" || e.stunMs > 0) f.lineStyle(1, 0xffffff, 0.6).strokeEllipse(ex, top - 2, ENEMY_ART_SIZE[e.kind].w * 0.6, 3);
+      // The top of the visible figure (a sprite's frame is mostly empty space around it).
+      const top = art ? art.top : sprite.y - sprite.displayHeight;
+      if (b.mode === "recover" || e.stunMs > 0) f.lineStyle(1, 0xffffff, 0.6).strokeEllipse(ex, top - 2, (art ? art.figureW : ENEMY_ART_SIZE[e.kind].w) * 0.6, 3);
       // HP bar and name above the canopy, so the trees never hide them.
       const bw = e.boss ? 30 : 16;
       bar(bars, ex - bw / 2, top - 5, bw, 2.5, e.hp / e.maxHp, COL.hpEnemy, 0.5);
@@ -421,7 +500,9 @@ export class ForestScene extends Phaser.Scene {
     }
 
     // The player's swing and dash trail.
-    const px = toPx(p.pos.x), py = toPx(p.pos.y) - 3;
+    // The arc is drawn from the hitbox's own origin (the sim's player centre, which the sprite's figure stands on,
+    // centred), not a few pixels up: what you see is what hits.
+    const { x: px, y: py } = swingDrawOrigin(p.pos, (v) => ({ x: toPx(v.x), y: toPx(v.y) }));
     if (p.swingMs > 0) {
       const arc = swingArc(p.pos, p.swingDir, p.radius); // the hitbox itself, so it turns with the facing
       const k = p.swingMs / PLAYER.swingMs;
@@ -440,8 +521,8 @@ export class ForestScene extends Phaser.Scene {
     const alive = s.alive.length;
     this.texts.hp.setText(`You  ${p.hp} / ${p.maxHp}`);
     this.texts.foes.setText(`${s.enemies.length > 1 ? `${alive} / ${s.enemies.length} standing  ·  ` : ""}${s.enemyHpLeft} HP`);
-    this.texts.clock.setText(`${(s.timeMs / 1000).toFixed(1)} s`);
-    this.texts.help.setVisible(!this.touchUI && !this.finished);
+    this.texts.clock.setText(this.cfg.clock ? `${(s.timeMs / 1000).toFixed(1)} s` : "");
+    this.texts.help.setVisible(this.cfg.help !== false && !this.touchUI && !this.finished);
     this.texts.attack.setVisible(this.touchUI);
     this.texts.dash.setVisible(this.touchUI);
     if (this.touchUI) {

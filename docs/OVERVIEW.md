@@ -20,6 +20,7 @@ Writing code with an AI assistant? Give it this page first. Then name the row of
 | `npm run build:test` / `npm run build:game` | Test build into `dist-test/`: all pages, including the game. | `vite.config.ts` |
 | `npm run preview` / `preview:test` / `preview:game` | Serve a finished build. `preview:game` opens `/play.html`. | none |
 | `npm run mock:devil` | Fake devil backend on `localhost:8787/deal`. | `scripts/mock-devil-server.ts` |
+| `npm run devil:oai` | The LLM devil on `localhost:8788/deal`, over any OpenAI-compatible API (llama-swap by default, or Gemini). See [devil-api.md](devil-api.md). | `scripts/oai-devil.ts` |
 | `npm test` | All unit tests. | `src/**/*.test.ts`, `tools/*.test.ts` |
 | `npm run fixtures` | Re-record the engine fixtures. Rare. See section 4. | `src/game/__fixtures__/generate.ts` |
 | `npm run play` | **Not the game.** A terminal REPL for the engine (`play -- --json` for machine use). | `src/game/repl.ts` |
@@ -78,7 +79,7 @@ How to read it:
 - **Play flow** (`src/play/flow.ts`): a pure function, `flow(view, local)`. It decides which screen and which prompts to show, and when the map is open or forced. `src/play/play.ts` draws the result. See [play.md](play.md).
 - **Scenes**: village and forest are JSON files (`src/world/scenes/`) drawn by `src/world/`. The map is `src/mapscene/` ([mapscene.md](mapscene.md)). The HUD is `src/hud/` ([hud.md](hud.md)). The fight is `src/fight/` ([fight.md](fight.md)); it reports back a result that the engine clamps (`sanitizeFightResult`).
 - **Devil**: the engine asks, a backend answers. `StubDevil` (`src/game/devil.ts`) is canned and offline. `HttpDevil` (`src/game/httpDevil.ts`) calls the backend described in [devil-api.md](devil-api.md). Every answer goes through `sanitizeDeal` before it touches the run.
-- **Art**: the designer's art is in `assets/` at the repo root, imported through Vite: the devil's poses (`src/play/devilArt.ts`, [play.md](play.md)) and the forest band (`src/world/bandArt.ts`, [world.md](world.md)). Everything else is placeholders drawn in code. Private art in the gitignored `public/assets/private/` replaces them automatically. See [assets.md](assets.md) and [world.md](world.md).
+- **Art**: the designer's art is in `assets/` at the repo root, imported through Vite: the devil's poses (`src/play/devilArt.ts`, [play.md](play.md)) and the forest band (`src/world/bandArt.ts`, [world.md](world.md)). The licensed sprite packs (encrypted, served only with `ASSET_KEY`) draw the player and the enemies: Soldier, Orc, Demon_A for the minibosses, WarriorCh for the final boss (`src/render/sprites.ts`, [fight.md](fight.md) "Sprites", [CREDITS.md](CREDITS.md)). Everything else is placeholders drawn in code, and without the key the sprites fall back to them too. Private art in the gitignored `public/assets/private/` replaces them automatically. See [assets.md](assets.md) and [world.md](world.md).
 - **Map generator** (`src/map/`): makes each act from the seed. See `src/map/README.md`.
 - **Dead code**: `src/scenes/MapScene.ts` is an old Phaser map. Nothing imports it.
 
@@ -91,7 +92,7 @@ Names in backticks are constants or functions you can search for. "Inline" means
 | 1 | Shop prices | `WARES` in `src/game/gameState.ts` |
 | 2 | What a ware does (heal 12, blade +1, blessing roll) | `buy()` in `src/game/state-machine.ts`. Also update the text copies: `WARE_INFO` in `src/hud/model.ts` and `WARE_TEXT` in `src/world/shopZone.ts` |
 | 3 | Gold from a won fight | Inline in `src/game/state-machine.ts`, twice: `fight()` and `fightResult()`. Change both |
-| 4 | Engine enemy HP and power per act | Inline in `enter()` in `src/game/state-machine.ts` (regular and boss) |
+| 4 | Engine enemy HP and power per act | `FOE` and `BOSS` in `src/game/difficulty.ts` |
 | 5 | Enemy and boss names | `FOES` and `BOSSES` in `src/game/gameState.ts` |
 | 6 | Realtime enemy stats (speed, cooldowns, aggro) | `ENEMIES` in `src/fight/enemies.ts` |
 | 7 | Enemy mix and scaling up the run | `ENCOUNTER_BANDS` and `SCALING` in `src/fight/encounters.ts` |
@@ -99,11 +100,11 @@ Names in backticks are constants or functions you can search for. "Inline" means
 | 9 | Which kinds exist, and good vs bad | `GOOD_KINDS`, `BAD_KINDS` in `src/map/types.ts` |
 | 10 | Campfire rules (rest heals 40%, train +1) | Rest is inline (`maxHp * 0.4`, case `"rest"` in `step`). Train is `TRAIN_ATTACK` in `src/game/gameState.ts` |
 | 11 | Well rules (blessing, one choice, devil chance) | `WELL_DEVIL_CHANCE`, `ONE_CHOICE` in `src/game/gameState.ts`. Blessing outcomes are inline in `buy()` |
-| 12 | Healing on stairs and after a boss | Inline `healBy` calls in `go()`, `fight()` and `fightResult()` in `src/game/state-machine.ts` |
+| 12 | Healing on stairs and after a boss; HP after the revival | `FREE_HEAL` and `REVIVE_SHARE` in `src/game/difficulty.ts` |
 | 13 | Starting stats | `newPlayer` in `src/game/state.ts` |
 | 14 | Hard limits on stats and deal sizes | `STAT_RANGE`, `DELTA_RANGE` in `src/game/state.ts`; `MAX_STRIKE_HP` in `src/game/deal.ts` |
 | 15 | Questions per node, per run, curses held | `MAX_ASKS`, `MAX_DEVIL_QUERIES`, `MAX_CURSES` in `src/game/gameState.ts` |
-| 16 | Stub devil offers and wording | `OFFERS` in `src/game/devil.ts` |
+| 16 | Stub devil offers and wording | `OFFERS` in `src/game/devil.ts`. His prices: `DEVIL_MARGIN`, `priceDeal` there, scored by `dealValue` (`src/game/dealValue.ts`) |
 | 17 | Stub devil opening offer | `openingOffer`, `OPENER_LOW_HP`, `OPENER_POOR` in `src/game/devil.ts` |
 | 18 | Stub devil anger and strikes | `ANGRY`, `STRIKE_LINES`, `STRIKE_CHANCE`, `OFF_TOPIC_STRIKE_CHANCE` in `src/game/devil.ts` |
 | 19 | Devil lines at wells | `WELL_ENTICE` in `src/game/devil.ts` |
@@ -146,6 +147,8 @@ You do not need to know TypeScript to build the backend. You need a web service 
 - **Never trust the model's JSON.** The game always runs the reply through `sanitizeDeal` (`src/game/deal.ts`), which clamps numbers and drops junk. Do the same in your backend so a bad reply becomes a safe one.
 - **Off-topic and jailbreak text gets an angry devil.** Put the rules from devil-api.md in your prompt. `devil_prompt.txt` is a short seed.
 - **Failure is safe.** If you time out (15 s) or return junk, the devil only smiles and the run goes on.
+
+**A working LLM devil.** `npm run devil:oai` (llama-swap `gemma4:26b` by default; Gemini with `OAI_BASE_URL`, `OAI_MODEL`, `OAI_API_KEY`), then `VITE_DEVIL_URL=http://localhost:8788/deal npm run game`. Details in [devil-api.md](devil-api.md).
 
 **Test without Gemini.** Run `npm run mock:devil`. It replies like the stub on `http://localhost:8787/deal`. Add `?chaos=1` for junk replies.
 

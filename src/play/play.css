@@ -1,5 +1,6 @@
 /* The play page (docs/play.md). Layers over the full-screen stage, bottom to top: the scene or fight, the map, the HUD,
-   the Map button and shop prompt, the campfire/well panel, the devil's overlay, the ending card, the toast. */
+   the Map and pause buttons and shop prompt, the campfire/well panel, the devil's overlay, the ending card, the toast,
+   the pause menu, the title screen. */
 html, body { margin: 0; height: 100%; background: #0b0707; color: #eee; font: 15px system-ui, sans-serif; }
 body { overflow: hidden; }
 #play { position: fixed; inset: 0; height: 100dvh; overflow: hidden; touch-action: none; user-select: none; -webkit-user-select: none; }
@@ -9,13 +10,18 @@ body { overflow: hidden; }
 .play-backdrop canvas { width: min(40vmin, 220px); image-rendering: pixelated; opacity: .35; }
 .play-map { z-index: 5; background: #0b0707; }
 .play .hud { z-index: 10; }
-/* The page's own buttons only: the HUD's item slots and the map's Legend toggle keep their own styles (their padding and colours were being overridden). */
+/* The page's own buttons only: the HUD's item slots (lab pages) and the map's Legend toggle keep their own styles (their padding and colours were being overridden). */
 .play button:not(.hud-slot):not(.mapscene-legend-btn) { font: inherit; color: #eee; background: #8a2020; border: 1px solid #c44; border-radius: 8px; padding: 8px 14px; min-height: 44px; min-width: 44px; font-weight: 600; cursor: pointer; }
 .play button.quiet { background: #2a1a1a; border-color: #553333; }
 .play button:disabled { opacity: .5; cursor: not-allowed; }
 .play button:focus-visible { outline: 3px solid #f0c060; outline-offset: 2px; }
 .play-mapbtn { position: absolute; z-index: 20; top: max(8px, env(safe-area-inset-top)); right: max(8px, env(safe-area-inset-right)); }
 .play-mapclose { position: absolute; z-index: 20; top: max(8px, env(safe-area-inset-top)); right: max(8px, env(safe-area-inset-right)); }
+/* The pause button: top right, under the Map button (or the map's Close); over the campfire/well panel, under the devil. In a fight (no Map button) it sits under the
+   fight's own title, enemy count and clock, which run down the top-right corner to about 85 px. */
+.play-pausebtn { position: absolute; z-index: 35; top: calc(max(8px, env(safe-area-inset-top)) + 52px); right: max(8px, env(safe-area-inset-right)); font-size: 18px !important; line-height: 1; padding: 0 !important; width: 44px; height: 44px; }
+.play-pausebtn::before { content: ""; display: block; margin: auto; width: 16px; height: 18px; box-sizing: border-box; border-inline: 6px solid currentColor; }
+.play.fighting .play-pausebtn { top: calc(max(8px, env(safe-area-inset-top)) + 88px); }
 .play-maptitle { position: absolute; z-index: 20; left: 50%; transform: translateX(-50%); bottom: max(56px, calc(env(safe-area-inset-bottom) + 48px)); background: rgba(20, 10, 10, .85); border: 1px solid #c44; border-radius: 8px; padding: 6px 12px; font-weight: 600; pointer-events: none; white-space: nowrap; }
 .play-prompt { position: absolute; z-index: 15; left: 50%; transform: translateX(-50%); bottom: max(44px, calc(env(safe-area-inset-bottom) + 36px)); width: min(92vw, 420px); box-sizing: border-box; background: rgba(20, 10, 10, .92); border: 1px solid #553333; border-radius: 10px; padding: 10px 12px; display: flex; flex-wrap: wrap; gap: 6px 10px; align-items: center; }
 .play-prompt b { flex: 1 1 auto; }
@@ -68,18 +74,17 @@ body { overflow: hidden; }
 .play-toast[hidden] { display: block; opacity: 0; }
 .play-fightcard { z-index: 30; }
 .play-mapbtn .key { opacity: .8; font-weight: 400; }
-/* Portrait (phones): the HUD's stats run nearly the full width at the top and its item slots stack up the right edge;
-   the world's touch stick rests bottom-centre. Keep the Map button short, the prompt clear of the item column, and
-   the map title and toast below the stats. */
+/* Portrait (phones): the HUD's stats run nearly the full width at the top; the world's touch stick rests bottom-centre.
+   Keep the Map button short, the prompt above the stick, and the map title and toast below the stats. */
 @media (max-aspect-ratio: 1/1) {
   .play-mapbtn .key, .play-mapclose .key { display: none; }
   #play .play-mapclose { padding-inline: 10px; }
-  .play-prompt { left: max(10px, env(safe-area-inset-left)); right: 84px; width: auto; transform: none; bottom: calc(max(12px, env(safe-area-inset-bottom)) + 150px); }
+  .play-prompt { left: max(10px, env(safe-area-inset-left)); right: max(10px, env(safe-area-inset-right)); width: auto; transform: none; bottom: calc(max(12px, env(safe-area-inset-bottom)) + 150px); }
   .play-maptitle { bottom: auto; top: calc(var(--hud-bottom, 122px) + 8px); }
   .play-toast { top: calc(var(--hud-bottom, 122px) + 50px); }
 }
 /* Landscape under 1300 px wide (a laptop window, a turned phone): a centred toast runs into the HUD's stats strip
-   (348 px from the left edge), hiding Soul and Revive. Centre it in the space right of the strip instead. */
+   (348 px from the left edge). Centre it in the space right of the strip instead. */
 @media (min-aspect-ratio: 1/1) and (max-width: 1299px) {
   .play-toast { left: calc(max(8px, env(safe-area-inset-left)) + 356px); right: max(8px, env(safe-area-inset-right)); transform: none; margin-inline: auto; box-sizing: border-box; max-width: min(560px, calc(100% - 372px)); }
 }
@@ -89,4 +94,28 @@ body { overflow: hidden; }
 @media (min-aspect-ratio: 1/1) and (max-height: 540px) {
   .play-maptitle { left: max(8px, env(safe-area-inset-left)); transform: none; bottom: auto; top: calc(var(--hud-bottom, 96px) + 8px); }
 }
+/* The pause menu: over everything but the title screen. */
+.play-pause { z-index: 70; display: flex; align-items: center; justify-content: center; background: rgba(5, 2, 2, .78); padding: 12px; box-sizing: border-box; }
+.play-pause .play-card { width: min(94vw, 520px); }
+.play-pause .lead { margin: 4px 0 14px; color: #cbb; }
+.play-pause .controls h3 { margin: 12px 0 6px; font-size: 14px; color: #f0c060; text-transform: uppercase; letter-spacing: .06em; }
+.play-pause dl { display: grid; grid-template-columns: max-content 1fr; gap: 4px 14px; margin: 0; font-size: 14px; }
+.play-pause dt { font-weight: 700; color: #f3e8e8; }
+.play-pause dd { margin: 0; color: #cbb; }
+.play-pause .row { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 16px; }
+.play-pause .row button { flex: 1 1 140px; }
+/* The title screen (after Quit, or ?title=1). */
+.play-title { z-index: 80; display: flex; align-items: center; justify-content: center; text-align: center; background: radial-gradient(ellipse at 50% 40%, #3a0d0d 0%, #0a0303 75%); }
+.play-title h1 { font: 400 clamp(28px, 7vw, 56px)/1.15 Georgia, serif; margin: 0 16px 28px; color: #f2d2c0; letter-spacing: .03em; }
+.play-title h1 b { color: #ff5a4a; font-weight: 700; }
+.play-title button { font-size: 18px !important; padding: 12px 28px !important; }
 .play [hidden]:not(.play-toast) { display: none !important; }
+/* Credits (the sprite packs' attribution files): over the title, the pause menu and the ending card. */
+.play-credits { z-index: 90; display: flex; align-items: center; justify-content: center; background: rgba(5, 2, 2, .9); padding: 12px; box-sizing: border-box; }
+.play-credits .credits-body { margin: 8px 0 14px; }
+.play-credits h3 { font-size: 14px; margin: 12px 0 4px; color: #f0c060; }
+.play-credits pre { white-space: pre-wrap; word-break: break-word; font: 13px/1.4 system-ui, sans-serif; color: #ddd; margin: 0; }
+.play-ending-row, .play-title-row { display: flex; gap: 10px; justify-content: center; flex-wrap: wrap; }
+/* The pause menu: Resume, Controls, Credits, Quit game, one per row. */
+.play-pause .row.menu { flex-direction: column; }
+.play-pause .row.menu button { flex: 0 0 auto; }

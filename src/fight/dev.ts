@@ -134,11 +134,11 @@ async function start(): Promise<void> {
   document.body.classList.add("fighting");
   const result = forest
     ? await runForestFight(stage, inp, {
-      touch, force: forced(), gamma: Number(gamma.value),
+      touch, clock: true, force: forced(), gamma: Number(gamma.value),
       onEncounter: (e) => { state.encounter = e; enc.innerHTML = describeEncounter(e); },
       onDebug: (sim, view) => { state.sim = sim; state.view = view; },
     })
-    : await runFight(stage, inp, { touch, onDebug: (sim) => { state.sim = sim; } });
+    : await runFight(stage, inp, { touch, clock: true, onDebug: (sim) => { state.sim = sim; } });
   state.running = false;
   state.result = result;
   document.body.classList.remove("fighting");

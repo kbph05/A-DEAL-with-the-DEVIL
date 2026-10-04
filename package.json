@@ -15,6 +15,7 @@
     "build:game": "npm run build:test",
     "preview:game": "vite preview --outDir dist-test --open /play.html",
     "mock:devil": "tsx scripts/mock-devil-server.ts",
+    "devil:oai": "tsx scripts/oai-devil.ts",
     "test": "tsx --test src/**/*.test.ts tools/*.test.ts",
     "play": "tsx src/game/repl.ts",
     "fixtures": "tsx src/game/__fixtures__/generate.ts",

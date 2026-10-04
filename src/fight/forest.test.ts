@@ -179,7 +179,8 @@ test("skeleton archers keep to the path band: spawned in it, and backing off nev
   let archers = 0, steps = 0;
   for (let i = 0; i < 24; i++) {
     const r = req(3, 4 + (i % 3), `band-${i}`);
-    const w = forestWorld(forest, encounterFor(r));
+    // Archers are out of the encounter tables (orcs only since 4 Oct), so force them: the band rule still holds.
+    const w = forestWorld(forest, encounterFor(r, { force: "skeleton_archer" }));
     assert.deepEqual(w.band, { x: band.x * K, y: band.y * K, w: band.w * K, h: band.h * K });
     for (const e of w.enemies) if (e.kind === "skeleton_archer") { archers++; assert.ok(inBand(e.pos, e.params.radius, w.band!), `archer spawn in the band (${r.seed})`); }
     // Chase the archers up and down the path: the bot first, then straight at the nearest archer, sweeping the edges.

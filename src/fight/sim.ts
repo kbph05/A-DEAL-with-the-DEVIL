@@ -13,7 +13,7 @@ import { hashSeed, mulberry32, type Rng } from "../map/rng";
 import {
   ARENA, KNOCK_DECAY, PLAYER, STEP_MS, burstDamage, canBeHit, clampToRect, contactDamage, d3, dist,
   hitBySwing, isReady, knockback, lungeDamage, norm, playerHitDamage, pushOutOfRect, sanitizeInput, sub,
-  tick, circleHitsRect, swingArc,
+  tick, circleHitsRect, swingArc, attackDir,
   type FightInput, type FightResult, type Rect, type Vec,
 } from "./logic";
 import { arrowDamage, enemyParams, enemyTier, newBrain, tickBrain, type EnemyBrain, type EnemyId, type EnemyParams } from "./enemies";
@@ -202,11 +202,10 @@ export class FightSim {
     // Attack (held = swing again as soon as the cooldown allows). Not mid-dash. One swing hits every enemy in the
     // arc, each with its own roll, in the enemies' order.
     if (!stunned && c.attack && isReady(p.attackCdMs) && p.dashMs <= 0) {
-      if (c.aim) {
-        const a = norm(sub(c.aim, p.pos));
-        if (a.x !== 0 || a.y !== 0) p.facing = a;
-      }
-      p.swingDir = p.facing;
+      // Moving: the swing follows the movement, whatever the input. Still: a click aims, Space/touch use the facing.
+      const dir = attackDir({ moving: move.x !== 0 || move.y !== 0, moveVec: move, lastFacing: p.facing, clickTarget: c.aim, from: p.pos });
+      p.facing = dir;
+      p.swingDir = dir;
       p.swingMs = PLAYER.swingMs;
       p.attackCdMs = PLAYER.attackCdMs;
       this.fx.push("swing");

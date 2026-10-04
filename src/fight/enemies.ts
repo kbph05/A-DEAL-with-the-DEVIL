@@ -1,9 +1,11 @@
 /**
- * The enemy roster (Big Chungus): slime, demon, skeleton archer, miniboss 1, miniboss 2 and the final boss. Data plus
+ * The enemy roster (Big Chungus): orc, slime, demon, skeleton archer, miniboss 1, miniboss 2 and the final boss. Data plus
  * behaviour, pure (no Phaser): each enemy is an `EnemyDef` (id, label, HP share, damage, speed, size, behaviour and
  * the base values the encounter scaling multiplies), and every behaviour runs on the one state machine below
  * (`nextEnemyMode` / `tickBrain`), stepped by `FightSim`. Tested in node (enemies.test.ts, logic.test.ts).
  *
+ * - orc: the slime's numbers and behaviour, drawn with the Orc sprite (src/render/sprites.ts). Since 4 Oct the only
+ *   regular enemy in the encounter tables; the slime, demon and skeleton archer stay defined (the lab can force them).
  * - slime: the original fight enemy. Chases, telegraphs (swells, a lane on the floor), lunges, recovers. Touching it
  *   while it walks hurts a little.
  * - demon: stalks from further out, then a fast, long lunge after a clear telegraph, then a long recovery window
@@ -137,7 +139,7 @@ export function tickBrain(b: EnemyBrain, dtMs: number, gap: number, p: EnemyPara
 // ---------------------------------------------------------------------------------------------------------------
 // The roster
 
-export const ENEMY_IDS = ["slime", "demon", "skeleton_archer", "miniboss1", "miniboss2", "final_boss"] as const;
+export const ENEMY_IDS = ["orc", "slime", "demon", "skeleton_archer", "miniboss1", "miniboss2", "final_boss"] as const;
 export type EnemyId = (typeof ENEMY_IDS)[number];
 export const isEnemyId = (v: unknown): v is EnemyId => (ENEMY_IDS as readonly unknown[]).includes(v);
 
@@ -168,6 +170,12 @@ export interface EnemyDef {
 
 /** Tunable. Speeds and ranges are fight units (the arena is 720 across; the player has radius 16 and walks 230/s). */
 export const ENEMIES: Readonly<Record<EnemyId, EnemyDef>> = {
+  // The orc (Big Chungus, 4 Oct: "disable any enemies we don't have sprites for"): the slime's numbers and behaviour
+  // under the Tiny RPG pack's Orc sprite. It is the only regular enemy in the encounter tables now.
+  orc: {
+    id: "orc", label: "Orc", boss: false, hpShare: 1, damage: 0.75, speed: 105, size: 18, behaviour: "lunger",
+    attackCdMs: 1100, hitstunMs: 140, stunTakenMs: 260, aggroRange: 230, tier: 0, extra: {},
+  },
   slime: {
     id: "slime", label: "Slime", boss: false, hpShare: 1, damage: 0.75, speed: 105, size: 18, behaviour: "lunger",
     attackCdMs: 1100, hitstunMs: 140, stunTakenMs: 260, aggroRange: 230, tier: 0, extra: {},

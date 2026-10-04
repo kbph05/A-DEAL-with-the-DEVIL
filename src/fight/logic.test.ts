@@ -2,10 +2,12 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { mulberry32 } from "../map/rng";
 import {
-  ARENA, PLAYER, STEP_MS, burstDamage, canBeHit, clampStick, clampToArena, contactDamage, d3, dist, enemyParams, enemyTier,
+  ARENA, FIGHT_SPRINT_MULT, FIGHT_WALK_SPEED, PLAYER, STEP_MS, burstDamage, canBeHit, clampStick, clampToArena, contactDamage, d3, dist, enemyParams, enemyTier,
   fightLayout, relayout, inSwingArc, isReady, knockback, lungeDamage, moveDir, newBrain, nextEnemyMode, norm, playerHitDamage,
   pushOutOfRect, sanitizeInput, stickDir, sub, tick, tickBrain, type EnemyBrain, type FightInput,
 } from "./logic";
+import { ENEMY_IDS } from "./enemies";
+import { scaledParams } from "./encounters";
 import { FightSim, NO_CONTROLS, type FightControls } from "./sim";
 
 const ACT1: FightInput = { player: { hp: 30, maxHp: 30, attack: 3 }, enemy: { name: "cave rat", hp: 10, maxHp: 10, power: 2, boss: false }, seed: "t1" };
@@ -220,4 +222,17 @@ test("sim: whole fights are deterministic for a seed and end with a FightResult"
   const s = new FightSim(BOSS3);
   while (!s.over && s.timeMs < 20_000) { s.step(NO_CONTROLS); if (s.fx.includes("burst")) sawBurst = true; }
   assert.ok(sawBurst, "the boss uses its second pattern");
+});
+
+test("fight speed: base walk is not slow, sprint = base x multiplier, constant from the first step", () => {
+  assert.ok(FIGHT_WALK_SPEED >= 260, "walking is at least 260 units/s");
+  assert.equal(PLAYER.speed, FIGHT_WALK_SPEED);
+  assert.equal(PLAYER.dashSpeed, FIGHT_WALK_SPEED * FIGHT_SPRINT_MULT);
+  assert.ok(FIGHT_SPRINT_MULT > 1);
+  // Every enemy's chase speed, even at the top of the progress curve, stays under the player's walk: not outrun, not trivial.
+  for (const id of ENEMY_IDS) assert.ok(scaledParams(id, 1).speed < FIGHT_WALK_SPEED * 0.65, `${id} chases well under the player's walk`);
+  const s = new FightSim(ACT1);
+  const x0 = s.player.pos.x;
+  s.step({ ...NO_CONTROLS, move: { x: 1, y: 0 } });
+  assert.ok(Math.abs(s.player.pos.x - x0 - FIGHT_WALK_SPEED * (STEP_MS / 1000)) < 1e-6, "full walking speed in the first step");
 });
