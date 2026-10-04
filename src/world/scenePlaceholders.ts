@@ -5,7 +5,8 @@
  *   walls and water; exits are dirt, triggers stone floor. Big trees get their trunks here.
  * - the overlay: transparent except tree canopies (a row along the bottom edge and the big trees), drawn above
  *   actors, so the player walks under them.
- * - actors: a 16×24 pixel figure, coloured by id.
+ * - actors: a 16×24 pixel figure, coloured by id; or, by id prefix, a market stall ("stall-…", 40×36) or a
+ *   cottage ("house-…", 64×56).
  * The tile grid and canopy layout are pure (tested); only the drawing needs a canvas. Real art in
  * public/assets/private/scenes/<id>/ replaces these (docs/world.md).
  */
@@ -24,12 +25,25 @@ export function sceneTiles(def: SceneDef): { width: number; height: number; tile
   const height = Math.ceil(def.size.h / S);
   const base = generateWorld(def.id, { width, height });
   const tiles: number[] = [];
+  // A scene with shops gets dirt paths: from the spawn along its row, then up or down to each shop and exit.
+  const shops = (def.zones ?? []).some((z) => z.kind === "shop");
+  const legs: Array<{ x: number; y: number; w: number; h: number }> = [];
+  if (shops) {
+    for (const z of def.zones ?? []) {
+      if (z.kind !== "shop" && z.kind !== "exit") continue;
+      const cx = z.x + z.w / 2, cy = z.y + z.h / 2, sx = def.spawn.x, sy = def.spawn.y;
+      legs.push({ x: Math.min(sx, cx) - S, y: sy - S, w: Math.abs(cx - sx) + 2 * S, h: 2 * S });
+      legs.push({ x: cx - S, y: Math.min(sy, cy) - S, w: 2 * S, h: Math.abs(cy - sy) + 2 * S });
+    }
+  }
+  const onPath = (c: { x: number; y: number }) => pointIn(c, def.bounds) && legs.some((r) => pointIn(c, r));
   for (let y = 0; y < height; y++) {
     for (let x = 0; x < width; x++) {
       const c = { x: x * S + S / 2, y: y * S + S / 2 };
       let id = tileAt(base, x, y);
       if (pointIn(c, def.bounds)) id = isBlockingId(id) || id === T.DOOR ? T.GRASS : id;
       else id = id === T.WALL || id === T.WATER ? id : T.TREE;
+      if (onPath(c)) id = T.PATH;
       const zone = (def.zones ?? []).find((z) => pointIn(c, z));
       if (zone) id = zone.kind === "exit" ? T.PATH : T.FLOOR;
       tiles.push(id);
@@ -122,9 +136,72 @@ export const ACTOR_SIZE = { w: 16, h: 24 };
 
 const ROBES = ["#a83232", "#6b3fa0", "#8a6a3a", "#3f6f8a", "#5a7a3a", "#7a3a5a"];
 
-/** A 16×24 pixel figure in a robe, coloured by `id`, under `key` (made once). */
+/** Which placeholder an actor id gets: "stall-…" a market stall, "house-…" a cottage, anything else a figure. Pure. */
+export function actorShape(id: string): "stall" | "house" | "figure" {
+  return id.startsWith("stall-") ? "stall" : id.startsWith("house-") ? "house" : "figure";
+}
+
+export const STALL_SIZE = { w: 40, h: 36 };
+export const HOUSE_SIZE = { w: 64, h: 56 };
+
+const AWNINGS = ["#b83a3a", "#3a6fb8", "#c9a227", "#3a8a5a", "#8a3ab8"];
+
+/** A market stall: striped awning on two posts, a seller behind a wooden counter. Colours seeded by `id`. */
+function drawStall(ctx: CanvasRenderingContext2D, id: string): void {
+  const p = (x: number, y: number, w: number, h: number, c: string) => { ctx.fillStyle = c; ctx.fillRect(x, y, w, h); };
+  const awning = AWNINGS[hashSeed(id) % AWNINGS.length];
+  const robe = ROBES[hashSeed(`${id}:seller`) % ROBES.length];
+  p(2, 33, 36, 3, "rgba(0,0,0,0.3)"); // shadow
+  p(4, 8, 3, 26, "#5b3b22"); // posts
+  p(33, 8, 3, 26, "#5b3b22");
+  // Seller behind the counter.
+  p(15, 13, 10, 10, robe);
+  p(16, 7, 8, 7, "#f1c27d");
+  p(15, 6, 10, 3, "#2a1d14");
+  p(18, 10, 1, 1, "#1a1010");
+  p(21, 10, 1, 1, "#1a1010");
+  // Counter with wares.
+  p(3, 22, 34, 11, "#7a5230");
+  p(3, 22, 34, 2, "#9a6a40");
+  p(3, 31, 34, 2, "#4a2f1a");
+  for (let i = 0; i < 4; i++) p(7 + i * 7, 19, 4, 3, i % 2 ? "#d8c070" : "#c05050");
+  // Striped awning with a scalloped edge.
+  for (let x = 0; x < 40; x += 4) p(x, 0, 4, 7, (x / 4) % 2 ? "#f3e8d8" : awning);
+  for (let x = 0; x < 40; x += 4) p(x + 1, 7, 2, 2, (x / 4) % 2 ? "#f3e8d8" : awning);
+  p(0, 0, 40, 1, "rgba(0,0,0,0.25)");
+}
+
+/** A small cottage: stone walls, a door and window, a dark pitched roof. */
+function drawHouse(ctx: CanvasRenderingContext2D, id: string): void {
+  const p = (x: number, y: number, w: number, h: number, c: string) => { ctx.fillStyle = c; ctx.fillRect(x, y, w, h); };
+  const roof = ["#5a2a2a", "#3a3a4a", "#4a3a22"][hashSeed(id) % 3];
+  p(4, 52, 56, 4, "rgba(0,0,0,0.3)");
+  p(8, 26, 48, 27, "#8a8070"); // walls
+  for (let y = 28; y < 52; y += 6) for (let x = 8 + ((y / 6) % 2) * 4; x < 56; x += 8) p(x, y, 7, 1, "#6f665a");
+  p(26, 36, 12, 17, "#4a2f1a"); // door
+  p(27, 37, 10, 16, "#5b3b22");
+  p(35, 45, 1, 2, "#d8c070");
+  p(13, 33, 9, 8, "#2a1d14"); // windows
+  p(14, 34, 7, 6, "#e0b050");
+  p(42, 33, 9, 8, "#2a1d14");
+  p(43, 34, 7, 6, "#e0b050");
+  // Roof: a stepped triangle.
+  for (let i = 0; i < 14; i++) p(Math.round(28 - i * 2.4), 4 + i * 2, Math.round(8 + i * 4.8), 2, i % 3 === 0 ? "#2a1414" : roof);
+  p(4, 30, 56, 2, "#2a1414");
+  p(44, 6, 6, 12, "#6f665a"); // chimney
+}
+
+/** A 16×24 pixel figure in a robe, coloured by `id`, under `key` (made once); stalls and houses by id prefix. */
 export function actorPlaceholder(scene: Phaser.Scene, key: string, id: string): void {
   if (scene.textures.exists(key)) return;
+  const shape = actorShape(id);
+  if (shape !== "figure") {
+    const size = shape === "stall" ? STALL_SIZE : HOUSE_SIZE;
+    const { tex, ctx } = canvasTexture(scene, key, size.w, size.h);
+    (shape === "stall" ? drawStall : drawHouse)(ctx, id);
+    tex.refresh();
+    return;
+  }
   const { tex, ctx } = canvasTexture(scene, key, ACTOR_SIZE.w, ACTOR_SIZE.h);
   const robe = ROBES[hashSeed(id) % ROBES.length];
   const p = (x: number, y: number, w: number, h: number, c: string) => { ctx.fillStyle = c; ctx.fillRect(x, y, w, h); };

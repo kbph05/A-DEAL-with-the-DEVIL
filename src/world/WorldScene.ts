@@ -161,6 +161,13 @@ export class WorldScene extends Phaser.Scene {
       const sprite = this.add.image(a.x, a.y, r.key).setOrigin(0.5, 1);
       this.actors.push({ def: a, sprite });
       world.push(sprite);
+      // Placeholder actors carry their label as a small sign above them (real art draws its own).
+      if (a.label && r.art === "placeholder") {
+        const sign = this.add.text(a.x, a.y - sprite.displayHeight - 2, a.label, {
+          fontFamily: "system-ui, sans-serif", fontSize: "8px", color: "#ffe9b0", backgroundColor: "rgba(20,10,10,0.75)", padding: { x: 2, y: 1 },
+        }).setOrigin(0.5, 1).setResolution(4).setDepth(this.debug.depth.overlay - 1);
+        world.push(sign);
+      }
     }
 
     // Player: origin at the bottom of the feet box, so y is the feet whatever the art (the placeholder's feet box
@@ -320,8 +327,9 @@ export class WorldScene extends Phaser.Scene {
     g.lineStyle(1, 0xffe066, 1).strokeRect(b.x + 0.5, b.y + 0.5, b.w - 1, b.h - 1);
     for (const z of this.def.zones ?? []) {
       const inside = this.zones.current.includes(z.id);
-      g.lineStyle(1, z.kind === "exit" ? 0xff6655 : 0x66ccff, inside ? 1 : 0.6).strokeRect(z.x + 0.5, z.y + 0.5, z.w - 1, z.h - 1);
-      if (inside) g.fillStyle(z.kind === "exit" ? 0xff6655 : 0x66ccff, 0.2).fillRect(z.x, z.y, z.w, z.h);
+      const colour = z.kind === "exit" ? 0xff6655 : z.kind === "shop" ? 0xffd27a : 0x66ccff;
+      g.lineStyle(1, colour, inside ? 1 : 0.6).strokeRect(z.x + 0.5, z.y + 0.5, z.w - 1, z.h - 1);
+      if (inside) g.fillStyle(colour, 0.2).fillRect(z.x, z.y, z.w, z.h);
     }
     const body = this.player.body;
     g.lineStyle(1, 0xffffff, 1).strokeRect(body.x, body.y, body.width, body.height);

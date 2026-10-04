@@ -16,6 +16,17 @@
       #where { font-variant-numeric: tabular-nums; color: #f2d36b; min-width: 22em; }
       #event { color: #a99; }
       #stage { position: relative; flex: 1; min-height: 0; touch-action: none; user-select: none; -webkit-user-select: none; }
+      #shop { position: absolute; left: 50%; bottom: 56px; transform: translateX(-50%); z-index: 20; width: min(360px, calc(100% - 24px)); box-sizing: border-box;
+              padding: 8px 12px; background: rgba(18, 10, 10, .9); border: 1px solid #6a4040; border-radius: 8px; color: #f3e8e8; display: grid; grid-template-columns: 1fr auto; gap: 2px 10px; align-items: center; }
+      #shop[hidden] { display: none; }
+      #shop-title { font-weight: 700; color: #ffd27a; }
+      #shop-desc, #shop-why, #shop-result { grid-column: 1; font-size: 13px; }
+      #shop-why { color: #ff9a8a; }
+      #shop-why:empty, #shop-result:empty, #shop-desc:empty { display: none; }
+      #shop-result { color: #b3e0a0; }
+      #shop-buy { grid-column: 2; grid-row: 1 / span 4; font: inherit; font-weight: 700; min-height: 44px; min-width: 72px; padding: 4px 14px; border-radius: 6px;
+                  background: #8a2020; color: #fff; border: 1px solid #b33; cursor: pointer; }
+      #shop-buy:disabled { background: #3a2a2a; border-color: #553333; color: #998; cursor: not-allowed; }
       #err { position: absolute; inset: 0; display: none; place-items: center; color: #f88; padding: 1em; text-align: center; }
     </style>
   </head>
@@ -27,7 +38,16 @@
       <span id="where"></span>
       <span id="event"></span>
     </div>
-    <div id="stage"><div id="err"></div></div>
+    <div id="stage">
+      <div id="err"></div>
+      <div id="shop" role="dialog" aria-live="polite" hidden>
+        <div id="shop-title"></div>
+        <div id="shop-desc"></div>
+        <div id="shop-why"></div>
+        <div id="shop-result"></div>
+        <button id="shop-buy" type="button">Buy</button>
+      </div>
+    </div>
     <script type="module" src="/src/world/dev.ts"></script>
   </body>
 </html>

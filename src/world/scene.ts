@@ -10,9 +10,14 @@ export interface Rect { x: number; y: number; w: number; h: number }
 
 export interface SceneZone extends Rect {
   id: string;
-  /** "exit" leads somewhere (later: a node of the act map); "trigger" is anything else. Default "trigger". */
-  kind?: "exit" | "trigger";
+  /**
+   * "exit" leads somewhere (later: a node of the act map); "shop" sells one engine ware (`item`); "trigger" is
+   * anything else. Default "trigger".
+   */
+  kind?: "exit" | "trigger" | "shop";
   label?: string;
+  /** For `kind: "shop"`: the engine item id it sells (`{cmd:"buy", item}`), e.g. "heal", "blade", "blessing". */
+  item?: string;
   /** Free-form link to an act-map node, for later. Not used by the engine yet. */
   node?: string;
 }
@@ -105,8 +110,9 @@ export function sceneErrors(raw: unknown): string[] {
     const re = rectErrors(z, at);
     e.push(...re);
     if (re.length === 0 && be.length === 0 && !overlaps(z as unknown as Rect, bounds)) e.push(`${at} lies outside bounds, so it can never be entered`);
-    if (z.kind !== undefined && z.kind !== "exit" && z.kind !== "trigger") e.push(`${at}.kind must be "exit" or "trigger"`);
-    for (const k of ["label", "node"]) if (z[k] !== undefined && typeof z[k] !== "string") e.push(`${at}.${k} must be a string`);
+    if (z.kind !== undefined && z.kind !== "exit" && z.kind !== "trigger" && z.kind !== "shop") e.push(`${at}.kind must be "exit", "trigger" or "shop"`);
+    if (z.kind === "shop" && !str(z.item)) e.push(`${at} is a shop, so it needs an item (an engine item id)`);
+    for (const k of ["label", "node", "item"]) if (z[k] !== undefined && typeof z[k] !== "string") e.push(`${at}.${k} must be a string`);
   });
   ids(raw.actors, "actors", (a, at) => {
     if (!fin(a.x) || !fin(a.y)) e.push(`${at} needs finite x and y`);

@@ -5,7 +5,7 @@ import {
   ZoneTracker, actorDepth, artSource, clampToBounds, footY, isUrl, overlayDepth, parseSceneDef, pointIn, sceneErrors,
   zoneChanges, zonesAt, type SceneDef,
 } from "./scene";
-import { overlayCanopies, sceneTiles } from "./scenePlaceholders";
+import { actorShape, overlayCanopies, sceneTiles } from "./scenePlaceholders";
 import { SCENES, sceneById } from "./scenes";
 import { T, isBlockingId } from "./tiles";
 
@@ -18,7 +18,8 @@ const scene = (over: Record<string, unknown> = {}): Record<string, unknown> => (
 });
 
 test("SceneDef: the sample scenes are valid and findable", () => {
-  assert.ok(SCENES.length >= 2);
+  assert.ok(SCENES.length >= 3);
+  assert.equal(SCENES[0].id, "village", "the village is the default scene (act 1 starts there)");
   for (const s of SCENES) assert.deepEqual(sceneErrors(s), [], s.id);
   assert.equal(sceneById("crossroads")?.size.w, 960);
   assert.equal(sceneById("nope"), undefined);
@@ -41,6 +42,10 @@ test("SceneDef: bounds inside size, spawn inside bounds, finite numbers", () => 
   has(scene({ overlay: "" }), /overlay/);
   has(scene({ zones: [{ id: "a", x: 0, y: 0, w: 10, h: 10 }] }), /outside bounds/);
   has(scene({ zones: [{ id: "a", x: 60, y: 110, w: 10, h: 10, kind: "door" }] }), /kind/);
+  // Shop zones (additive): kind "shop" needs an item, the engine item id.
+  assert.deepEqual(sceneErrors(scene({ zones: [{ id: "a", x: 60, y: 110, w: 10, h: 10, kind: "shop", item: "heal" }] })), []);
+  has(scene({ zones: [{ id: "a", x: 60, y: 110, w: 10, h: 10, kind: "shop" }] }), /is a shop, so it needs an item/);
+  has(scene({ zones: [{ id: "a", x: 60, y: 110, w: 10, h: 10, kind: "trigger", item: 3 }] }), /item must be a string/);
   has(scene({ zones: [{ id: "a", x: 60, y: 110, w: 10, h: 10 }, { id: "a", x: 70, y: 110, w: 10, h: 10 }] }), /used twice/);
   has(scene({ actors: [{ id: "x", x: 500, y: 10 }] }), /outside size/);
   has(scene({ actors: [{ id: "x", x: 5 }] }), /finite x and y/);
@@ -129,4 +134,12 @@ test("worldLayout: zoom is an integer >= 1, default 2", () => {
   assert.equal(worldLayout(1280, 800).zoom, 2);
   assert.equal(worldLayout(1280, 800, 3).zoom, 3);
   assert.equal(worldLayout(1280, 800, 0).zoom, 1);
+});
+
+test("placeholder art: actors named stall-… and house-… get a stall and a cottage", () => {
+  assert.equal(actorShape("stall-smith"), "stall");
+  assert.equal(actorShape("house-mill"), "house");
+  assert.equal(actorShape("devil"), "figure");
+  const village = sceneById("village")!;
+  assert.equal(village.actors!.filter((a) => actorShape(a.id) === "stall").length, 3);
 });
