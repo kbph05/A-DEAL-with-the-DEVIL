@@ -1,0 +1,126 @@
+{
+  "format": "ADWD1",
+  "keyId": "ebe9fef38b212bae",
+  "files": {
+    "Tiny RPG Character Asset Pack 01/Arrow01(32x32).png": {
+      "sha256": "e87d9c62230b082dda32e9aca4e822f60816900f45318da297a9f5dc04d78b9a",
+      "bytes": 260
+    },
+    "Tiny RPG Character Asset Pack 01/Orc_Attack01.png": {
+      "sha256": "642bd0df611abf91dda5adf2f6061a2d8decc7997f8277d681af6693b6a0f9a7",
+      "bytes": 2379
+    },
+    "Tiny RPG Character Asset Pack 01/Orc_Attack02.png": {
+      "sha256": "01ffe346a493820a604d92bfc5cd41f94971be6e8b35b354b4c7db013a55309a",
+      "bytes": 2391
+    },
+    "Tiny RPG Character Asset Pack 01/Orc_Death.png": {
+      "sha256": "cf376c07465cd284a838ed0abc977823faa92e0aa4f9db0461e33b11143cc13f",
+      "bytes": 1952
+    },
+    "Tiny RPG Character Asset Pack 01/Orc_Hurt.png": {
+      "sha256": "9870c61b29eb6594b20b184b3332a6be8c3fdceb002fe5fd2b158b9b054d7eef",
+      "bytes": 2103
+    },
+    "Tiny RPG Character Asset Pack 01/Orc_Idle.png": {
+      "sha256": "430b6a97ca4cfa80998d53422f3e942cd50ca906335c350e5615651f35c7aef4",
+      "bytes": 1522
+    },
+    "Tiny RPG Character Asset Pack 01/Orc_Walk.png": {
+      "sha256": "6d892ffd6e8fccea65480f89e29ef145faaa05cc742534717023237093f500d7",
+      "bytes": 2007
+    },
+    "Tiny RPG Character Asset Pack 01/Soldier_Attack01.png": {
+      "sha256": "907f5bd89b18492e7051ff3b1014a687fb8ffa501ac4486a24a1f58d198b4b20",
+      "bytes": 1978
+    },
+    "Tiny RPG Character Asset Pack 01/Soldier_Attack02.png": {
+      "sha256": "f978eb5ffba4d3446a9ffd6a6ac1ac6586c594c74d58ccab95ebd4d24e92ceaa",
+      "bytes": 2358
+    },
+    "Tiny RPG Character Asset Pack 01/Soldier_Attack03.png": {
+      "sha256": "bc6dbffbc74809c6cf1d86184d84485f64a4f9835d5fae307500ec22c3312280",
+      "bytes": 2555
+    },
+    "Tiny RPG Character Asset Pack 01/Soldier_Death.png": {
+      "sha256": "2968064e9692c43f7e4941a0106e5b370471f0e9beaedc5c40631d9daeb4c84e",
+      "bytes": 1673
+    },
+    "Tiny RPG Character Asset Pack 01/Soldier_Hurt.png": {
+      "sha256": "aaa0768cc7da2ce1fed3afd02ef7d8c9b2efeb4bdf797723f51c088bf729f1a6",
+      "bytes": 1840
+    },
+    "Tiny RPG Character Asset Pack 01/Soldier_Idle.png": {
+      "sha256": "572776014e1b348e8386ce587855c53e3ebd84b8fbe9041f680a917a9d3b955a",
+      "bytes": 1452
+    },
+    "Tiny RPG Character Asset Pack 01/Soldier_Walk.png": {
+      "sha256": "47ad61833e22238123b591b11d985e08858bfb5098348adee496fecb41e54954",
+      "bytes": 1860
+    },
+    "Tiny RPG Character Asset Pack 01/attribution.txt": {
+      "sha256": "ec64f84c2b6cef8fdc0dcbdfb0f4b725ca28b215ae66b1235cba5adbed3716e6",
+      "bytes": 71
+    },
+    "Tiny RPG Character Asset Pack 02/Demon_A_Attack01.png": {
+      "sha256": "684b61ffea1580deb927642d3677d7c209b8a6b09415325672f1c3f6b810c059",
+      "bytes": 1964
+    },
+    "Tiny RPG Character Asset Pack 02/Demon_A_Attack02.png": {
+      "sha256": "55606ca23e2600c6dcc857acb96802740ba5444ef4075881f44608e028da1a13",
+      "bytes": 2108
+    },
+    "Tiny RPG Character Asset Pack 02/Demon_A_Death.png": {
+      "sha256": "475d285b758ab4752183d1f5bf95dd47d1004468f859ed00654b6a925b37ecb8",
+      "bytes": 1815
+    },
+    "Tiny RPG Character Asset Pack 02/Demon_A_Hurt.png": {
+      "sha256": "286f32c6bcf0807352123e3e2c3236212df7a3c40f577e2719da59b71959196b",
+      "bytes": 1687
+    },
+    "Tiny RPG Character Asset Pack 02/Demon_A_Idle.png": {
+      "sha256": "f5327b2eeab9e57515999dc01e832c875a8db0cfccd6320d67d1d1f27eddabe1",
+      "bytes": 1322
+    },
+    "Tiny RPG Character Asset Pack 02/Demon_A_Walk.png": {
+      "sha256": "b644160d0546d1dfe19ebd2b81ec87bbb001180b3be4edcb13a62235cfc32cdb",
+      "bytes": 1754
+    },
+    "Tiny RPG Character Asset Pack 02/attribution.txt": {
+      "sha256": "ace217523bb77157921fcfadafe6509ba47d16de2a75952a7cb0b4d176115505",
+      "bytes": 74
+    },
+    "WarriorChAnimation/WarriorChAttack.png": {
+      "sha256": "84a5a9acd1de3303634f3456ebc3c1a2447a2da04f42cc419151c7fa9bb3d5be",
+      "bytes": 15774
+    },
+    "WarriorChAnimation/WarriorChAttack2.png": {
+      "sha256": "146120f6929b738a339c3a0a58a62bb8d6da12a29ecc06c8c10e26223199c1c9",
+      "bytes": 19195
+    },
+    "WarriorChAnimation/WarriorChAttack3.png": {
+      "sha256": "218809368d717b0cb2e30f0331ad6bb8592f4c88240a8d98289cb67b269ac467",
+      "bytes": 15375
+    },
+    "WarriorChAnimation/WarriorChHRun.png": {
+      "sha256": "f0bd24ba74451c3ee2f0b77836cb697bd81daf5a105c3559069f354521cb2317",
+      "bytes": 14999
+    },
+    "WarriorChAnimation/WarriorChHeavy.png": {
+      "sha256": "33a53263ac5bf7107c25541825734784372b630bc8a93d159ba560df4c94ffa4",
+      "bytes": 21115
+    },
+    "WarriorChAnimation/WarriorChIdle.png": {
+      "sha256": "897b1c2d26ceaa654c1d29e7c3e9bd5bf25f567da78979e4ccfe00e15b05a172",
+      "bytes": 10187
+    },
+    "WarriorChAnimation/WarriorChWalk.png": {
+      "sha256": "4e354f4ae7b9c25c8e95af8f87ff39addf7b4f653fcac9573936273d0db57d71",
+      "bytes": 17137
+    },
+    "WarriorChAnimation/attribution.txt": {
+      "sha256": "7a02345284847a56a04ef3d4bed5cf33dd49c8b2e2dee0223687cf670b214bcf",
+      "bytes": 67
+    }
+  }
+}
