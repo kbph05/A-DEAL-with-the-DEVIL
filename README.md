@@ -12,10 +12,10 @@ npm install              # install dependencies (first time, or after package.js
 | Command | What it is for |
 | --- | --- |
 | `npm run dev` | Dev server in **test mode** (`vite --mode test`): game UI plus the test tools (Devil lab with stub/HTTP toggle, autoplay button, F12 console commands). Add `?seed=abc` for a fixed map. |
-| `npm run build:test` | The same test-tools flavour as a static bundle in `dist-test/`. `npm run preview:test` serves it. |
-| `/fight.html` (test builds) | **Fight lab**: the realtime 2D fight on its own (pick act and boss, play, see the `FightResult`). The lab page is not in the final build; the fight itself is (fight nodes play it). See [docs/fight.md](docs/fight.md). |
 | `npm run game` | Dev server (test mode) that opens the **game scene** straight away: `/world.html`, a character walking around a tile map. WASD/arrows or the touch stick. See [docs/world.md](docs/world.md). |
 | `npm run build:game` / `npm run preview:game` | Build the game scene as a static bundle (the same test build as `build:test`, into `dist-test/`), then serve it and open `/world.html`. |
+| `npm run build:test` | The test-mode bundle (game UI plus test tools, and both lab pages) in `dist-test/`. `npm run preview:test` serves it. |
+| `/fight.html` (test builds) | **Fight lab**: the realtime 2D fight on its own (pick act and boss, play, see the `FightResult`). The lab page is not in the final build; the fight itself is (fight nodes play it). See [docs/fight.md](docs/fight.md). |
 | `/world.html` (test builds) | **World lab**: the game scene on its own: a seeded tile map (or a Tiled map with `?map=`), seed box and Regenerate, and the tile under the player. Not in the final build yet; nothing in the game uses it so far. See [docs/world.md](docs/world.md). |
 | `npm run build` | **Final** bundle in `dist/`: game UI only. The lab, autoplay and console are tree-shaken out (`import.meta.env.MODE` check in `src/main.ts`), not hidden. The devil is the HTTP backend at `VITE_DEVIL_URL` (set at build time, e.g. `VITE_DEVIL_URL=https://example.com/deal npm run build`), or the built-in StubDevil if unset. `npm run preview` serves it. |
 | `npm run mock:devil` | Mock backend on `localhost:8787/deal` (StubDevil replies, `?chaos=1` for junk, `?delay=ms`) for testing the HTTP devil without Gemini. Contract: [docs/devil-api.md](docs/devil-api.md). |

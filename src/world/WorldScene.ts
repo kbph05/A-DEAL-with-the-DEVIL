@@ -118,7 +118,12 @@ export class WorldScene extends Phaser.Scene {
 
     // Cameras: the zoomed world camera follows; the UI camera is 1:1 over the whole canvas.
     const cam = this.cameras.main;
-    cam.setZoom(L.zoom).setBounds(0, 0, worldW, worldH).setRoundPixels(true);
+    // A map smaller than the view is centred: widen the bounds evenly around it on that axis.
+    const viewW = L.width / L.zoom;
+    const viewH = L.height / L.zoom;
+    const bx = Math.min(0, (worldW - viewW) / 2);
+    const by = Math.min(0, (worldH - viewH) / 2);
+    cam.setZoom(L.zoom).setBounds(bx, by, Math.max(worldW, viewW), Math.max(worldH, viewH)).setRoundPixels(true);
     cam.startFollow(this.player, true, 0.2, 0.2);
     cam.centerOn(this.player.x, this.player.y);
     this.ui = this.add.graphics().setDepth(10);

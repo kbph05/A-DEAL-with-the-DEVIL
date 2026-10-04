@@ -54,7 +54,7 @@ Shared with the fight: `src/input/dir.ts` (keyboard and stick to a unit directio
 
 - The logical size follows the container's shape: 540 px on the short side, up to 1280 on the long side. Phaser `Scale.FIT` then scales the canvas to the container.
 - The world camera has an integer zoom of 3 and `pixelArt: true`, so the pixels stay crisp. About 11 tiles fit across the short side.
-- The camera follows the player and stays inside the map. A second, unzoomed camera draws the stick and the help line.
+- The camera follows the player and stays inside the map; a map smaller than the view is centred. A second, unzoomed camera draws the stick and the help line.
 
 ## Tiles
 
