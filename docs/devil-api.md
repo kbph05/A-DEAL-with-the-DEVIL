@@ -4,7 +4,7 @@ The contract between the game (`src/game/httpDevil.ts`, `HttpDevil`) and the Gem
 
 ## Request
 
-`POST <url>` (default `http://localhost:8787/deal`), `Content-Type: application/json`. One request per ask: the player talked to the devil at a deal node, **a campfire, or a well** (4 Oct: he also sits at every campfire, where a deal is the third choice beside resting and sharpening, and at about half the wells; same rules everywhere). `context.kind` says which.
+`POST <url>` (default `http://localhost:8787/deal`), `Content-Type: application/json`. One request per ask: the player talked to the devil at a deal node, **a campfire, or a well** (4 Oct: he also sits at every campfire, where a deal is the third choice beside resting and sharpening, and at about half the wells; same rules everywhere). `context.kind` says which. **At a well** (`kind: "well"`) the devil and the blessing are one choice of the two: the first ask locks the blessing, even if the player then refuses. So the devil should try to talk the player out of the blessing ("Holy water? Dull. I can do better…") before making his offer; the StubDevil opens every well offer with such a line (`WELL_ENTICE` in `src/game/devil.ts`).
 
 Body: `{ state, context, playerText }`
 

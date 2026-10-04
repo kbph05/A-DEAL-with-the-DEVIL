@@ -449,6 +449,8 @@ export function chooseCards(o: Pick<Observation, "kind" | "resolved" | "state"> 
   if (o.kind === "well") {
     const w = A.buy.find((b) => b.item === "blessing");
     const base = { key: "blessing", icon: WARE_ICON.blessing, title: "Drink from the well (8g)", effect: WARE_EFFECT.blessing, cmd: { cmd: "buy", item: "blessing" } as Command };
+    if (!o.resolved && o.devilPresent === true && o.asksLeft !== undefined && o.asksLeft < MAX_ASKS) // one choice per well: the devil's
+      return [{ ...base, state: "closed", note: "You chose the devil at this well" }];
     if (o.resolved || !w) return [{ ...base, state: "chosen", note: null }];
     return [{ ...base, state: w.affordable ? "available" : "short", note: buyLabel(w, o.state.gold).reason }];
   }

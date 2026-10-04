@@ -7,7 +7,7 @@ import { availableActions, blurbOf, chooseCards, fireChoice, type FireChoice, de
 import { diffDeal } from "./dealDiff";
 import { lastStrike, STRIKE_HEAD } from "./logic";
 import { sanitizeDeal } from "../game/deal";
-import { initialState } from "../game/gameState";
+import { MAX_ASKS, initialState } from "../game/gameState";
 import { restoreGame } from "../game/run";
 
 test("actions follow the observation", () => {
@@ -367,9 +367,8 @@ test("real engine: one pick resolves campfire and well; the village keeps sellin
         g.buy("blessing"); const after = g.view();
         assert.ok(after.resolved && !after.actions.some((c) => c.cmd === "buy"));
         assert.equal(chooseCards(after, availableActions(after, false, after.actions))[0].state, "chosen");
-        assert.equal(after.actions.some((c) => c.cmd === "deal"), after.devilPresent, "the blessing leaves the devil's deal open");
-        assert.equal(availableActions(after, false, after.actions).ask !== null, after.devilPresent);
-        if (after.devilPresent) assert.equal(devilPhase(after, null), "ask", "a drunk well is not a settled deal");
+        assert.ok(!after.actions.some((c) => c.cmd === "deal"), "the blessing locks the devil's deal (one choice per well)");
+        assert.deepEqual(panelKinds(after), ["choose"]);
         seen.add("well");
       }
       if (v.enemy) g.fight(); else if (v.exits.length) g.go(1); else break;
@@ -469,4 +468,13 @@ test("real engine: a deal at the campfire shows on the choice cards and the devi
   assert.deepEqual(chooseCards(after, availableActions(after, false, after.actions), fireChoice(log2)).map((c) => c.state), ["closed", "closed", "chosen"]);
   assert.deepEqual(panelKinds(after), ["choose"]);
   assert.ok(!after.actions.some((c) => ["rest", "train", "deal"].includes(c.cmd)), "refusing still spent the fire");
+});
+
+test("chooseCards: at a well, asking the devil closes the blessing, with the reason", () => {
+  const A = { rest: false, buy: [{ item: "blessing" as const, cost: 8, affordable: true }] };
+  const o = { kind: "well" as const, resolved: false, state: { hp: 30, maxHp: 30, gold: 20, attack: 3, soul: 1 as const, act: 0, nodeId: "w", log: [] }, devilPresent: true };
+  assert.equal(chooseCards({ ...o, asksLeft: MAX_ASKS }, A)[0].state, "available");
+  const [c] = chooseCards({ ...o, asksLeft: MAX_ASKS - 1 }, { ...A, buy: [] });
+  assert.equal(c.state, "closed");
+  assert.match(c.note!, /chose the devil/);
 });

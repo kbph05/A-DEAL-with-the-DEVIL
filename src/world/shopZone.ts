@@ -3,7 +3,7 @@
  * `shopPrompt(zone, view)` says what the prompt shows and whether Buy is enabled, from the engine's own legal
  * actions. Tested in node (shopZone.test.ts). The world lab (dev.ts) renders it; docs/world.md, "Shop zones".
  */
-import { WARES, type Command } from "../game/gameState";
+import { MAX_ASKS, ONE_CHOICE, WARES, type Command } from "../game/gameState";
 import type { SceneZone } from "./scene";
 
 /** What a shop prompt shows. `command` is what to send to the engine when Buy is pressed (only when `enabled`). */
@@ -26,6 +26,9 @@ export interface ShopView {
   resolved?: boolean;
   ending?: string | null;
   pending?: boolean;
+  /** At a well: the devil sits there, and the asks left (fewer than MAX_ASKS once he was asked: the blessing is locked). */
+  devilPresent?: boolean;
+  asksLeft?: number;
 }
 
 // What each ware does and where it is sold, as the engine's `buy` (state-machine.ts) and `legalActions` (actions.ts)
@@ -57,10 +60,13 @@ function whyNot(item: string, cost: number, soldAt: string, v: ShopView): string
   if (v.kind !== "village" && v.kind !== "well") return `Not at a shop (this is a ${v.kind} node)`;
   if (v.kind !== soldAt) return `Only sold at a ${soldAt}, not in the ${v.kind}`;
   if (item === "blessing" && v.resolved) return "The well has given what it will give";
+  if (item === "blessing" && v.devilPresent && v.asksLeft !== undefined && v.asksLeft < MAX_ASKS) return capital(ONE_CHOICE.well.devil);
   const gold = typeof v.state?.gold === "number" ? v.state.gold : 0;
   if (gold < cost) return `Not enough gold: need ${cost}g, you have ${gold}g`;
   return "Not available right now";
 }
+
+const capital = (t: string): string => t.charAt(0).toUpperCase() + t.slice(1);
 
 /** The text for an exit zone while the map is not wired yet. */
 export const exitPrompt = (zone: SceneZone): string => `${zone.label ?? zone.id} (map: coming soon)`;

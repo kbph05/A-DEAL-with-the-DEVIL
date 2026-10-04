@@ -360,6 +360,19 @@ const JAILBREAK_STRIKE_LINES: readonly string[] = [
 
 const FINE_PRINT = /fine print|loophole|clause|read the contract|contract/i;
 
+/**
+ * At a well the devil and the blessing are one choice of the two (ONE_CHOICE in gameState.ts), so his pitch opens by
+ * talking the player out of the blessing. Picked on its own seeded stream, so the offer's dice don't move.
+ */
+export const WELL_ENTICE: readonly string[] = [
+  "Holy water? Dull. I can do better, and I won't make you drink it.",
+  "Eight gold for a damp blessing? Put the coin away. My gifts come with interest.",
+  "That well gives you a sip of luck. I'm offering the whole bottle.",
+  "Leave the bucket, friend. Saints are stingy; I am generous.",
+  "Wishing into a hole in the ground? Wish at me instead. I answer.",
+];
+const wellEntice = (c: DevilContext): string => pick(mulberry32(hashSeed(`well-entice:${c.seed}:${c.askIndex}`)), WELL_ENTICE);
+
 /** Canned bad-faith offers, deterministic in (seed, ask sequence). Stands in until the Gemini devil is plugged in. */
 export class StubDevil implements Devil {
   /**
@@ -389,7 +402,8 @@ export class StubDevil implements Devil {
       delete deal.curse;
       deal.dialogue = `You read the fine print aloud. He winces. "...Struck. Hateful habit, reading." ${deal.dialogue}`;
     }
-    return { ...deal, dialogue: deal.dialogue + taunt(context) };
+    const opener = context.kind === "well" ? `${wellEntice(context)} ` : "";
+    return { ...deal, dialogue: opener + deal.dialogue + taunt(context) };
   }
 
   /**

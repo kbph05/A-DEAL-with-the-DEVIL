@@ -5,7 +5,7 @@
  * goes through the one shared `Session`; what is on screen is derived from `flow(view, local)` (flow.ts) on each render.
  */
 import "./play.css";
-import { HttpDevil, describe, execute, setDevil, type Command, type GameEvent, type View } from "../game";
+import { HttpDevil, ONE_CHOICE, describe, execute, setDevil, type Command, type GameEvent, type View } from "../game";
 import { createSession } from "../game/session";
 import { runForestFight } from "../fight";
 import { mountHud } from "../hud/hud";
@@ -244,6 +244,12 @@ function renderPanel(v: View, f: Flow): void {
     buy.disabled = !p.enabled;
     list.append(buy);
     if (f.prompts.includes("deal")) list.append(button("Deal", () => patch(OPEN_DEVIL), "", "Talk to the devil at the well"));
+    else if (v.devilPresent) { // one choice per well: say why the devil is closed
+      const why = v.resolved ? ONE_CHOICE.well.spent : v.questionsLeft <= 0 ? "the devil has heard enough from you this run" : "the devil has gone";
+      const deal = button("Deal", () => undefined, "", why.charAt(0).toUpperCase() + why.slice(1));
+      deal.disabled = true;
+      list.append(deal);
+    }
     list.append(button("Move on", () => patch({ movedOn: true }), "quiet", "Choose the next stop on the map"));
   } else {
     title.append(icon("fight"), "Back on your feet");

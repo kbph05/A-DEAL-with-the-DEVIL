@@ -5,9 +5,9 @@
  */
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import type { Deal, Devil } from "./devil";
+import { StubDevil, WELL_ENTICE, type Deal, type Devil } from "./devil";
 import {
-  MAX_ASKS, MAX_DEVIL_QUERIES, WELL_DEVIL_CHANCE, devilAtWell, initialState, type Command, type GameState, type StepResult,
+  MAX_ASKS, MAX_DEVIL_QUERIES, ONE_CHOICE, WELL_DEVIL_CHANCE, devilAtWell, initialState, type Command, type GameState, type StepResult,
 } from "./gameState";
 import { restoreGame } from "./run";
 import { step } from "./state-machine";
@@ -123,26 +123,51 @@ test("well devil: entering a well announces him exactly when the dice say so, an
   assert.ok(seen > 100 && absent > 100, `${seen} with, ${absent} without`);
 });
 
-test("well devil: the blessing and the deal are independent, in either order", () => {
+test("well: one choice of blessing, deal or skip; the first choice locks the other, in either order", () => {
   const rich = (s: GameState) => { s.player.gold = 50; return s; };
-  // blessing first, then the deal
-  let s = ok(rich(atWell(true)), { cmd: "buy", item: "blessing" });
-  assert.ok(s.resolved && has(step(s, { cmd: "look" }), "deal"));
-  s = ok(ask(s), { cmd: "accept" });
-  assert.equal(reason(step(s, { cmd: "deal" })), "the devil has already gone");
+  // blessing first: the deal is refused, with a player-facing reason, and the devil is shut out of the view
+  const s = ok(rich(atWell(true)), { cmd: "buy", item: "blessing" });
+  assert.ok(s.resolved && !has(step(s, { cmd: "look" }), "deal"));
+  assert.equal(reason(step(s, { cmd: "deal" })), ONE_CHOICE.well.spent);
   assert.equal(observation(s).asksLeft, 0);
-  // deal first (refused), then the blessing
-  let t = ok(ask(rich(atWell(true, "well-2"))), { cmd: "refuse" });
-  assert.ok(t.devilGone && !t.resolved && has(step(t, { cmd: "look" }), "buy"));
-  t = ok(t, { cmd: "buy", item: "blessing" });
-  assert.equal(reason(step(t, { cmd: "buy", item: "blessing" })), "the well has given what it will give");
-  // no devil: the well is only a well
+  assert.equal(reason(step(s, { cmd: "buy", item: "blessing" })), "the well has given what it will give");
+  assert.ok(has(step(s, { cmd: "look" }), "go"), "moving on is still open");
+  // the first ask locks the blessing, before any answer is decided (an offer standing, or a strike)
+  const asked = ask(rich(atWell(true, "well-2")));
+  assert.ok(asked.offer && !has(step(asked, { cmd: "look" }), "buy"));
+  assert.equal(reason(step(asked, { cmd: "buy", item: "blessing" })), ONE_CHOICE.well.devil);
+  const struck = ask(rich(atWell(true, "well-2")), STRIKE);
+  assert.equal(reason(step(struck, { cmd: "buy", item: "blessing" })), ONE_CHOICE.well.devil);
+  // refusing (or accepting) the deal still locks it
+  for (const end of ["refuse", "accept"] as const) {
+    const t = ok(asked, { cmd: end });
+    assert.ok(t.devilGone && !t.resolved);
+    assert.equal(reason(step(t, { cmd: "buy", item: "blessing" })), ONE_CHOICE.well.devil);
+    assert.equal(reason(step(t, { cmd: "deal" })), "the devil has already gone");
+    assert.ok(has(step(t, { cmd: "look" }), "go"));
+    assert.equal(ok(t, { cmd: "go", n: 1 }).devilGone, undefined, "leaving resets the devil's flag");
+  }
+  // skipping is just leaving: nothing taken, nothing locked behind you
+  assert.ok(step(rich(atWell(true)), { cmd: "go", n: 1 }).ok);
+  // no devil: the well is only a well (blessing or skip)
   const u = rich(atWell(false));
   assert.equal(reason(step(u, { cmd: "deal" })), "the devil does not sit here");
+  assert.deepEqual(step(u, { cmd: "look" }).actions.map((c) => c.cmd).filter((c) => c !== "go"), ["buy"]);
   assert.ok(step(u, { cmd: "buy", item: "blessing" }).ok);
   assert.equal(step(atWell(true), { cmd: "deal" }).awaiting?.devil?.context.kind, "well");
-  // leaving resets the devil's flag
-  assert.equal(ok(t, { cmd: "go", n: 1 }).devilGone, undefined);
+});
+
+test("well: the stub devil opens by talking the player out of the blessing, deterministic per seed", async () => {
+  const pending = (seed: string) => step(atWell(true, seed), { cmd: "deal" }).state.pending!;
+  for (const seed of ["well", "well-2", "w3"]) {
+    const req = pending(seed);
+    const a = await new StubDevil().offer(req.state, req.context), b = await new StubDevil().offer(req.state, req.context);
+    assert.equal(a.dialogue, b.dialogue);
+    assert.ok(WELL_ENTICE.some((l) => a.dialogue.startsWith(l)), a.dialogue);
+  }
+  const fire = ok(atFire(), { cmd: "deal" }).pending!;
+  const f = await new StubDevil().offer(fire.state, fire.context);
+  assert.ok(!WELL_ENTICE.some((l) => f.dialogue.includes(l)), "only at a well");
 });
 
 test("the run-wide question cap counts asks at deal nodes, campfires and wells alike", () => {

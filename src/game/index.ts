@@ -5,7 +5,7 @@ export { HttpDevil, DEFAULT_DEVIL_URL, type DevilRequest, type Exchange } from "
 export { devilFor, setDevil, StubDevil, isGibberish, type Curse, type CurseTrigger, type Deal, type Devil, type DevilContext } from "./devil";
 export { describe, isSyncMarker, type GameEvent, type Result, type Ending } from "./events";
 export { createGame, restoreGame, Game, type MapView, type MapViewNode, type Observation, type View } from "./run";
-export { initialState, isGameState, devilContext, MAX_ASKS, MAX_CURSES, MAX_DEVIL_QUERIES, questionsLeft, WARES, type GameState, type StepResult, type Enemy } from "./gameState";
+export { initialState, isGameState, devilContext, MAX_ASKS, MAX_CURSES, MAX_DEVIL_QUERIES, questionsLeft, WARES, ONE_CHOICE, type GameState, type StepResult, type Enemy } from "./gameState";
 export { step, rejection } from "./state-machine";
 export { legalActions } from "./actions";
 export { view, observation, mapView } from "./view";

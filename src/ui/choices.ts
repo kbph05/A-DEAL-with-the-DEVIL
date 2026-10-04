@@ -96,13 +96,13 @@ export function mountChoices(el: HTMLElement, send: (c: Command) => void, fight?
 
   function choosePanel(o: View, A: Actions, fire: FireChoice): HTMLElement {
     const cards = chooseCards(o, A, fire);
-    const done = o.resolved || (o.kind === "campfire" && o.devilPresent && o.asksLeft < MAX_ASKS); // at a fire, the first ask is the choice
+    const done = o.resolved || ((o.kind === "campfire" || o.kind === "well") && o.devilPresent && o.asksLeft < MAX_ASKS); // the first ask is the choice
     const card = (c: ChooseCard) => {
       const b = h("button", { class: `choose-card ${c.state}` },
         h("span", { class: "radio", aria: { hidden: "true" }, text: c.state === "chosen" ? "●" : "○" }),
         h("span", { class: "choose-ico", text: c.icon, aria: { hidden: "true" } }),
         h("span", { class: "choose-text" }, h("b", { text: c.title }), h("span", { text: c.effect }),
-          h("span", { class: "choose-note", text: c.state === "chosen" ? "✓ Chosen" : c.state === "closed" ? "Closed" : c.note ?? "" })));
+          h("span", { class: "choose-note", text: c.state === "chosen" ? "✓ Chosen" : c.state === "closed" ? c.note ?? "Closed" : c.note ?? "" })));
       b.type = "button";
       b.disabled = A.locked || c.state !== "available";
       b.setAttribute("aria-pressed", String(c.state === "chosen"));

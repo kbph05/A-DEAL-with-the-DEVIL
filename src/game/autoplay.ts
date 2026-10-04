@@ -31,7 +31,7 @@ export async function execute(g: Game, c: Command): Promise<Result> {
 /**
  * Default bot: fights; at a fire trains when HP is at least 70% of max (and attack is below its cap), else rests, but takes
  * the devil's deal instead when neither would do anything (attack at its cap and HP at least 90%); spends gold on healing
- * (when hurt) or blades, drinks from wells and then hears out the devil if he is sitting there; alternates refusing and
+ * (when hurt) or blades, at a well hears out the devil if he is sitting there and will listen, else drinks the blessing (one or the other); alternates refusing and
  * accepting deals (refuse first) wherever they are; and otherwise takes the first exit. It never sends text, so the
  * StubDevil stays deterministic, and it only asks while the engine would listen (`asksLeft`, `questionsLeft`).
  */
@@ -52,8 +52,9 @@ export const botPolicy: Policy = (o) => {
       if (gold >= 15) return { cmd: "buy", item: "blade" };
       break;
     case "well":
-      if (!o.resolved && gold >= 8) return { cmd: "buy", item: "blessing" };
+      // One choice per well: the devil if he sits there and will listen, else the blessing (never both: ONE_CHOICE).
       if (canAsk) return { cmd: "deal" };
+      if (!o.resolved && (!o.devilPresent || o.asksLeft === MAX_ASKS) && gold >= 8) return { cmd: "buy", item: "blessing" };
       break;
     case "deal":
       if (canAsk) return { cmd: "deal" };

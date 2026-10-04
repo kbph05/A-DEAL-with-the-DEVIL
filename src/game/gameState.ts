@@ -36,8 +36,24 @@ export function devilPresent(s: GameState): boolean {
   const n = currentNode(s);
   return n.kind === "deal" || n.kind === "campfire" || (n.kind === "well" && devilAtWell(s.seed, n.id));
 }
-/** Has the devil's business at this node ended (deal accepted or refused, or, at a campfire, the fire spent on rest or train)? */
-export const devilDone = (s: GameState): boolean => (currentNode(s).kind === "well" ? s.devilGone === true : s.resolved);
+/**
+ * One choice per node (kbph, 4 Oct). At a campfire (rest, train or deal) and at a well (the blessing, a deal when the devil
+ * is there, or skip by moving on) the first choice locks the others: `rest`, `train` or the blessing set `resolved` with no
+ * ask, which shuts the devil out (`spent`); the first `deal` ask is the devil's, whatever follows (haggles, a strike,
+ * accept, refuse, walking away), which shuts the rest (`devil`). Player-facing rejection reasons, by node kind.
+ */
+export const ONE_CHOICE = {
+  campfire: { spent: "the embers are spent", devil: "you chose the devil at this fire" },
+  well: { spent: "you took the well's blessing; the devil has nothing for you here", devil: "you chose the devil at this well" },
+} as const;
+/** The lock reasons for the player's node, or null where the devil is not one choice among others. */
+export const oneChoice = (s: GameState): (typeof ONE_CHOICE)[keyof typeof ONE_CHOICE] | null =>
+  ONE_CHOICE[currentNode(s).kind as keyof typeof ONE_CHOICE] ?? null;
+/**
+ * Has the devil's business at this node ended (deal accepted or refused, or, at a campfire or well, the node's one choice
+ * spent on something else: rest, train, the blessing)?
+ */
+export const devilDone = (s: GameState): boolean => (currentNode(s).kind === "well" ? s.devilGone === true || s.resolved : s.resolved);
 /** Attack gained by training at a campfire (the alternative to resting there). */
 export const TRAIN_ATTACK = 1;
 export const WARES = { heal: { cost: 10 }, blade: { cost: 15 }, blessing: { cost: 8 } } as const;
@@ -54,7 +70,8 @@ export interface Enemy extends EnemyView {
 /**
  * Every input the engine accepts. `devil_reply` answers a pending devil request (see StepResult.awaiting).
  * At a campfire, `rest` (heal), `train` (+1 attack) and `deal` are alternatives: the first of them spends the fire (the
- * first `deal` ask counts, whatever follows: haggling, accepting, refusing, a strike or walking away).
+ * first `deal` ask counts, whatever follows: haggling, accepting, refusing, a strike or walking away). At a well the same
+ * goes for `buy` blessing and `deal` (when the devil is there): see ONE_CHOICE.
  * `fight` is one round; `fight` with `realtime: true` instead asks the client to play a realtime fight (StepResult.awaiting
  * `fight`), answered by `fight_result` (untrusted; sanitized, see fightResult.ts).
  */
@@ -79,11 +96,11 @@ export interface GameState {
   player: PlayerState;
   curses: Curse[];
   enemy: Enemy | null;
-  /** The current node's one-shot action is used up (campfire rested, trained at or dealt at, well drunk, enemy slain, deal decided). */
+  /** The current node's one-shot action is used up (campfire rested, trained at or dealt at, well's blessing taken, enemy slain, deal decided). */
   resolved: boolean;
   /**
-   * A well's deal is decided (accepted or refused) and the devil has left it. Wells keep `resolved` for the blessing, so the
-   * two stay independent. Reset on every move; absent elsewhere and in older saves.
+   * A well's deal is decided (accepted or refused) and the devil has left it. Wells keep `resolved` for the blessing (which
+   * the first ask locks: see ONE_CHOICE). Reset on every move; absent elsewhere and in older saves.
    */
   devilGone?: boolean;
   offer: Deal | null;

@@ -79,3 +79,10 @@ test("shopPrompt: disabled with a reason (gold, wrong node, spent well, not a sh
   const odd = shopPrompt({ id: "x", x: 0, y: 0, w: 1, h: 1, kind: "shop", item: "potion", label: "Odd" }, view(s));
   assert.deepEqual([odd.enabled, odd.price, odd.reason], [false, null, "Nothing for sale here"]);
 });
+
+test("shopPrompt: a well's blessing is locked once the devil was asked there (one choice per well)", () => {
+  const z = { id: "well", kind: "shop" as const, item: "blessing", label: "Well", x: 0, y: 0, w: 1, h: 1 };
+  const p = shopPrompt(z, { kind: "well", state: { gold: 20 }, actions: [], resolved: false, devilPresent: true, asksLeft: 2 });
+  assert.equal(p.enabled, false);
+  assert.equal(p.reason, "You chose the devil at this well");
+});
