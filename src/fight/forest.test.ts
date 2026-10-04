@@ -2,7 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { sanitizeFightResult, type FightRequest } from "../game/fightResult";
 import { sceneById } from "../world/scenes";
-import { pointIn } from "../world/scene";
+import { bandLayout, pointIn } from "../world/scene";
 import { encounterFor, type ForestRequest } from "./encounters";
 import { BAND_HEAD, CANOPY_REACH, UNITS_PER_PX, VIEW_SHORT, VIEW_SHORT_PORTRAIT, footPx, forestLayout, forestWorld, orderedSpawns, packSizes, pathBand, spawnSlots } from "./forest";
 import { overlayCanopies } from "../world/scenePlaceholders";
@@ -200,4 +200,17 @@ test("skeleton archers keep to the path band: spawned in it, and backing off nev
   }
   assert.ok(archers >= 10, `enough archers to mean something (${archers})`);
   assert.ok(steps > 10_000);
+});
+
+test("the forest path lines up with the designer's band (assets/forest.png): bounds on the dirt, the archers' band inside it", () => {
+  // Measured rows of the 256×256 band: the dirt path runs from about row 144 to row 192 (its core 150 to 186).
+  const L = bandLayout({ w: 256, h: 256 }, forest.size);
+  assert.equal(L.scale, forest.size.h / 256, "scaled to fill the scene height");
+  assert.ok(L.copies * 256 * L.scale >= forest.size.w, "the copies cover the scene's width");
+  const dirt = { top: 144 * L.scale, bottom: 192 * L.scale };
+  const B = forest.bounds, band = pathBand(forest);
+  assert.ok(Math.abs(B.y + B.h / 2 - (dirt.top + dirt.bottom) / 2) <= 4, "the bounds are centred on the dirt path");
+  assert.ok(B.y >= dirt.top - 8 && B.y + B.h <= dirt.bottom + 8, "the bounds keep to the dirt path");
+  assert.ok(band.y >= dirt.top && band.y + band.h <= dirt.bottom, "archers keep to the dirt");
+  assert.ok(forest.spawn.y >= dirt.top && forest.spawn.y <= dirt.bottom, "you start on the dirt");
 });

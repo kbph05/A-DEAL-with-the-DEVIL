@@ -78,7 +78,7 @@ How to read it:
 - **Play flow** (`src/play/flow.ts`): a pure function, `flow(view, local)`. It decides which screen and which prompts to show, and when the map is open or forced. `src/play/play.ts` draws the result. See [play.md](play.md).
 - **Scenes**: village and forest are JSON files (`src/world/scenes/`) drawn by `src/world/`. The map is `src/mapscene/` ([mapscene.md](mapscene.md)). The HUD is `src/hud/` ([hud.md](hud.md)). The fight is `src/fight/` ([fight.md](fight.md)); it reports back a result that the engine clamps (`sanitizeFightResult`).
 - **Devil**: the engine asks, a backend answers. `StubDevil` (`src/game/devil.ts`) is canned and offline. `HttpDevil` (`src/game/httpDevil.ts`) calls the backend described in [devil-api.md](devil-api.md). Every answer goes through `sanitizeDeal` before it touches the run.
-- **Art**: placeholders are drawn in code. Private art in the gitignored `public/assets/private/` replaces them automatically. See [assets.md](assets.md) and [world.md](world.md).
+- **Art**: the designer's art is in `assets/` at the repo root, imported through Vite: the devil's poses (`src/play/devilArt.ts`, [play.md](play.md)) and the forest band (`src/world/bandArt.ts`, [world.md](world.md)). Everything else is placeholders drawn in code. Private art in the gitignored `public/assets/private/` replaces them automatically. See [assets.md](assets.md) and [world.md](world.md).
 - **Map generator** (`src/map/`): makes each act from the seed. See `src/map/README.md`.
 - **Dead code**: `src/scenes/MapScene.ts` is an old Phaser map. Nothing imports it.
 
@@ -110,7 +110,7 @@ Names in backticks are constants or functions you can search for. "Inline" means
 | 20 | Gemini devil wording and offers | Your backend, not this repo. Seed prompt: `devil_prompt.txt`. Contract: [devil-api.md](devil-api.md). See section 5 |
 | 21 | Village and forest layout (stalls, exits, bounds, spawns) | `src/world/scenes/village.json`, `src/world/scenes/forest.json`. Shape: `SceneDef` in `src/world/scene.ts`; [world.md](world.md) |
 | 22 | Which scenes exist | `SCENES` in `src/world/scenes/index.ts` |
-| 23 | Replace art (backgrounds, overlays, player, map icons) | Drop files in the gitignored `public/assets/private/`: `scenes/<id>/background.png`, `player-idle.png`, `player-walk.png`, `map/<kind>.png`. Sheet spec: `PRIVATE_PLAYER` in `src/world/assets.ts`. See [assets.md](assets.md) |
+| 23 | Replace art (backgrounds, overlays, player, map icons). The team's own art: the PNGs in `assets/` (devil poses, forest band; same names) | Drop files in the gitignored `public/assets/private/`: `scenes/<id>/background.png`, `player-idle.png`, `player-walk.png`, `map/<kind>.png`. Sheet spec: `PRIVATE_PLAYER` in `src/world/assets.ts`. See [assets.md](assets.md) |
 | 24 | Share licensed art with the team | Encrypted pipeline: `npm run assets:encrypt`, key `ASSET_KEY` in `.env`. Code: `tools/assets.ts`, `tools/vite-plugin-encrypted-assets.ts` |
 | 25 | HUD fields and layout | `hudModel` and `HudModel` in `src/hud/model.ts`; drawing in `src/hud/hud.ts`; looks in `src/hud/hud.css` |
 | 26 | Map icons (pixel art) and legend words | `ICONS` in `src/mapscene/icons.ts`; `LEGEND` in `src/mapscene/MapScene.ts` |

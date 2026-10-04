@@ -60,7 +60,8 @@ export const BAND_HEAD = 12;
 /**
  * The path band: the readable middle of the path, the bounds less the strips under the canopy rows (and, at the top,
  * room for an archer's head). Skeleton archers keep to it, so one that backs off from you stays on the path instead of
- * standing in the tree line. Bounds too short for a band give the bounds. World pixels.
+ * standing in the tree line. On the designer's forest band (src/world/bandArt.ts) that is the dirt path's core
+ * (forest.test.ts checks it). Bounds too short for a band give the bounds. World pixels.
  */
 export function pathBand(def: SceneDef): Rect {
   const b = def.bounds;

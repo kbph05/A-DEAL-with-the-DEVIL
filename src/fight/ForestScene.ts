@@ -2,7 +2,8 @@ import Phaser from "phaser";
 import { FloatingStick } from "../input/stick";
 import { privateFiles, privateUrl } from "../world/assets";
 import { facingOf, type Facing } from "../world/logic";
-import { BG_DEPTH, actorDepth, artSource, isUrl, overlayDepth, type SceneDef } from "../world/scene";
+import { addBand, bundledKey, preloadBand } from "../world/bandArt";
+import { BG_DEPTH, actorDepth, artSource, isUrl, overlayDepth, privateSceneFile, type SceneDef } from "../world/scene";
 import { backgroundPlaceholder, overlayPlaceholder } from "../world/scenePlaceholders";
 import { HERO_COLS, HERO_ROWS, PLACEHOLDER_HERO, ensurePlaceholderTextures } from "../world/textures";
 import { COL, bar, button, inCircle, lerpColor } from "./draw";
@@ -23,7 +24,8 @@ export interface ForestView {
   scroll: Vec;
   /** Current depths: the player, each enemy (in `sim.enemies` order), the overlay. */
   depth: { player: number; enemies: number[]; overlay: number };
-  art: { background: "file" | "key" | "placeholder"; overlay: "file" | "key" | "placeholder" | "none" };
+  /** "bundled": the team's band (src/world/bandArt.ts), which also drops the placeholder canopy (overlay "none"). */
+  art: { background: "file" | "bundled" | "key" | "placeholder"; overlay: "file" | "key" | "placeholder" | "none" };
 }
 
 export interface ForestSceneConfig {
@@ -101,6 +103,7 @@ export class ForestScene extends Phaser.Scene {
       const src = artSource(privateFiles(), def.id, name, value, privateUrl);
       if (src && src.kind !== "key") this.load.image(this.partKey(name), src.url);
     }
+    if (!privateSceneFile(privateFiles(), def.id, "background")) preloadBand(this, def);
   }
 
   private resolve(name: string, value: string | undefined, draw: (key: string) => void): { key: string; art: "file" | "key" | "placeholder" } {
@@ -124,9 +127,16 @@ export class ForestScene extends Phaser.Scene {
     const OV = this.view.depth.overlay;
     const world: Phaser.GameObjects.GameObject[] = [];
 
-    const bg = this.resolve("background", def.background, (k) => backgroundPlaceholder(this, k, def));
-    this.view.art.background = bg.art;
-    world.push(this.add.image(0, 0, bg.key).setOrigin(0, 0).setDisplaySize(def.size.w, def.size.h).setDepth(BG_DEPTH));
+    // A private file or the def's art, stretched to the scene; else the bundled band, which brings its own trees (no canopy).
+    const band = !privateSceneFile(privateFiles(), def.id, "background") && this.textures.exists(bundledKey(def.id)) && !this.failed.has(bundledKey(def.id));
+    if (band) {
+      this.view.art.background = "bundled";
+      world.push(addBand(this, def, BG_DEPTH));
+    } else {
+      const bg = this.resolve("background", def.background, (k) => backgroundPlaceholder(this, k, def));
+      this.view.art.background = bg.art;
+      world.push(this.add.image(0, 0, bg.key).setOrigin(0, 0).setDisplaySize(def.size.w, def.size.h).setDepth(BG_DEPTH));
+    }
     this.ground = this.add.graphics().setDepth(BG_DEPTH + 1);
     world.push(this.ground);
 
@@ -146,7 +156,8 @@ export class ForestScene extends Phaser.Scene {
     world.push(this.player);
     this.fxg = this.add.graphics().setDepth(OV - 1);
     world.push(this.fxg);
-    if (def.overlay) {
+    if (band) this.view.art.overlay = "none";
+    else if (def.overlay) {
       const ov = this.resolve("overlay", def.overlay, (k) => overlayPlaceholder(this, k, def));
       this.view.art.overlay = ov.art;
       world.push(this.add.image(0, 0, ov.key).setOrigin(0, 0).setDisplaySize(def.size.w, def.size.h).setDepth(OV));

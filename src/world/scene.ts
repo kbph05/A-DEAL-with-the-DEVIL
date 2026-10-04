@@ -229,3 +229,15 @@ export function artSource(files: readonly string[], sceneId: string, name: strin
   if (!value) return null;
   return isUrl(value) ? { kind: "url", url: value } : { kind: "key", key: value };
 }
+
+/**
+ * A band background (the designer's 256×256 forest, src/world/bandArt.ts) laid along a scene: scaled to fill the
+ * scene's height (nearest-neighbour), then repeated along x, every other copy mirrored so each join meets itself
+ * (the band's own left and right edges don't match). `copies` is how many source-width copies cover `size.w` at that
+ * scale; `width` is their total width in source pixels.
+ */
+export function bandLayout(img: { w: number; h: number }, size: { w: number; h: number }): { scale: number; copies: number; width: number } {
+  const scale = size.h / img.h;
+  const copies = Math.max(1, Math.ceil(size.w / (img.w * scale) - 1e-9));
+  return { scale, copies, width: copies * img.w };
+}

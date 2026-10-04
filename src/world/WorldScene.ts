@@ -4,14 +4,18 @@ import { FloatingStick } from "../input/stick";
 import { PRIVATE_PLAYER, privateFiles, privateUrl } from "./assets";
 import { FEET, WALK, facingOf, stepVelocity, type Facing, type WorldLayout } from "./logic";
 import {
-  BG_DEPTH, ZoneTracker, actorDepth, artSource, clampToBounds, footY, isUrl, overlayDepth,
+  BG_DEPTH, ZoneTracker, actorDepth, artSource, clampToBounds, footY, isUrl, overlayDepth, privateSceneFile,
   type Rect, type SceneActor, type SceneDef, type SceneZone,
 } from "./scene";
+import { addBand, bundledKey, preloadBand } from "./bandArt";
 import { actorPlaceholder, backgroundPlaceholder, overlayPlaceholder } from "./scenePlaceholders";
 import { HERO_COLS, HERO_ROWS, HERO_SIZE, PLACEHOLDER_HERO, ensurePlaceholderTextures } from "./textures";
 
-/** Where a texture came from: a private file, a URL in the def, a texture key in the def, or a generated placeholder. */
-export type Art = "private" | "url" | "key" | "placeholder";
+/**
+ * Where a texture came from: a private file, the team's bundled band (bandArt.ts; backgrounds only), a URL in the def,
+ * a texture key in the def, or a generated placeholder.
+ */
+export type Art = "private" | "bundled" | "url" | "key" | "placeholder";
 
 /** Live, read-only view of the scene for dev pages and smoke tests. */
 export interface WorldDebug {
@@ -113,6 +117,7 @@ export class WorldScene extends Phaser.Scene {
       const src = artSource(files, this.def.id, name, value, privateUrl);
       if (src && src.kind !== "key") this.load.image(this.partKey(name), src.url);
     }
+    if (!privateSceneFile(files, this.def.id, "background")) preloadBand(this, this.def);
   }
 
   private parts(): [string, string | undefined][] {
@@ -149,10 +154,17 @@ export class WorldScene extends Phaser.Scene {
     const art = this.debug.art;
     art.player = this.privatePlayer ? "private" : "placeholder";
 
-    // Background, depth 0, stretched to the scene size.
-    const bg = this.resolve("background", def.background, `scene-ph:${def.id}:bg`, (k) => backgroundPlaceholder(this, k, def));
-    art.background = bg.art;
-    world.push(this.add.image(0, 0, bg.key).setOrigin(0, 0).setDisplaySize(def.size.w, def.size.h).setDepth(BG_DEPTH));
+    // Background, depth 0: a private file or the def's art, stretched to the scene size; else the bundled band, laid
+    // along the scene (bandArt.ts), which brings its own trees, so the placeholder canopy overlay is left out.
+    const band = !privateSceneFile(privateFiles(), def.id, "background") && this.loaded(bundledKey(def.id));
+    if (band) {
+      art.background = "bundled";
+      world.push(addBand(this, def, BG_DEPTH));
+    } else {
+      const bg = this.resolve("background", def.background, `scene-ph:${def.id}:bg`, (k) => backgroundPlaceholder(this, k, def));
+      art.background = bg.art;
+      world.push(this.add.image(0, 0, bg.key).setOrigin(0, 0).setDisplaySize(def.size.w, def.size.h).setDepth(BG_DEPTH));
+    }
 
     // Actors: feet at (x, y), origin bottom centre; y-sorted every frame.
     for (const a of def.actors ?? []) {
@@ -188,8 +200,9 @@ export class WorldScene extends Phaser.Scene {
     this.setPose(false);
     world.push(this.player);
 
-    // Overlay above every actor.
-    if (def.overlay) {
+    // Overlay above every actor (not over the bundled band: see above).
+    if (band) art.overlay = "none";
+    else if (def.overlay) {
       const ov = this.resolve("overlay", def.overlay, `scene-ph:${def.id}:overlay`, (k) => overlayPlaceholder(this, k, def));
       art.overlay = ov.art;
       world.push(this.add.image(0, 0, ov.key).setOrigin(0, 0).setDisplaySize(def.size.w, def.size.h).setDepth(this.debug.depth.overlay));

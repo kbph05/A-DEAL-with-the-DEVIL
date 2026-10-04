@@ -2,7 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { worldLayout } from "./logic";
 import {
-  ZoneTracker, actorDepth, artSource, clampToBounds, footY, isUrl, overlayDepth, parseSceneDef, pointIn, sceneErrors,
+  ZoneTracker, actorDepth, bandLayout, artSource, clampToBounds, footY, isUrl, overlayDepth, parseSceneDef, pointIn, sceneErrors,
   zoneChanges, zonesAt, type SceneDef,
 } from "./scene";
 import { actorShape, overlayCanopies, sceneTiles } from "./scenePlaceholders";
@@ -179,4 +179,10 @@ test("placeholder art: a fight scene is a dirt path through grass, forest all ro
   assert.ok(c.some((k) => k.y + k.r > b.y && k.y < b.y), "a canopy row over the top edge");
   assert.ok(c.some((k) => k.y - k.r < b.y + b.h && k.y > b.y + b.h), "and over the bottom edge");
   assert.ok(c.every((k) => !k.trunk), "no big tree in the way of the fight");
+});
+
+test("bandLayout: a band fills the scene height and is repeated (mirrored every other copy) to cover the width", () => {
+  assert.deepEqual(bandLayout({ w: 256, h: 256 }, { w: 1280, h: 560 }), { scale: 2.1875, copies: 3, width: 768 });
+  assert.deepEqual(bandLayout({ w: 256, h: 256 }, { w: 512, h: 256 }), { scale: 1, copies: 2, width: 512 }, "an exact fit adds no copy");
+  assert.deepEqual(bandLayout({ w: 256, h: 256 }, { w: 100, h: 512 }), { scale: 2, copies: 1, width: 256 });
 });

@@ -60,7 +60,7 @@ A scene is plain JSON data (`SceneDef` in `src/world/scene.ts`). The example bel
 - actors stand inside `size` (they may be outside `bounds`: shopfronts on the edge);
 - enemy `spawns` lie inside `bounds`.
 
-**The samples** are in `src/world/scenes/`: `village.json` (960×540, the default: the first entry of `SCENES`; see "The village and shop zones" below), and `forest.json` (1280×560, wider than the view, so the camera scrolls and clamps: the forest path the fights play on, with six enemy `spawns` and an exit at the far end; the world lab can walk it too). There are only these two scenes. To add one, drop a JSON file there and list it in `scenes/index.ts`. The lab can also load any SceneDef JSON by URL (see below).
+**The samples** are in `src/world/scenes/`: `village.json` (960×540, the default: the first entry of `SCENES`; see "The village and shop zones" below), and `forest.json` (1280×560, wider than the view, so the camera scrolls and clamps: the forest path the fights play on, drawn on the designer's band (see "Art"), with its bounds on the band's dirt path, six enemy `spawns` and an exit at the far end; the world lab can walk it too). There are only these two scenes. To add one, drop a JSON file there and list it in `scenes/index.ts`. The lab can also load any SceneDef JSON by URL (see below).
 
 ## The village and shop zones
 
@@ -210,7 +210,16 @@ Other options:
 
 ## Art
 
-There are no image files in the repo, and nothing comes from generative models. Until real art exists, the placeholders are generated pixel art, drawn in code (`scenePlaceholders.ts`):
+**The designer's art.** Big Chungus's first batch (4 Oct) is in `assets/` at the repo root. The forest scene uses `assets/forest.png`, a 256×256 pixel-art band (trees on top, a dirt path across the middle, bushes at the bottom), through `src/world/bandArt.ts`:
+
+- It is imported through Vite (a hashed file in builds) and scaled to fill the scene height (560 / 256, about 2.19×), nearest-neighbour.
+- It is repeated along the path, **every other copy mirrored**. Its left and right edges don't match (a tree trunk and the dirt patches cut off at the join), so plain tiling showed a seam; mirrored, each join meets itself. The copies are drawn once into one texture, so there are no hairline gaps between them.
+- The pure layout is `bandLayout` in `scene.ts`. `forest.test.ts` checks that the bounds, the archers' band and the spawn sit on the band's dirt path (measured at rows 144 to 192 of the 256).
+- The band brings its own trees, so the placeholder canopy overlay is left out over it (`debug.art.overlay` is `"none"`; `art.background` is `"bundled"`).
+- **Precedence:** a private `scenes/forest/background.png` (below) > the band > the def's key or URL > the placeholder. If the band fails to load, the placeholder background and its canopy come back.
+- The village has no art of its own yet, so it keeps the placeholders. The duplicate `forest.png` at the repo root (an earlier commit) is not used.
+
+Nothing comes from generative models. Where there is no real art, the placeholders are generated pixel art, drawn in code (`scenePlaceholders.ts`):
 
 - **Background.** The seeded tile generator (`gen.ts`, seeded by the scene id) is rendered with the placeholder tileset (`textures.ts`) into one texture of the scene's size.
   - Inside `bounds` it is ground: grass, dirt paths and stone floor.
