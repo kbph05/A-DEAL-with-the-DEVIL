@@ -59,4 +59,9 @@ body { overflow: hidden; }
   .play-maptitle { bottom: auto; top: calc(max(8px, env(safe-area-inset-top)) + 122px); }
   .play-toast { top: calc(max(8px, env(safe-area-inset-top)) + 164px); }
 }
+/* Landscape under 1300 px wide (a laptop window, a turned phone): a centred toast runs into the HUD's stats strip
+   (348 px from the left edge), hiding Soul and Revive. Centre it in the space right of the strip instead. */
+@media (min-aspect-ratio: 1/1) and (max-width: 1299px) {
+  .play-toast { left: calc(max(8px, env(safe-area-inset-left)) + 356px); right: max(8px, env(safe-area-inset-right)); transform: none; margin-inline: auto; box-sizing: border-box; max-width: min(560px, calc(100% - 372px)); }
+}
 .play [hidden]:not(.play-toast) { display: none !important; }
