@@ -142,11 +142,11 @@ Plan: keep the state client-side and exchange it with the backend only when ente
 ```json
 { "ok": true,
   "events": [ { "type": "moved", "from": "a0n0", "to": "a0n1", "kind": "fight", "act": 0 },
-              { "type": "enemy_appeared", "enemy": { "name": "cave rat", "hp": 10, "maxHp": 10, "boss": false } } ],
+              { "type": "enemy_appeared", "enemy": { "name": "orc", "hp": 10, "maxHp": 10, "boss": false } } ],
   "actions": [ { "cmd": "fight" }, { "cmd": "fight", "realtime": true } ],
   "state": { "v": 1, "seed": "demo", "rng": { "s": 189795653 }, "acts": ["…"],
              "player": { "hp": 30, "maxHp": 30, "gold": 10, "attack": 3, "soul": 1, "act": 0, "nodeId": "a0n1", "log": [] },
-             "curses": [], "enemy": { "name": "cave rat", "hp": 10, "maxHp": 10, "power": 2, "boss": false },
+             "curses": [], "enemy": { "name": "orc", "hp": 10, "maxHp": 10, "power": 2, "boss": false },
              "resolved": false, "offer": null, "asks": 0, "totalAsks": 0, "dealsDecided": 0, "ending": null, "pending": null } }
 ```
 

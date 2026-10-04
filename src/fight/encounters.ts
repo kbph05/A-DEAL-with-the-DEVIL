@@ -14,10 +14,10 @@
  *   power is the engine enemy's `power` times its damage factor. So the FightResult maps back as is: `enemyHpLeft`
  *   is the sum left, `won` means all of them dropped.
  * - **Bosses:** a boss request is one boss, `miniboss1` in act 1, `miniboss2` in act 2, `final_boss` in the last act.
- * - **Names:** the engine's enemy is the encounter. Its name is the encounter's `title` ("Cave rat", or "Cave rat and
+ * - **Names:** the engine's enemy is the encounter. Its name is the encounter's `title` ("Orc raider", or "Orc raider and
  *   its pack" for a group) and labels the group's lead (the band's `lead`, which every group has); the rest of the pack
  *   keep their roster labels. A boss keeps the engine's boss name. The end-of-fight line (`encounterSummary`) says
- *   "Cave rat falls." as the engine's `enemy_slain` event does.
+ *   "Orc raider falls." as the engine's `enemy_slain` event does.
  */
 import { hashSeed, mulberry32 } from "../map/rng";
 import { ENEMIES, baseParams, enemyPower, enemyTier, type EnemyId, type EnemyParams } from "./enemies";
@@ -154,7 +154,7 @@ export interface EncounterEnemy {
 }
 
 export interface Encounter {
-  /** The engine enemy's name, as the engine's events say it ("cave rat", "the Gatekeeper"). */
+  /** The engine enemy's name, as the engine's events say it ("orc raider", "the Gatekeeper"). */
   foe: string;
   /** Shown as the fight's heading: the engine name, capitalized, plus " and its pack" for a group. */
   title: string;
@@ -176,14 +176,14 @@ export interface EncounterOptions {
   force?: EnemyId;
 }
 
-/** Capitalize the first letter only ("cave rat" -> "Cave rat", "the unlit" -> "The unlit"), as the UI's `capitalize`. */
+/** Capitalize the first letter only ("orc raider" -> "Orc raider", "the Gatekeeper" -> "The Gatekeeper"), as the UI's `capitalize`. */
 const cap = (t: string): string => t.charAt(0).toUpperCase() + t.slice(1);
 
-/** The encounter's heading from the engine's enemy name: "Cave rat", or "Cave rat and its pack" for a group. */
+/** The encounter's heading from the engine's enemy name: "Orc raider", or "Orc raider and its pack" for a group. */
 export const encounterTitle = (foe: string, count: number, boss = false): string =>
   `${cap(foe)}${!boss && count > 1 ? " and its pack" : ""}`;
 
-/** The end-of-fight line, in the engine's words: "Cave rat falls." (its `enemy_slain`), or "Cave rat still stands." */
+/** The end-of-fight line, in the engine's words: "Orc raider falls." (its `enemy_slain`), or "Orc raider still stands." */
 export const encounterSummary = (enc: Pick<Encounter, "foe">, won: boolean): string =>
   `${cap(enc.foe)} ${won ? "falls" : "still stands"}.`;
 

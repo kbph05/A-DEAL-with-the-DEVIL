@@ -144,10 +144,16 @@ test("names: the engine's enemy is the encounter (title, the lead's label, the e
     const e = encounterFor({ ...r, enemy: { ...r.enemy, name: foe } });
     assert.equal(e.foe, foe);
     assert.equal(e.title, encounterTitle(foe, e.enemies.length));
-    const named = e.enemies.filter((m) => m.name === foe.charAt(0).toUpperCase() + foe.slice(1));
-    assert.equal(named.length, 1, `exactly one mob carries the engine's name (${foe}, ${seed})`);
-    assert.equal(named[0].id, ENCOUNTER_BANDS[e.band].lead, "the band's lead");
-    for (const m of e.enemies) if (m !== named[0]) assert.equal(m.name, ENEMIES[m.id].label, "the rest keep their roster labels");
+    const cap = foe.charAt(0).toUpperCase() + foe.slice(1);
+    if (cap === ENEMIES[ENCOUNTER_BANDS[e.band].lead].label) {
+      // The engine's plain "orc" is also the roster label: every mob reads "Orc".
+      for (const m of e.enemies) assert.equal(m.name, ENEMIES[m.id].label, `plain roster labels (${foe})`);
+    } else {
+      const named = e.enemies.filter((m) => m.name === cap);
+      assert.equal(named.length, 1, `exactly one mob carries the engine's name (${foe}, ${seed})`);
+      assert.equal(named[0].id, ENCOUNTER_BANDS[e.band].lead, "the band's lead");
+      for (const m of e.enemies) if (m !== named[0]) assert.equal(m.name, ENEMIES[m.id].label, "the rest keep their roster labels");
+    }
     // The fight's end line agrees with the engine's own event, as the play page's toast words it.
     assert.ok(eventText({ type: "enemy_slain", name: foe, gold: 5, boss: false }).startsWith(encounterSummary(e, true)), foe);
   }

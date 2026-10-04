@@ -68,7 +68,11 @@ export const openerDue = (s: GameState): boolean => devilPresent(s) && !devilDon
 export const TRAIN_ATTACK = 1;
 /** Prices live with the rest of the gold knobs in economy.ts. */
 export { WARES } from "./economy";
-export const FOES = [["cave rat", "drowned monk", "ash hound"], ["bone mason", "glass wolf", "hollow knight"], ["choir of moths", "gilded wretch", "the unlit"]];
+/**
+ * Regular enemies' display names, one row per act (kbph, 4 Oct: every regular is drawn as an Orc, so they are named as
+ * orcs). Names only: their stats are FOE in difficulty.ts. Keep 3 per act (the engine rolls one of 3).
+ */
+export const FOES = [["orc", "orc raider", "orc cutthroat"], ["orc brute", "orc reaver", "orc ravager"], ["orc berserker", "orc bloodsworn", "orc warchief's guard"]];
 export const BOSSES = ["the Gatekeeper", "the Cartographer of Ruin", "the Devil's Left Hand"];
 
 /** An enemy as the engine keeps it (`power` is hidden from the player). */

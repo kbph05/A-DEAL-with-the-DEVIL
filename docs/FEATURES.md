@@ -191,7 +191,7 @@ No miss chance, no crits, no dodge, no defense stat, no armor. A round's player 
 
 | | Act 1 | Act 2 | Act 3 |
 | --- | --- | --- | --- |
-| Regular names (one picked at random on entry) | cave rat, drowned monk, ash hound | bone mason, glass wolf, hollow knight | choir of moths, gilded wretch, the unlit |
+| Regular names (one picked at random on entry) | orc, orc raider, orc cutthroat | orc brute, orc reaver, orc ravager | orc berserker, orc bloodsworn, orc warchief's guard |
 | Regular HP | 8 + d4(0..3) = **8 to 11** | **12 to 15** | **18 to 21** |
 | Regular power (damage per hit) | 2 (+0..2) = **2 to 4** | 3 (+0..2) = **3 to 5** | 4 (+0..2) = **4 to 6** |
 | Boss | the Gatekeeper | the Cartographer of Ruin | the Devil's Left Hand |

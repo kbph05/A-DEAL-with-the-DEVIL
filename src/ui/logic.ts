@@ -327,7 +327,7 @@ export function rejectedText(reason: string): string {
 export const eventText = (e: GameEvent, kindOf?: (id: string) => Kind | undefined): string => capitalize(wordEvent(e, kindOf));
 
 /**
- * Upper-cases the first letter of the text and of each of its lines, so a name the engine keeps lower-case ("drowned monk
+ * Upper-cases the first letter of the text and of each of its lines, so a name the engine keeps lower-case ("orc raider
  * falls.") starts its sentence properly. A leading quote or bracket is skipped; the rest of the text is left alone (the
  * devil's own words are not re-cased).
  */

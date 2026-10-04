@@ -227,7 +227,7 @@ export class ForestScene extends Phaser.Scene {
     this.ui = this.add.graphics().setDepth(10);
     this.texts = {
       hp: this.add.text(0, 0, "", font(18)).setDepth(11),
-      // The engine's enemy is the encounter: its name heads the fight ("Cave rat and its pack"), as the toasts say it.
+      // The engine's enemy is the encounter: its name heads the fight ("Orc raider and its pack"), as the toasts say it.
       title: this.add.text(0, 0, this.cfg.encounter.title, font(18)).setOrigin(1, 0).setDepth(11),
       foes: this.add.text(0, 0, "", font(16)).setOrigin(1, 0).setDepth(11),
       clock: this.add.text(0, 0, "", font(16, COL.dim)).setOrigin(1, 0).setDepth(11),
