@@ -3,7 +3,6 @@ import { FloatingStick } from "../input/stick";
 import { ARENA, PLAYER, STEP_MS, moveDir, type Circle, type FightLayout, type FightResult, type Vec } from "./logic";
 import { FightSim, type FightControls } from "./sim";
 import type { FightInput } from "./logic";
-import { placeholderTexture } from "../render/placeholder";
 
 export interface FightSceneConfig {
   input: Required<FightInput>;
@@ -16,27 +15,20 @@ export interface FightSceneConfig {
 
 type KeyName = "W" | "A" | "S" | "D" | "UP" | "DOWN" | "LEFT" | "RIGHT" | "SPACE" | "SHIFT";
 
-// The art is placeholder black, white and grey (labelled textures from ../render/placeholder.ts) until the team's own
-// exists. The HUD bars and the touch controls are UI, not art, and keep their colours.
 const COL = {
-  floor: 0xc8c8c8, grid: 0xb4b4b4, wall: 0x303030,
-  telegraph: 0x000000, bullet: 0x000000,
+  floor: 0x231515, grid: 0x2c1b1b, wall: 0x6b3a3a, pillar: 0x3b2626, pillarEdge: 0x7a4c4c,
+  player: 0x6fb7ff, enemy: 0xa33b3b, boss: 0x7a2bb0, telegraph: 0xffe066, recover: 0x4a3434, bullet: 0xff7ad9,
   hpBack: 0x2a1a1a, hpPlayer: 0x4cc36a, hpEnemy: 0xd8443c, text: "#eeeeee", dim: "#a99",
 };
-const SCALE_UP = 3; // canvas pixels per logical pixel for the fight's labelled bodies, so their text stays crisp
 
 /**
- * The realtime fight: draws a `FightSim` (placeholder labelled sprites for the bodies and pillars, plain shapes for
- * the rest) and feeds it keyboard, mouse and touch input at a fixed 60 Hz step. All rules live in `sim.ts` / `logic.ts`.
+ * The realtime fight: draws a `FightSim` with plain shapes (no textures) and feeds it keyboard, mouse and touch
+ * input at a fixed 60 Hz step. All rules live in `sim.ts` / `logic.ts`.
  */
 export class FightScene extends Phaser.Scene {
   private cfg: FightSceneConfig;
   private sim!: FightSim;
-  private g!: Phaser.GameObjects.Graphics; // room, lane and trail, under the sprites
-  private g2!: Phaser.GameObjects.Graphics; // swing, bullets, HUD and touch controls, over them
-  private playerImg!: Phaser.GameObjects.Image;
-  private enemyImg!: Phaser.GameObjects.Image;
-  private enemyKeys!: { normal: string; flash: string };
+  private g!: Phaser.GameObjects.Graphics;
   private keys!: Record<KeyName, Phaser.Input.Keyboard.Key>;
   private acc = 0;
   private finished = false;
@@ -62,8 +54,6 @@ export class FightScene extends Phaser.Scene {
     this.sim = new FightSim(this.cfg.input);
     this.cfg.onDebug?.(this.sim);
     this.g = this.add.graphics();
-    this.makeBodies();
-    this.g2 = this.add.graphics().setDepth(2);
 
     const kb = this.input.keyboard!;
     this.keys = kb.addKeys("W,A,S,D,UP,DOWN,LEFT,RIGHT,SPACE,SHIFT", true) as Record<KeyName, Phaser.Input.Keyboard.Key>;
@@ -89,26 +79,6 @@ export class FightScene extends Phaser.Scene {
       dash: this.add.text(L.dashBtn.x, L.dashBtn.y, "Dash", font(20)).setOrigin(0.5).setDepth(2),
     };
     this.render();
-  }
-
-  /** The labelled placeholder sprites: player and enemy (inverted so they stand out), and one per pillar. */
-  private makeBodies(): void {
-    const e = this.sim.enemy;
-    const pd = this.sim.player.radius * 2;
-    const ed = e.radius * 2;
-    const ek = `fight-enemy-${e.boss ? "boss" : "enemy"}-${e.name}-${ed}`;
-    this.enemyKeys = { normal: ek, flash: `${ek}-flash` };
-    const label = e.boss ? `BOSS:\n${e.name}` : "ENEMY";
-    placeholderTexture(this, "fight-player", pd, pd, "PLAYER", { invert: true, circle: true, res: SCALE_UP });
-    placeholderTexture(this, this.enemyKeys.normal, ed, ed, label, { invert: true, circle: true, res: SCALE_UP });
-    placeholderTexture(this, this.enemyKeys.flash, ed, ed, label, { circle: true, res: SCALE_UP }); // white: the windup flash and the hurt flash
-    this.playerImg = this.add.image(0, 0, "fight-player").setDisplaySize(pd, pd).setDepth(1);
-    this.enemyImg = this.add.image(0, 0, this.enemyKeys.normal).setDisplaySize(ed, ed).setDepth(1);
-    for (const r of this.sim.obstacles) {
-      const key = `fight-pillar-${r.w}x${r.h}`;
-      placeholderTexture(this, key, r.w, r.h, "PILLAR", { res: SCALE_UP });
-      this.add.image(this.cfg.layout.arena.x + r.x, this.cfg.layout.arena.y + r.y, key).setOrigin(0, 0).setDisplaySize(r.w, r.h).setDepth(0.5);
-    }
   }
 
   update(_time: number, delta: number): void {
@@ -189,74 +159,82 @@ export class FightScene extends Phaser.Scene {
     const L = this.cfg.layout;
     const s = this.sim;
     const g = this.g.clear();
-    const g2 = this.g2.clear();
     const ox = L.arena.x;
     const oy = L.arena.y;
     const blink = Math.floor(s.timeMs / 80) % 2 === 0;
 
-    // Room (pillars are sprites).
+    // Room.
     g.fillStyle(COL.floor).fillRect(ox, oy, ARENA, ARENA);
     g.lineStyle(1, COL.grid);
     for (let i = 48; i < ARENA; i += 48) { g.lineBetween(ox + i, oy, ox + i, oy + ARENA); g.lineBetween(ox, oy + i, ox + ARENA, oy + i); }
     g.lineStyle(8, COL.wall).strokeRect(ox - 4, oy - 4, ARENA + 8, ARENA + 8);
+    for (const r of s.obstacles) g.fillStyle(COL.pillar).fillRect(ox + r.x, oy + r.y, r.w, r.h).lineStyle(3, COL.pillarEdge).strokeRect(ox + r.x, oy + r.y, r.w, r.h);
 
-    // Enemy: black body; it swells and flashes white to telegraph, and goes faint while it recovers.
+    // Enemy.
     const e = s.enemy;
     const ex = ox + e.pos.x;
     const ey = oy + e.pos.y;
-    let flash = false;
-    let alpha = 1;
+    const base = e.boss ? COL.boss : COL.enemy;
+    let color = base;
     let scale = 1;
     const b = e.brain;
     if (b.mode === "windup") {
       const k = Math.min(1, b.modeMs / e.params.windupMs);
+      color = lerpColor(base, COL.telegraph, k);
       scale = 1 + 0.3 * k;
-      const locked = b.modeMs >= e.params.windupMs / 2;
-      flash = locked && blink; // flashing once the aim locks
       // Where the lunge will go: a fading lane, solid once the aim locks.
       const reach = (e.params.lungeSpeed * e.params.lungeMs) / 1000 + e.radius;
+      const locked = b.modeMs >= e.params.windupMs / 2;
       g.lineStyle(e.radius * 1.6, COL.telegraph, locked ? 0.28 : 0.12).lineBetween(ex, ey, ex + e.aim.x * reach, ey + e.aim.y * reach);
     } else if (b.mode === "lunge") {
+      color = COL.telegraph;
       scale = 1.1;
     } else if (b.mode === "recover") {
-      alpha = 0.45 + 0.55 * Math.min(1, b.modeMs / e.params.recoverMs);
+      color = lerpColor(COL.recover, base, Math.min(1, b.modeMs / e.params.recoverMs));
     } else if (b.mode === "burstWindup") {
       const k = Math.min(1, b.modeMs / e.params.burstWindupMs);
+      color = lerpColor(base, COL.bullet, k);
       g.lineStyle(4, COL.bullet, 0.3 + 0.5 * k).strokeCircle(ex, ey, e.radius * (1 + 1.4 * k));
     }
-    if (e.hurtMs > 0) flash = true;
+    if (e.hurtMs > 0) color = 0xffffff;
     const er = e.radius * scale;
-    this.enemyImg.setTexture(flash ? this.enemyKeys.flash : this.enemyKeys.normal).setPosition(ex, ey).setDisplaySize(er * 2, er * 2).setAlpha(alpha);
-    if (b.mode === "windup" && b.modeMs >= e.params.windupMs / 2 && blink) g2.lineStyle(4, 0x000000).strokeCircle(ex, ey, er + 4);
-    if (b.mode === "recover") g2.lineStyle(2, 0x000000, 0.5).strokeEllipse(ex, ey - er - 6, er * 1.1, 8);
+    g.fillStyle(color).fillCircle(ex, ey, er);
+    g.lineStyle(3, 0x000000, 0.6).strokeCircle(ex, ey, er);
+    if (b.mode === "windup" && b.modeMs >= e.params.windupMs / 2 && blink) g.lineStyle(4, 0xffffff).strokeCircle(ex, ey, er + 4);
+    // Eyes look at the player.
+    const look = unit({ x: s.player.pos.x - e.pos.x, y: s.player.pos.y - e.pos.y });
+    const side = { x: -look.y, y: look.x };
+    for (const sgn of [-1, 1]) g.fillStyle(0x110808).fillCircle(ex + look.x * er * 0.45 + side.x * er * 0.3 * sgn, ey + look.y * er * 0.45 + side.y * er * 0.3 * sgn, Math.max(3, er * 0.14));
+    if (b.mode === "recover") g.lineStyle(2, 0xffffff, 0.5).strokeEllipse(ex, ey - er - 6, er * 1.1, 8);
     // Enemy HP bar.
     const bw = e.boss ? 120 : 60;
-    bar(g2, ex - bw / 2, ey - er - 18, bw, 8, e.hp / e.maxHp, COL.hpEnemy);
+    bar(g, ex - bw / 2, ey - er - 18, bw, 8, e.hp / e.maxHp, COL.hpEnemy);
     this.texts.name.setPosition(ex, ey - er - 22);
 
-    // Boss bullets: black with a white core.
-    for (const bl of s.bullets) g2.fillStyle(COL.bullet).fillCircle(ox + bl.pos.x, oy + bl.pos.y, bl.radius).fillStyle(0xffffff).fillCircle(ox + bl.pos.x, oy + bl.pos.y, bl.radius * 0.45);
+    // Boss bullets.
+    for (const bl of s.bullets) g.fillStyle(COL.bullet).fillCircle(ox + bl.pos.x, oy + bl.pos.y, bl.radius).fillStyle(0xffffff).fillCircle(ox + bl.pos.x, oy + bl.pos.y, bl.radius * 0.45);
 
-    // Player: black body with a white rim; a white arrow shows the facing.
+    // Player.
     const p = s.player;
     const px = ox + p.pos.x;
     const py = oy + p.pos.y;
     if (p.swingMs > 0) {
       const a = Math.atan2(p.swingDir.y, p.swingDir.x);
       const k = p.swingMs / PLAYER.swingMs;
-      g2.fillStyle(0xffffff, 0.5 * k).slice(px, py, p.radius + PLAYER.swingRange, a - PLAYER.swingHalfAngle, a + PLAYER.swingHalfAngle, false).fillPath();
-      g2.lineStyle(4, 0x000000, 0.8 * k).beginPath().arc(px, py, p.radius + PLAYER.swingRange, a - PLAYER.swingHalfAngle, a + PLAYER.swingHalfAngle, false).strokePath();
+      g.fillStyle(0xffffff, 0.35 * k).slice(px, py, p.radius + PLAYER.swingRange, a - PLAYER.swingHalfAngle, a + PLAYER.swingHalfAngle, false).fillPath();
+      g.lineStyle(4, 0xffffff, 0.8 * k).beginPath().arc(px, py, p.radius + PLAYER.swingRange, a - PLAYER.swingHalfAngle, a + PLAYER.swingHalfAngle, false).strokePath();
     }
-    if (p.dashMs > 0) for (let i = 1; i <= 3; i++) g.fillStyle(0x000000, 0.18).fillCircle(px - p.dashDir.x * i * 14, py - p.dashDir.y * i * 14, p.radius);
-    const alpha2 = p.iframesMs > 0 && blink ? 0.35 : 1;
-    this.playerImg.setPosition(px, py).setAlpha(alpha2);
+    if (p.dashMs > 0) for (let i = 1; i <= 3; i++) g.fillStyle(COL.player, 0.18).fillCircle(px - p.dashDir.x * i * 14, py - p.dashDir.y * i * 14, p.radius);
+    const alpha = p.iframesMs > 0 && blink ? 0.35 : 1;
+    g.fillStyle(COL.player, alpha).fillCircle(px, py, p.radius);
+    g.lineStyle(3, 0xffffff, alpha).strokeCircle(px, py, p.radius);
     const f = p.facing;
     const tip = { x: px + f.x * (p.radius + 9), y: py + f.y * (p.radius + 9) };
-    g2.fillStyle(0x000000, alpha2).fillTriangle(tip.x, tip.y, px + f.x * p.radius - f.y * 7, py + f.y * p.radius + f.x * 7, px + f.x * p.radius + f.y * 7, py + f.y * p.radius - f.x * 7);
+    g.fillStyle(0xffffff, alpha).fillTriangle(tip.x, tip.y, px + f.x * p.radius - f.y * 7, py + f.y * p.radius + f.x * 7, px + f.x * p.radius + f.y * 7, py + f.y * p.radius - f.x * 7);
 
     // HUD.
-    bar(g2, ox, 42, 300, 18, p.hp / p.maxHp, COL.hpPlayer);
-    bar(g2, ox, 63, 300, 4, 1 - p.dashCdMs / PLAYER.dashCdMs, 0x6fb7ff); // dash cooldown
+    bar(g, ox, 42, 300, 18, p.hp / p.maxHp, COL.hpPlayer);
+    bar(g, ox, 63, 300, 4, 1 - p.dashCdMs / PLAYER.dashCdMs, 0x6fb7ff); // dash cooldown
     this.texts.hp.setText(`You  ${p.hp} / ${p.maxHp}`);
     this.texts.foe.setText(`${e.boss ? "BOSS  " : ""}${e.name}  ${e.hp} / ${e.maxHp}`);
     this.texts.clock.setText(`${(s.timeMs / 1000).toFixed(1)} s`);
@@ -266,15 +244,20 @@ export class FightScene extends Phaser.Scene {
     this.texts.attack.setVisible(this.touchUI);
     this.texts.dash.setVisible(this.touchUI);
     if (this.touchUI) {
-      this.stick.draw(g2);
-      button(g2, L.attackBtn, this.attackPtr !== null ? 0.45 : 0.22, 1);
-      button(g2, L.dashBtn, 0.22, 1 - p.dashCdMs / PLAYER.dashCdMs);
+      this.stick.draw(g);
+      button(g, L.attackBtn, this.attackPtr !== null ? 0.45 : 0.22, 1);
+      button(g, L.dashBtn, 0.22, 1 - p.dashCdMs / PLAYER.dashCdMs);
     }
   }
 }
 
 function inCircle(p: { x: number; y: number }, c: Circle, scale = 1): boolean {
   return Math.hypot(p.x - c.x, p.y - c.y) <= c.r * scale;
+}
+
+function unit(v: Vec): Vec {
+  const l = Math.hypot(v.x, v.y);
+  return l > 1e-9 ? { x: v.x / l, y: v.y / l } : { x: 0, y: 1 };
 }
 
 function bar(g: Phaser.GameObjects.Graphics, x: number, y: number, w: number, h: number, frac: number, color: number): void {
@@ -290,3 +273,8 @@ function button(g: Phaser.GameObjects.Graphics, c: Circle, alpha: number, ready:
   g.lineStyle(3, 0xffffff, 0.6).strokeCircle(c.x, c.y, c.r);
 }
 
+function lerpColor(a: number, b: number, t: number): number {
+  const ch = (c: number, s: number) => (c >> s) & 0xff;
+  const mix = (s: number) => Math.round(ch(a, s) + (ch(b, s) - ch(a, s)) * t) << s;
+  return mix(16) | mix(8) | mix(0);
+}
