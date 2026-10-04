@@ -1,0 +1,64 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 600" font-family="Georgia, 'DejaVu Serif', serif">
+  <defs>
+    <marker id="a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#ffb347"/>
+    </marker>
+  </defs>
+  <style>
+    .box { fill: #1f1010; stroke: #b9a89a; stroke-width: 3; }
+    .pure { fill: #1f1010; stroke: #ffb347; stroke-width: 4; }
+    .devil { fill: #3a0c0c; stroke: #e04a3a; stroke-width: 5; }
+    .t { fill: #f2e6d8; font-size: 34px; text-anchor: middle; }
+    .m { fill: #b9a89a; font-size: 21px; text-anchor: middle; font-family: Menlo, 'DejaVu Sans Mono', monospace; }
+    .dt { fill: #e04a3a; font-size: 40px; font-weight: bold; text-anchor: middle; }
+    .line { stroke: #ffb347; stroke-width: 4; fill: none; marker-end: url(#a); }
+    .note { fill: #e8b0a0; font-size: 28px; font-style: italic; text-anchor: middle; }
+  </style>
+
+  <!-- top row: the ask -->
+  <rect class="box"  x="30"   y="60" width="320" height="130" rx="14"/>
+  <text class="t" x="190" y="115">GameState</text>
+  <text class="m" x="190" y="155">one JSON object</text>
+
+  <rect class="pure" x="430"  y="60" width="320" height="130" rx="14"/>
+  <text class="t" x="590" y="115">step(state, deal)</text>
+  <text class="m" x="590" y="155">pure: no I/O</text>
+
+  <rect class="box"  x="830"  y="60" width="320" height="130" rx="14"/>
+  <text class="t" x="990" y="115">awaiting.devil</text>
+  <text class="m" x="990" y="155">{state, context, text}</text>
+
+  <rect class="devil" x="1230" y="40" width="340" height="170" rx="20"/>
+  <text class="dt" x="1400" y="115">THE DEVIL</text>
+  <text class="m" x="1400" y="160">LLM, any model</text>
+
+  <!-- bottom row: the answer, back into the engine -->
+  <rect class="box"  x="1230" y="400" width="340" height="130" rx="14"/>
+  <text class="t" x="1400" y="455">Deal JSON</text>
+  <text class="m" x="1400" y="495">{effects, curse, rewrite}</text>
+
+  <rect class="pure" x="830"  y="400" width="320" height="130" rx="14"/>
+  <text class="t" x="990" y="455">step(state, reply)</text>
+  <text class="m" x="990" y="495">sanitizeDeal: clamp</text>
+
+  <rect class="pure" x="430"  y="400" width="320" height="130" rx="14"/>
+  <text class="t" x="590" y="455">step(state, accept)</text>
+  <text class="m" x="590" y="495">the only way in</text>
+
+  <rect class="box"  x="30"   y="400" width="320" height="130" rx="14"/>
+  <text class="t" x="190" y="455">GameState′</text>
+  <text class="m" x="190" y="495">hp, soul, curses, map</text>
+
+  <!-- arrows -->
+  <path class="line" d="M350,125 L425,125"/>
+  <path class="line" d="M750,125 L825,125"/>
+  <path class="line" d="M1150,125 L1225,125"/>
+  <path class="line" d="M1400,210 L1400,395"/>
+  <path class="line" d="M1230,465 L1155,465"/>
+  <path class="line" d="M830,465 L755,465"/>
+  <path class="line" d="M430,465 L355,465"/>
+  <path class="line" d="M190,400 L190,195"/>
+
+  <text class="note" x="800" y="285">He never touches the state.</text>
+  <text class="note" x="800" y="330">He sends JSON; step() decides what it does.</text>
+</svg>

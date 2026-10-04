@@ -86,6 +86,18 @@ Image img/devil-offer-desk.png is local only; the devil in it is the offline stu
 
 ---
 
+## One pure function
+
+![w:1120](img/step-devil-flow.svg)
+
+<!--
+Tech, second half. "The whole run is one JSON object, and one pure function, step(state, command), is the only thing that changes it. When you ask the devil, step doesn't call anything: it hands back a request. The model answers with a deal as JSON, our code clamps it, and only when you accept does step apply it. So the devil can raise your attack, curse you, take your soul or rewrite the map, but always through the same door as every other move."
+Code: step() in src/game/state-machine.ts; the devil_reply case runs sanitizeDeal (src/game/deal.ts). Same function drives the game, the tests (700 replayed runs) and the console.
+Diagram source: img/step-devil-flow.svg (hand-written SVG, deck colours).
+-->
+
+---
+
 ## Demo
 
 ![bg right:42% contain](img/map-rewritten.png)
