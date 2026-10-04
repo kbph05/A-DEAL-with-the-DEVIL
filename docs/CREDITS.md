@@ -1,35 +1,35 @@
 # Credits
 
+## Scene art
+
+Devil, forest, well and village art by Armand (Big Chungus).
+
 ## Sprite packs
 
-**TO FILL IN: copy each pack's own attribution text here.** These packs are used under their licences:
+These packs are used under their licences. The list below is `assets/attribution.txt`, word for word (it is plaintext in the repo):
 
-| Pack | Used for | Attribution file (encrypted in `assets/encrypted/`) |
-| --- | --- | --- |
-| Tiny RPG Character Asset Pack 01 | the player (Soldier) and every regular enemy (Orc) | `Tiny RPG Character Asset Pack 01/attribution.txt` |
-| Tiny RPG Character Asset Pack 02 | both minibosses (Demon_A) | `Tiny RPG Character Asset Pack 02/attribution.txt` |
-| WarriorChAnimation | the final boss (WarriorCh) | `WarriorChAnimation/attribution.txt` |
+```
+Tiny RPG Character Asset Pack 01
+by Zerie (itch.io)
+https://zerie.itch.io/tiny-rpg-character-asset-pack
 
-This page was written without `ASSET_KEY`, so the attribution files could not be read. To fill it in, with the key in `.env`:
+Tiny RPG Character Asset Pack 02
+by Zerie (itch.io)
+https://zerie.itch.io/tiny-rpg-character-asset-pack-02
 
-```sh
-npm run assets:decrypt   # writes the originals, attribution.txt included, to the gitignored assets/private-src/
+Warrior Character Animation
+By Corwin (itch.io)
+https://lmaomonkey.itch.io/character-animation
 ```
 
-Then paste each `attribution.txt` under its pack's heading below, word for word, and delete this note.
+| Pack | Used for |
+| --- | --- |
+| Tiny RPG Character Asset Pack 01 | the player (Soldier) and every regular enemy (Orc) |
+| Tiny RPG Character Asset Pack 02 | both minibosses (Demon_A) |
+| Warrior Character Animation (`WarriorChAnimation`) | the final boss (WarriorCh) |
 
-### Tiny RPG Character Asset Pack 01
-
-(attribution text to come)
-
-### Tiny RPG Character Asset Pack 02
-
-(attribution text to come)
-
-### WarriorChAnimation
-
-(attribution text to come)
+Each pack also ships its own `attribution.txt`, encrypted with the sheets in `assets/encrypted/` (`<pack>/attribution.txt.enc`). With `ASSET_KEY`, `npm run assets:decrypt` writes the originals to the gitignored `assets/private-src/`.
 
 ## In the game
 
-The play page has a **Credits** screen, from the title screen, the pause menu and the ending card. It reads the same three `attribution.txt` files at runtime (`src/render/credits.ts`), so it shows them whenever the build has the key, even before this page is filled in. Without the key it says that the packs' credits need the art.
+The play page has a **Credits** screen, from the title screen, the pause menu and the ending card. It always shows the scene-art line and `assets/attribution.txt` (bundled into the build, `src/render/credits.ts`), with or without the key. When the build has the key it adds each pack's own encrypted `attribution.txt`, read at runtime.
