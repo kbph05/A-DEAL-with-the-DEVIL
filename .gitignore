@@ -11,3 +11,5 @@ public/assets/private/
 !.env.example
 # Plaintext of the encrypted art (assets/encrypted/ holds the .enc files): never commit
 assets/private-src/
+.vercel
+.env*
