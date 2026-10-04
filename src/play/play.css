@@ -9,7 +9,8 @@ body { overflow: hidden; }
 .play-backdrop canvas { width: min(40vmin, 220px); image-rendering: pixelated; opacity: .35; }
 .play-map { z-index: 5; background: #0b0707; }
 .play .hud { z-index: 10; }
-.play button { font: inherit; color: #eee; background: #8a2020; border: 1px solid #c44; border-radius: 8px; padding: 8px 14px; min-height: 44px; min-width: 44px; font-weight: 600; cursor: pointer; }
+/* The page's own buttons only: the HUD's item slots and the map's Legend toggle keep their own styles (their padding and colours were being overridden). */
+.play button:not(.hud-slot):not(.mapscene-legend-btn) { font: inherit; color: #eee; background: #8a2020; border: 1px solid #c44; border-radius: 8px; padding: 8px 14px; min-height: 44px; min-width: 44px; font-weight: 600; cursor: pointer; }
 .play button.quiet { background: #2a1a1a; border-color: #553333; }
 .play button:disabled { opacity: .5; cursor: not-allowed; }
 .play button:focus-visible { outline: 3px solid #f0c060; outline-offset: 2px; }
