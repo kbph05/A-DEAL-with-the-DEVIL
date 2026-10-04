@@ -8,6 +8,7 @@ import { h, region } from "./dom";
 import { availableActions, blurbOf, dealEnd, fireChoice, lastStrike, outcomeEvents } from "./logic";
 import { createHistory, renderOutcome } from "./outcome";
 import { renderSituation } from "./situation";
+import { fightModeFor } from "../fight/mode";
 
 const END: Record<string, [string, string]> = {
   win: ["You win.", "The devil is gracious about it, which is worse."],
@@ -87,8 +88,10 @@ export function mountUI(root: HTMLElement, session: Session, opts: UIOptions = {
     stage.scrollIntoView({ block: "nearest" });
     let report: unknown = null, failure: string | null = null;
     try {
-      const { runFight } = await import("../fight");
-      report = await runFight(stage, req, opts.onFightDebug ? { onDebug: opts.onFightDebug } : {});
+      const { runFight, runForestFight } = await import("../fight");
+      const debug = opts.onFightDebug ? { onDebug: opts.onFightDebug } : {};
+      // Bosses fight on the forest path (Big Chungus, 4 Oct); regular fights keep the arena here.
+      report = fightModeFor(req) === "forest" ? await runForestFight(stage, req, debug) : await runFight(stage, req, debug);
     } catch (err) {
       failure = err instanceof Error ? err.message : String(err);
       fightBroken = true;
