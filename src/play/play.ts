@@ -15,7 +15,7 @@ import { paintIcon, type IconKey } from "../mapscene/icons";
 import { effectChips, curseText, eventText, kindLookup, lastStrike, outcomeEvents, questionsText, restHint, rewriteText } from "../ui/logic";
 import { mountScene, sceneById, type SceneHandle, type SceneZone } from "../world";
 import { shopPrompt } from "../world/shopZone";
-import { CLOSE_DEVIL, LOCAL, OPEN_DEVIL, arrived, flow, setLocal, wantsOpener, wellChoice, type Flow, type Local } from "./flow";
+import { CLOSE_DEVIL, LOCAL, OPEN_DEVIL, arrived, flow, setLocal, wantsOpener, wellChoice, wishToSend, type Flow, type Local } from "./flow";
 
 const params = new URLSearchParams(location.search);
 const TEST = import.meta.env.MODE === "test";
@@ -307,7 +307,13 @@ function renderDevil(v: View, f: Flow): void {
     ask.type = "submit";
     ask.disabled = busy;
     input.disabled = busy;
-    form.onsubmit = (e) => { e.preventDefault(); const text = wish.trim(); wish = ""; void send({ cmd: "deal", text }); };
+    form.onsubmit = (e) => {
+      e.preventDefault();
+      const text = wishToSend(wish, v.opening);
+      if (text === null) { input.focus(); return; } // an empty wish would cost a question for nothing
+      wish = "";
+      void send({ cmd: "deal", text });
+    };
     form.append(input, ask);
     card.append(form);
   }

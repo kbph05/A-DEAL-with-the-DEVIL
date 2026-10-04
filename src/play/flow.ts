@@ -139,3 +139,12 @@ export function wellChoice(log: readonly GameEvent[]): "blessing" | "devil" | nu
   }
   return null;
 }
+
+/**
+ * What the devil's wish box sends, or null to send nothing. A blank wish is the free opening offer while it is still
+ * due (`opening`); after that the engine counts it as a question like any other, so a blank Ask or Haggle is not sent.
+ */
+export function wishToSend(text: string, opening: boolean | undefined): string | null {
+  const t = text.trim();
+  return t || opening === true ? t : null;
+}

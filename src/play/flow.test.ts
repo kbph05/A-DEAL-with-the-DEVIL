@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { initialState, legalActions, step, view, type Command, type GameState } from "../game";
 import { mulberry32 } from "../map/rng";
-import { CLOSE_DEVIL, LOCAL, OPEN_DEVIL, arrived, flow, setLocal, wantsOpener, wellChoice, type FlowView, type Local } from "./flow";
+import { CLOSE_DEVIL, LOCAL, OPEN_DEVIL, arrived, flow, setLocal, wantsOpener, wellChoice, wishToSend, type FlowView, type Local } from "./flow";
 import type { GameEvent } from "../game";
 
 const go: Command = { cmd: "go", n: 1 };
@@ -185,4 +185,11 @@ test("wellChoice: the blessing or the devil, since arriving at the well (log new
   assert.equal(wellChoice([{ type: "deal_refused" }, moved]), "devil", "refused: he has left");
   assert.equal(wellChoice([blessing, { type: "deal_refused" }, moved]), "blessing", "refused his opener, then bought the blessing");
   assert.equal(wellChoice([moved, accepted]), null, "a choice at an earlier node does not count");
+});
+
+test("wishToSend: a blank wish is sent only while the free opener is due", () => {
+  assert.equal(wishToSend("  make me rich ", false), "make me rich");
+  assert.equal(wishToSend("   ", false), null, "a blank Ask or Haggle would spend a question");
+  assert.equal(wishToSend("", undefined), null);
+  assert.equal(wishToSend("", true), "", "blank before the opener is the opener, which is free");
 });
