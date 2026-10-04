@@ -15,6 +15,7 @@ import { dagModel, type Dag, type DagNode } from "../ui/logic";
 import { layoutMap, type Cover, type LaidNode, type MapLayout } from "./layout";
 import { MapScene } from "./MapScene";
 import "./mapscene.css";
+import { GAME_FPS } from "../gameLoop";
 
 export { layoutMap, focusY, MAP_WIDTH, type MapLayout, type LaidNode, type LaidEdge } from "./layout";
 export { ICONS, ICON_KINDS, iconKey, privateIconFile, type IconKey } from "./icons";
@@ -144,6 +145,7 @@ export function mountMap(parent: HTMLElement, options: MountMapOptions): MapHand
     parent: host,
     backgroundColor: "#1d1210",
     banner: false,
+    fps: GAME_FPS, // no half-speed start (src/gameLoop.ts)
     pixelArt: true,
     disableContextMenu: true,
     audio: { noAudio: true },

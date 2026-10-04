@@ -16,6 +16,7 @@ import { FightScene } from "./FightScene";
 import { ForestScene, type ForestView } from "./ForestScene";
 import { fightLayout, relayout, sanitizeInput, type FightInput, type FightResult } from "./logic";
 import type { FightSim } from "./sim";
+import { GAME_FPS } from "../gameLoop";
 
 export type { FightInput, FightResult, FightPlayerInput, FightEnemyInput } from "./logic";
 export type { FightSim } from "./sim";
@@ -62,6 +63,7 @@ export function runFight(parent: HTMLElement, input: FightInput, options: RunFig
       parent,
       backgroundColor: "#120a0a",
       banner: false,
+      fps: GAME_FPS, // no half-speed start (src/gameLoop.ts)
       seed: [clean.seed],
       disableContextMenu: true,
       audio: { noAudio: true },
@@ -149,6 +151,7 @@ export function runForestFight(parent: HTMLElement, request: ForestRequest, opti
       parent,
       backgroundColor: "#0b0707",
       banner: false,
+      fps: GAME_FPS, // no half-speed start (src/gameLoop.ts)
       pixelArt: true,
       seed: [clean.seed],
       disableContextMenu: true,
