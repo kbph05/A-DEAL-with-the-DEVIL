@@ -109,5 +109,5 @@ That is the whole swap. The rest follows from it:
 ## Not done yet
 
 - **Campfires and wells** have no walking scene, only panels over a dim backdrop (kbph, 4 Oct). Deal nodes have no table scene behind the overlay.
-- **The map is its own Phaser game,** mounted when it opens and destroyed when it closes. One shared Phaser game would be lighter (docs/mapscene.md, "Wiring it into the game").
+- **The map is its own Phaser game,** mounted when it opens and destroyed when it closes. One shared Phaser game would be lighter (docs/mapscene.md, "Wiring it into the game"). Each teardown (the map, a fight, the village) goes through `destroyGame` (`src/destroyGame.ts`), which also releases the game's WebGL context, so a long run no longer piles up contexts (Chrome warned "Too many active WebGL contexts" after about 16). One shared game is not a simple swap: the map is drawn over the live village, and the scenes use different scale modes, physics and input settings.
 - **No save or resume** across reloads.

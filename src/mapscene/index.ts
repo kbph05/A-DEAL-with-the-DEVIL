@@ -9,6 +9,7 @@
  * tooltip, and the hint line that shows why nothing can be clicked (the devil is speaking, a fight is on).
  */
 import Phaser from "phaser";
+import { destroyGame } from "../destroyGame";
 import type { MapView, View } from "../game";
 import { dagModel, type Dag, type DagNode } from "../ui/logic";
 import { layoutMap, type Cover, type LaidNode, type MapLayout } from "./layout";
@@ -223,7 +224,7 @@ export function mountMap(parent: HTMLElement, options: MountMapOptions): MapHand
       clearTimeout(toastTimer);
       cancelAnimationFrame(pending);
       watch.disconnect();
-      game.destroy(true);
+      destroyGame(game);
       el.remove();
     },
     debug: () => ({ dag, layout, screenOf: (nid) => scene.screenOf(nid), ...scene.view, privateArt: [...scene.privateArt] }),

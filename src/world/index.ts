@@ -5,6 +5,7 @@
  * `onLeaveZone` fire once per entry and exit: the hook for linking scenes to act-map nodes later. Docs: docs/world.md.
  */
 import Phaser from "phaser";
+import { destroyGame } from "../destroyGame";
 import { worldLayout } from "./logic";
 import { parseSceneDef, type SceneDef, type SceneZone } from "./scene";
 import { SCENES } from "./scenes";
@@ -70,7 +71,7 @@ export function mountScene(parent: HTMLElement, options: MountSceneOptions = {})
     destroy() {
       if (destroyed) return;
       destroyed = true;
-      game.destroy(true);
+      destroyGame(game);
     },
   };
 }

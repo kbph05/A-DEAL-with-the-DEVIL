@@ -6,6 +6,7 @@
  * node); drawing and input: `FightScene.ts` (arena) and `ForestScene.ts` (forest).
  */
 import Phaser from "phaser";
+import { destroyGame } from "../destroyGame";
 import { parseSceneDef, type SceneDef } from "../world/scene";
 import { sceneById } from "../world/scenes";
 import type { EnemyId } from "./enemies";
@@ -49,7 +50,7 @@ export function runFight(parent: HTMLElement, input: FightInput, options: RunFig
           const finish = () => { if (!done) { done = true; resolve(result); } };
           stopWatching();
           game.events.once(Phaser.Core.Events.DESTROY, finish);
-          game.destroy(true);
+          destroyGame(game);
           setTimeout(finish, 1000); // the loop may be paused (hidden tab): don't hang on the event
         }, 0);
       },
@@ -128,7 +129,7 @@ export function runForestFight(parent: HTMLElement, request: ForestRequest, opti
           const finish = () => { if (!done) { done = true; resolve(result); } };
           stopWatching();
           game.events.once(Phaser.Core.Events.DESTROY, finish);
-          game.destroy(true);
+          destroyGame(game);
           setTimeout(finish, 1000);
         }, 0);
       },
