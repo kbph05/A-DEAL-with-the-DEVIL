@@ -19,6 +19,13 @@
       #stats { display: contents; }
       #stats summary { display: none; }
       @media (max-width: 700px) { #stats { display: block; } #stats summary { display: list-item; cursor: pointer; } #stats[open] { flex-basis: 100%; } }
+      #bar input[type=range] { width: 7em; padding: 0; }
+      body:not(.forest-mode) .forest { display: none !important; }
+      #enc { padding: 4px 10px; background: #160d0d; border-bottom: 1px solid #3a2222; color: #c9b; font-size: 12px; line-height: 1.45; font-variant-numeric: tabular-nums; max-height: 30vh; overflow: auto; }
+      #enc b { color: #f2d36b; font-weight: 600; }
+      /* Small screens: the readout steps aside while a fight runs (the result panel repeats it). */
+      @media (max-width: 700px), (max-height: 500px) { body.fighting #enc { display: none; } }
+      #done .enc { text-align: left; font-size: 12px; color: #c9b; margin: 0 0 .6em; }
       #stage { position: relative; flex: 1; min-height: 0; touch-action: none; user-select: none; -webkit-user-select: none; }
       #idle { position: absolute; inset: 0; display: grid; place-items: center; color: #a99; text-align: center; padding: 1em; }
       #done { position: absolute; inset: 0; display: none; place-items: center; background: rgba(10, 4, 4, .85); }
@@ -34,6 +41,9 @@
       <strong>Fight lab</strong>
       <label>Act <select id="act"><option value="0">1</option><option value="1">2</option><option value="2">3</option></select></label>
       <label><input id="boss" type="checkbox" /> Boss</label>
+      <label>Mode <select id="mode"><option value="arena">Arena</option><option value="forest">Forest path</option></select></label>
+      <label class="forest">Layer <input id="layer" type="range" min="0" max="6" step="1" value="0" /> <span id="layerv"></span></label>
+      <label class="forest">Enemy <select id="force"><option value="">Encounter</option></select></label>
       <label>Seed <input id="seed" type="text" placeholder="random" /></label>
       <details id="stats"><summary>Stats</summary>
         <span>You: <label>HP <input id="php" type="number" min="1" max="60" /></label>/<input id="pmax" type="number" min="1" max="60" aria-label="max HP" />
@@ -44,9 +54,10 @@
       </details>
       <button id="go" type="button">Fight</button>
     </div>
+    <div id="enc" class="forest"></div>
     <div id="stage">
-      <div id="idle">Pick an act, then press <b>Fight</b>.<br />Desktop: WASD / arrows, Space or click to attack, Shift to dash. Touch: left thumb joystick, Attack and Dash buttons.</div>
-      <div id="done"><div><h2 id="verdict"></h2><pre id="result"></pre><button id="again" type="button">Fight again</button></div></div>
+      <div id="idle">Pick an act (and, for a forest path, the layer), then press <b>Fight</b>.<br />Desktop: WASD / arrows, Space or click to attack, Shift to dash. Touch: left thumb joystick, Attack and Dash buttons.</div>
+      <div id="done"><div><h2 id="verdict"></h2><div id="done-enc" class="enc forest"></div><pre id="result"></pre><button id="again" type="button">Fight again</button></div></div>
     </div>
     <script type="module" src="/src/fight/dev.ts"></script>
   </body>
