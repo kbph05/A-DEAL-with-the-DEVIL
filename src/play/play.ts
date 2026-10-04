@@ -516,6 +516,7 @@ function render(): void {
   renderDevil(v, f);
   if (f.screen !== "ending") ending.replaceChildren();
   renderEnding(f);
+  syncVillageKeys(!ps.paused && f.map === "closed" && !f.devil);
   if (ps.paused) return; // nothing starts behind the pause menu; resuming renders again
   // The devil appears: he opens with an offer of his own, unasked (free; see wantsOpener).
   if (wantsOpener(v, f, local)) queueMicrotask(() => void send({ cmd: "deal" }));
@@ -538,8 +539,25 @@ function setGamePaused(game: Phaser.Game, on: boolean): void {
   if (on) game.pause(); else game.resume();
   const kb = game.input?.keyboard;
   if (kb) kb.enabled = !on;
-  if (!on) for (const sc of game.scene.getScenes(true)) sc.input?.keyboard?.resetKeys(); // keys released while paused
+  if (!on) releaseKeys(game); // keys released while paused
 }
+
+/** Release every key a scene thinks is held (its keyup may have gone to the page while the key was off or hidden). */
+function releaseKeys(game: Phaser.Game | null): void {
+  for (const sc of game?.scene.getScenes(true) ?? []) sc.input?.keyboard?.resetKeys();
+}
+/** The village walks only while nothing is over it: the map (its arrow keys), the devil, the pause menu. Keys held when
+ *  one opened, and released under it, must not stay down when it closes. */
+function syncVillageKeys(on: boolean): void {
+  const kb = villageGame?.input?.keyboard;
+  if (!kb || kb.enabled === on) return;
+  kb.enabled = on;
+  releaseKeys(villageGame);
+}
+// Focus leaving the page (another window, a hidden tab): nothing stays held.
+const releaseAll = (): void => { releaseKeys(villageGame); releaseKeys(fightGame); };
+window.addEventListener("blur", releaseAll);
+document.addEventListener("visibilitychange", releaseAll);
 
 function doPause(a: PauseAction): void {
   const before = ps;
