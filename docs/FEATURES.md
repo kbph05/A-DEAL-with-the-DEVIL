@@ -495,7 +495,8 @@ A deliberately plain DOM page over the same `Session` (one `Game` plus an event 
 | `npm run build` | **final** bundle in `dist/`: game UI only; lab, autoplay and console are removed at build time (tree-shaken via `import.meta.env.MODE`). The realtime fight (with Phaser, about 1.2 MB) is its own lazily loaded chunk; the page's own JS is about 50 kB. The devil is `HttpDevil(VITE_DEVIL_URL)` if that is set at build time, else the StubDevil. `npm run preview` serves it |
 | `npm run mock:devil` | the mock backend on port 8787 |
 | `npm run play` | the terminal REPL |
-| `npm test` | `tsx --test src/**/*.test.ts` |
+| `npm run assets:encrypt` / `assets:check` / `assets:decrypt` / `assets:keygen` | encrypted art (`tools/`, [docs/assets.md](assets.md)): originals in the gitignored `assets/private-src/`, AES-256-GCM files in `assets/encrypted/`, key in `ASSET_KEY` (`.env` or CI secret). With the key, Vite serves the decrypted files at `/assets/private/` in dev and preview, and writes them into builds; without it, the game uses the generated art |
+| `npm test` | `tsx --test src/**/*.test.ts tools/*.test.ts` |
 
 In test builds, `VITE_DEVIL_URL` only sets the default URL shown in the Devil lab; the lab starts in Stub mode unless you picked HTTP before. `npm run build` and `build:test` run `tsc` first, so a type error fails the build.
 
@@ -515,6 +516,7 @@ In test builds, `VITE_DEVIL_URL` only sets the default URL shown in the Devil la
 | `src/game/contract.test.ts` | 2 | the JSON contract is additive only: path-to-type snapshots (`contract.json`, the frozen pre-refactor baseline, and `contract-current.json`, with the new fields) of Command, PlayerState, Observation, MapView, Result, every GameEvent, the devil request, REPL `--json` lines (also `--state`, `--manual-devil`) |
 | `src/game/fightResult.test.ts` | 9 | the realtime fight round trip (awaiting shape, no dice, only `fight_result`/`look` while pending), a real FightSim bot fight won and an idle one lost, revival keeping the enemy for a new bout with a new seed, clamping of forged results (win with the enemy standing, hpLeft above start, overkill, junk), `on_hit` curses once and before the death check, boss heal, purity and determinism, `FightRequest.where` (act, layer, kind) for every fight and boss node |
 | `src/game/engine.test.ts` | 11 | `step` purity (deep-frozen input), legal-actions property, act 1 opening on the village, campfire rest xor train (and the attack cap), the devil round trip, GameState JSON save and restore mid-run, devil-stage events, `Session.onSync`, `view` |
+| `tools/encrypted-assets.test.ts` | 10 | encrypted art: key parsing (hex, base64, bad keys without echoing them), round trip, wrong key, any tampered byte, swapped paths (AAD), the manifest skipping unchanged files and re-encrypting on change or new key, `assets:check` errors, the plugin a no-op without a key and falling back on a wrong one, the dev middleware serving decrypted bytes with the right content type (a public file wins), a build emitting the files with the key nowhere in the output |
 
 Not covered by tests: the DOM UI rendering, the console, REPL text mode, combat numbers, shop numbers, balance (the REPL `--json` shape is covered by the contract test).
 

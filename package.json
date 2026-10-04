@@ -15,9 +15,13 @@
     "build:game": "npm run build:test",
     "preview:game": "vite preview --outDir dist-test --open /play.html",
     "mock:devil": "tsx scripts/mock-devil-server.ts",
-    "test": "tsx --test src/**/*.test.ts",
+    "test": "tsx --test src/**/*.test.ts tools/*.test.ts",
     "play": "tsx src/game/repl.ts",
-    "fixtures": "tsx src/game/__fixtures__/generate.ts"
+    "fixtures": "tsx src/game/__fixtures__/generate.ts",
+    "assets:keygen": "tsx tools/assets.ts keygen",
+    "assets:encrypt": "tsx tools/assets.ts encrypt",
+    "assets:check": "tsx tools/assets.ts check",
+    "assets:decrypt": "tsx tools/assets.ts decrypt"
   },
   "devDependencies": {
     "@types/node": "^20.19.43",
