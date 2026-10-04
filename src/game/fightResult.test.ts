@@ -94,13 +94,19 @@ test("realtime fight won (a real FightSim bot fight): the same events as a round
   assert.deepEqual(play(req, bot), fr, "the request replays the same fight");
 });
 
+/** Death's door: the devil's opener (the soul for the old revival's HP), accepted. */
+const sellSoul = (s: GameState) => step(step(s, { cmd: "devil_reply", deal: { dialogue: "Your soul.", effects: { soul: -1, hp: 15 } } }).state, { cmd: "accept" });
+
 test("realtime fight lost: revival keeps the enemy at the HP it was left on; a new bout gets a new seed", () => {
   const { s, req } = start(facing());
   const fr = play(req, () => NO_CONTROLS);
   assert.equal(fr.won, false);
-  const r = step(s, { cmd: "fight_result", ...fr });
-  assert.ok(r.ok);
-  assert.deepEqual(types(r.events), ["fought", "damaged", "revived"]);
+  const died = step(s, { cmd: "fight_result", ...fr });
+  assert.ok(died.ok);
+  assert.deepEqual(types(died.events), ["fought", "damaged", "devil_at_death"]);
+  assert.deepEqual(died.actions, [{ cmd: "devil_reply", deal: null }], "no fighting on at death's door");
+  const r = sellSoul(died.state);
+  assert.deepEqual(types(r.events), ["deal_applied", "revived"]);
   assert.equal(r.state.player.soul, 0);
   assert.equal(r.state.player.hp, 15);
   assert.deepEqual(r.state.enemy, { ...RAT, bouts: 1 }, "same enemy, untouched");
@@ -109,7 +115,7 @@ test("realtime fight lost: revival keeps the enemy at the HP it was left on; a n
   assert.equal(again.req.seed, `rt:${s.player.nodeId}:2`);
   assert.deepEqual(again.req.player, { hp: 15, maxHp: 30, attack: 3 });
   // partly hurt enemy, then the soul is gone: the second loss ends the run
-  const hurtFoe = step(s, result({ won: false, hpLeft: 0, hitsTaken: 5, enemyHpLeft: 4 }));
+  const hurtFoe = sellSoul(step(s, result({ won: false, hpLeft: 0, hitsTaken: 5, enemyHpLeft: 4 })).state);
   assert.equal(hurtFoe.state.enemy?.hp, 4);
   const next = start(hurtFoe.state);
   assert.equal(next.req.enemy.hp, 4);
@@ -164,11 +170,13 @@ test("on_hit curses fire (once) when a realtime fight landed a hit, before the d
   const clean = step(s, result({ won: true, hpLeft: 30, hitsTaken: 0, enemyHpLeft: 0 }));
   assert.deepEqual(types(clean.events), ["fought", "enemy_slain"]);
   assert.equal(clean.state.curses.length, 2);
-  // a lethal curse after a won fight: the soul pays, then the enemy still falls
+  // a lethal curse after a won fight: the enemy still falls, and the devil comes for the soul
   const lethal = facing();
   lethal.curses = [{ trigger: "on_hit", effect: { hp: -25 } }];
   const l = step(start(lethal).s, result({ won: true, hpLeft: 5, hitsTaken: 4, enemyHpLeft: 0 }));
-  assert.deepEqual(types(l.events), ["fought", "damaged", "curse_fired", "revived", "enemy_slain"]);
+  assert.deepEqual(types(l.events), ["fought", "damaged", "curse_fired", "devil_at_death", "enemy_slain"]);
+  assert.equal(l.state.enemy, null);
+  assert.deepEqual(types(sellSoul(l.state).events), ["deal_applied", "revived"]);
 });
 
 test("realtime boss win: gold and the victory heal; the bout is pure on deep-frozen input", () => {

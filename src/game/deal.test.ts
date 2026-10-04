@@ -105,11 +105,15 @@ test("curses fire once on their trigger", async () => {
   assert.ok(!g.go(1).events.some((e) => e.type === "curse_fired"));
 });
 
-test("soul revives once: a second fatal blow loses", async () => {
+test("soul revives once (sold at death's door): a second fatal blow loses", async () => {
   const mk = () => dealGame(devilSaying(() => ({ dialogue: "x", effects: { hp: -25 } })));
   const g = mk();
   g.state.hp = 3;
   await g.deal();
+  const died = g.accept();
+  assert.ok(died.events.some((e) => e.type === "devil_at_death"), "no automatic revival: the devil comes for the soul");
+  assert.equal(g.observe().dying, true);
+  await g.answerDevil(); // he answers his own death's-door request with the same junk (hp -25): the engine holds the bargain
   const first = g.accept();
   assert.ok(first.events.some((e) => e.type === "revived"));
   assert.equal(g.ending, null);

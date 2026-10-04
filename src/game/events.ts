@@ -35,6 +35,11 @@ export type GameEvent =
   | { type: "node_rewritten"; change: RewriteChange }
   | { type: "rewrite_failed"; nodeId: string; reason: string }
   | { type: "revived"; hp: number }
+  /**
+   * HP hit 0 while the soul was still yours (additive, 4 Oct): no automatic revival any more. The run pauses at death's
+   * door and the devil comes for the soul (a pending devil request with `context.kind` "death"). `cause` is what killed you.
+   */
+  | { type: "devil_at_death"; cause: string; nodeId: string }
   | { type: "won" }
   | { type: "hell" }
   | { type: "lost"; cause: string }
@@ -102,6 +107,7 @@ export function describe(e: GameEvent): string {
     case "curse_fired": return `The curse (${e.trigger}) fires: ${fmtDeltas(e.changes)}.`;
     case "node_rewritten": return `The devil rewrote ${e.change.nodeId}: ${e.change.from} -> ${e.change.to}${e.change.polarityFlip ? " (good turned bad, or the reverse)" : ""}.`;
     case "rewrite_failed": return `The devil tried to rewrite ${e.nodeId} but could not: ${e.reason}.`;
+    case "devil_at_death": return `You fall (${e.cause}). The devil is already kneeling beside you, pen in hand.`;
     case "revived": return `You die, and your soul pays for it. You wake with ${e.hp} HP, and your soul is gone.`;
     case "won": return "You win. The devil is gracious about it, which is worse.";
     case "hell": return "You win. But you sold your soul: the devil collects. HELL ending.";

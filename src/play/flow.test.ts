@@ -214,3 +214,23 @@ test("toast: only a menu choice's answer or a lone rejection; no arrival or figh
   assert.deepEqual(toastEvents(null, [no]), [no]);
   assert.deepEqual(toastEvents("deal", [{ type: "deal_offered", deal: offer as never }]), []);
 });
+
+test("death's door: the devil's overlay over a forest fight, with no map, prompts or fight, until it is settled", () => {
+  const s = initialState("flow-death");
+  s.enemy = { ...enemy, power: 2 };
+  const fought = step(step(s, { cmd: "fight", realtime: true }).state, { cmd: "fight_result", won: false, hpLeft: 0, timeMs: 3000, hitsTaken: 4, damageDealt: 2, enemyHpLeft: 8 });
+  const pending = flow(view(fought.state), at({}, fought.state.player.nodeId));
+  assert.deepEqual([pending.devil, pending.map, pending.prompts], [true, "closed", []]);
+  const offered = step(fought.state, { cmd: "devil_reply", deal: { dialogue: "Your soul for another life.", effects: { soul: -1, hp: 15 } } });
+  for (const local of [at({}, offered.state.player.nodeId), at({ walkedAway: true }, offered.state.player.nodeId), at({ busy: "fight" }, offered.state.player.nodeId)]) {
+    const f = flow(view(offered.state), local);
+    assert.equal(f.devil, true, JSON.stringify(local));
+    assert.equal(f.map, "closed");
+    assert.deepEqual(f.prompts, []);
+  }
+  const back = step(offered.state, { cmd: "accept" });
+  const after = flow(view(back.state), at({}, back.state.player.nodeId));
+  assert.deepEqual([after.devil, after.screen, after.prompts], [false, "fight", ["fight"]], "back on your feet: fight on");
+  const dead = flow(view(step(offered.state, { cmd: "refuse" }).state));
+  assert.deepEqual([dead.screen, dead.ending], ["ending", "lose"]);
+});

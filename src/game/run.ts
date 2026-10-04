@@ -74,11 +74,21 @@ export class Game {
   async deal(text?: string): Promise<Result> {
     const asked = this.step({ cmd: "deal", text });
     if (!asked.awaiting?.devil) return { ok: asked.ok, events: asked.events, state: snapshot(this.gs.player) };
-    const req = structuredClone(asked.awaiting.devil);
+    const r = (await this.answerDevil())!;
+    return r.ok ? { ...r, events: [...asked.events, ...r.events] } : r;
+  }
+
+  /**
+   * Answer the pending devil request (if any) with this game's devil, as `deal` does after asking. Needed after any
+   * command that can kill: a death with the soul ends that command with the devil's request (`context.kind` "death";
+   * `execute` in autoplay.ts calls this for you). Null when nothing is pending.
+   */
+  async answerDevil(): Promise<Result | null> {
+    if (!this.gs.pending) return null;
+    const req = structuredClone(this.gs.pending);
     let raw: unknown;
     try { raw = await this.devil.offer(req.state, req.context, req.playerText ?? undefined); } catch { raw = undefined; }
-    const r = this.devilReply(raw);
-    return r.ok ? { ...r, events: [...asked.events, ...r.events] } : r;
+    return this.devilReply(raw);
   }
 }
 
