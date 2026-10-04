@@ -72,102 +72,22 @@ export const lungeDamage = (power: number, roll: number): number => Math.max(1, 
 export const contactDamage = (power: number): number => Math.max(1, Math.ceil(power / 2));
 /** One boss burst bullet. */
 export const burstDamage = (power: number): number => Math.max(1, power - 1);
+export { arrowDamage } from "./enemies";
 
 // ---------------------------------------------------------------------------------------------------------------
-// Timers: every cooldown / i-frame window is "ms left", ticked down and never below 0.
+// Timers: every cooldown / i-frame window is "ms left", ticked down and never below 0 (timers.ts).
 
-export const tick = (msLeft: number, dtMs: number): number => Math.max(0, msLeft - dtMs);
-export const isReady = (msLeft: number): boolean => msLeft <= 0;
+export { isReady, tick } from "./timers";
 /** The player can be hurt only outside both the post-hit i-frames and the dash i-frames. */
 export const canBeHit = (p: { iframesMs: number; dashInvulnMs: number }): boolean => p.iframesMs <= 0 && p.dashInvulnMs <= 0;
 
 // ---------------------------------------------------------------------------------------------------------------
-// Enemy stats and state machine
-
-export type EnemyMode = "idle" | "chase" | "windup" | "lunge" | "recover" | "burstWindup";
-
-export interface EnemyParams {
-  radius: number;
-  speed: number;
-  aggroRange: number; // idle -> chase when the gap is under this...
-  idleMaxMs: number; // ...or after this long anyway
-  lungeRange: number; // chase -> windup when the gap is under this and the attack is ready
-  windupMs: number;
-  lungeMs: number;
-  lungeSpeed: number;
-  recoverMs: number;
-  attackCdMs: number; // from lunge start
-  knockTaken: number; // knockback impulse a sword hit gives it
-  burstEveryMs: number; // 0 = no burst (regular enemies)
-  burstWindupMs: number;
-  burstCount: number;
-  burstSpeed: number;
-}
-
-/** Which act (0-based) the enemy's power says it is from: regular power is 2 + act, boss power 3 + act. */
-export const enemyTier = (power: number, boss: boolean): number => Math.min(2, Math.max(0, Math.round(power) - (boss ? 3 : 2)));
-
-export function enemyParams(e: Pick<FightEnemyInput, "power" | "boss">): EnemyParams {
-  const t = enemyTier(e.power, e.boss);
-  if (e.boss) return {
-    radius: 34, speed: 95 + 10 * t, aggroRange: 9999, idleMaxMs: 900,
-    lungeRange: 150, windupMs: 600 - 50 * t, lungeMs: 280, lungeSpeed: 560, recoverMs: 550 - 50 * t, attackCdMs: 1300 - 150 * t,
-    knockTaken: 0, // bosses don't budge
-    burstEveryMs: 4600 - 500 * t, burstWindupMs: 900, burstCount: 10 + 4 * t, burstSpeed: 210 + 25 * t,
-  };
-  return {
-    radius: 18, speed: 105 + 15 * t, aggroRange: 300, idleMaxMs: 1200,
-    lungeRange: 120, windupMs: 480 - 40 * t, lungeMs: 240, lungeSpeed: 540, recoverMs: 600 - 100 * t, attackCdMs: 1100 - 100 * t,
-    knockTaken: 170,
-    burstEveryMs: 0, burstWindupMs: 0, burstCount: 0, burstSpeed: 0,
-  };
-}
-
-export interface EnemyBrain {
-  mode: EnemyMode;
-  modeMs: number; // time spent in the current mode
-  attackCdMs: number;
-  burstCdMs: number;
-}
-
-export const newBrain = (p: EnemyParams): EnemyBrain => ({ mode: "idle", modeMs: 0, attackCdMs: 0, burstCdMs: p.burstEveryMs });
-
-/**
- * The transition rule, given the brain after its timers were ticked and the gap (edge to edge) to the player.
- * idle -> chase -> windup (telegraph) -> lunge -> recover -> chase; bosses also chase -> burstWindup -> recover.
- * Returns the same mode when nothing changes.
- */
-export function nextEnemyMode(b: EnemyBrain, gap: number, p: EnemyParams): EnemyMode {
-  switch (b.mode) {
-    case "idle": return gap <= p.aggroRange || b.modeMs >= p.idleMaxMs ? "chase" : "idle";
-    case "chase":
-      if (p.burstEveryMs > 0 && isReady(b.burstCdMs)) return "burstWindup";
-      return gap <= p.lungeRange && isReady(b.attackCdMs) ? "windup" : "chase";
-    case "windup": return b.modeMs >= p.windupMs ? "lunge" : "windup";
-    case "lunge": return b.modeMs >= p.lungeMs ? "recover" : "lunge";
-    case "burstWindup": return b.modeMs >= p.burstWindupMs ? "recover" : "burstWindup";
-    case "recover": return b.modeMs >= p.recoverMs ? "chase" : "recover";
-  }
-}
-
-export interface BrainStep { brain: EnemyBrain; entered: EnemyMode | null; left: EnemyMode | null }
-
-/** Tick the brain's timers by `dtMs`, then apply at most one transition. Pure. */
-export function tickBrain(b: EnemyBrain, dtMs: number, gap: number, p: EnemyParams): BrainStep {
-  const t: EnemyBrain = {
-    mode: b.mode,
-    modeMs: b.modeMs + dtMs,
-    attackCdMs: tick(b.attackCdMs, dtMs),
-    // The burst clock only runs while the boss is not already charging one.
-    burstCdMs: b.mode === "burstWindup" ? b.burstCdMs : tick(b.burstCdMs, dtMs),
-  };
-  const next = nextEnemyMode(t, gap, p);
-  if (next === t.mode) return { brain: t, entered: null, left: null };
-  const brain: EnemyBrain = { ...t, mode: next, modeMs: 0 };
-  if (next === "lunge") brain.attackCdMs = p.attackCdMs;
-  if (t.mode === "burstWindup") brain.burstCdMs = p.burstEveryMs;
-  return { brain, entered: next, left: t.mode };
-}
+// Enemy stats and the state machine moved to enemies.ts (the roster: slime, demon, skeleton archer, bosses);
+// re-exported so existing imports keep working.
+export {
+  enemyParams, enemyTier, newBrain, nextEnemyMode, tickBrain,
+  type BrainStep, type EnemyBrain, type EnemyMode, type EnemyParams,
+} from "./enemies";
 
 // ---------------------------------------------------------------------------------------------------------------
 // Vectors and geometry
@@ -198,6 +118,15 @@ export function knockback(from: Vec, to: Vec, strength: number): Vec {
 /** Keep a circle inside the arena square. */
 export function clampToArena(p: Vec, r: number, size = ARENA): Vec {
   return { x: Math.min(size - r, Math.max(r, p.x)), y: Math.min(size - r, Math.max(r, p.y)) };
+}
+
+/**
+ * Keep a circle inside a rectangle (the forest path's bounds; the arena is the rect 0, 0, ARENA, ARENA, where this
+ * equals `clampToArena`). A rect narrower than the circle puts it on the rect's centre line on that axis.
+ */
+export function clampToRect(p: Vec, r: number, b: Rect): Vec {
+  const axis = (v: number, lo: number, size: number) => (2 * r >= size ? lo + size / 2 : Math.min(lo + size - r, Math.max(lo + r, v)));
+  return { x: axis(p.x, b.x, b.w), y: axis(p.y, b.y, b.h) };
 }
 
 /** Push a circle out of a rectangle; returns the corrected centre (unchanged if they don't overlap). */
