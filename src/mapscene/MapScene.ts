@@ -11,7 +11,8 @@
  */
 import Phaser from "phaser";
 import { hashSeed, mulberry32 } from "../map/rng";
-import { ensureIcons, iconKey, loadPrivateIcons, type IconKey } from "./icons";
+import { bundledUrl } from "./bundledIcons";
+import { ensureIcons, iconKey, loadIcons, type IconKey } from "./icons";
 import { bandCenter, clampCenter, coveredTop, focusY, legendBeside, legendShown, mapZoom, MAP_WIDTH, type Cover, type LaidNode, type MapLayout } from "./layout";
 
 export interface MapSceneModel {
@@ -132,7 +133,7 @@ export class MapScene extends Phaser.Scene {
   }
 
   preload(): void {
-    loadPrivateIcons(this); // a file that fails to load leaves its key free, and ensureIcons draws the generated one
+    loadIcons(this, bundledUrl); // private PNGs, else the bundled art; a file that fails to load leaves its key free, and ensureIcons draws the generated one
   }
 
   create(): void {

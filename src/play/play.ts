@@ -14,6 +14,7 @@ import { runForestFight, type FightSim } from "../fight";
 import { mountHud } from "../hud/hud";
 import { hudModel } from "../hud/model";
 import { mountMap, type MapHandle } from "../mapscene";
+import { iconArtUrl } from "../mapscene/bundledIcons";
 import { paintIcon, type IconKey } from "../mapscene/icons";
 import { effectChips, curseText, kindLookup, lastStrike, outcomeEvents, questionsText, restHint, rewriteText } from "../ui/logic";
 import { mountScene, sceneById, type SceneHandle, type SceneZone, type WorldDebug } from "../world";
@@ -60,15 +61,24 @@ function noteIcon(k: NoticeIcon): HTMLCanvasElement {
   const c = h("canvas", "note-icon");
   c.width = 16; c.height = 16;
   const ctx = c.getContext("2d");
-  if (ctx) { if (k === "flame") paintIcon(ctx, "campfire"); else if (k === "sword") paintIcon(ctx, "fight"); else if (k === "devil") paintIcon(ctx, "deal"); else paintNoticeIcon(ctx, k); }
+  if (ctx) { if (k === "flame") paintMapIcon(ctx, "campfire"); else if (k === "sword") paintMapIcon(ctx, "fight"); else if (k === "devil") paintMapIcon(ctx, "deal"); else paintNoticeIcon(ctx, k); }
   c.setAttribute("aria-hidden", "true");
   return c;
+}
+/** A map icon on a 16×16 canvas: the generated one at once, then the designer's art (or a private override) over it once it has loaded. */
+function paintMapIcon(ctx: CanvasRenderingContext2D, k: IconKey): void {
+  paintIcon(ctx, k);
+  const url = iconArtUrl(k);
+  if (!url) return;
+  const img = new Image();
+  img.onload = () => { ctx.clearRect(0, 0, 16, 16); ctx.imageSmoothingEnabled = false; ctx.drawImage(img, 0, 0, 16, 16); };
+  img.src = url; // a failed load leaves the generated icon
 }
 function icon(k: IconKey): HTMLCanvasElement {
   const c = h("canvas");
   c.width = 16; c.height = 16;
   const ctx = c.getContext("2d");
-  if (ctx) paintIcon(ctx, k);
+  if (ctx) paintMapIcon(ctx, k);
   c.setAttribute("aria-hidden", "true");
   return c;
 }

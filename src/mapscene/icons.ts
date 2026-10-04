@@ -1,6 +1,10 @@
 /**
  * The map's node icons: small pixel-art sprites drawn in code (16×16 grids of palette letters, painted onto canvas
- * textures), in the same generated style as the world scene's placeholders (src/world/textures.ts). No image files.
+ * textures), in the same generated style as the world scene's placeholders (src/world/textures.ts).
+ *
+ * Precedence, per kind: a private override > the designer's bundled art (assets/map/*.png, bundledIcons.ts; boss, campfire,
+ * stairs, fight, village, well) > the generated icon. `deal`, `final`, `rewritten` and `here` have no bundled art. This file is
+ * pure (node tests import it), so the PNG imports live in bundledIcons.ts and are passed in.
  *
  * Private art hook: a PNG at the gitignored public/assets/private/map/<kind>.png (campfire, fight, deal, well, village,
  * boss, final, stairs, and `rewritten` for the devil's mark) replaces the generated icon. As in the world scene,
@@ -19,6 +23,27 @@ export const ICON_KINDS: readonly DagKind[] = ["village", "fight", "campfire", "
 export const iconKey = (k: IconKey): string => `mapicon-${k}`;
 /** The private override's path inside public/assets/private/ (the `here` marker has none). */
 export const privateIconFile = (k: IconKey): string => `map/${k}.png`;
+
+/**
+ * The designer's PNGs in assets/map/ (Big Chungus, 8b31d8d), by file name, and the icon kind each one is. fire.png is the
+ * campfire and sword.png is the fight; there is no art for `deal` or `final`. All are 16×16, like the generated icons.
+ */
+export const BUNDLED_ICON_KINDS = {
+  "boss.png": "boss", "fire.png": "campfire", "stairs.png": "stairs", "sword.png": "fight", "village.png": "village", "well.png": "well",
+} as const satisfies Record<string, DagKind>;
+export type BundledIconFile = keyof typeof BUNDLED_ICON_KINDS;
+/** The kinds that have bundled art. */
+export const BUNDLED_KINDS: readonly IconKey[] = Object.values(BUNDLED_ICON_KINDS);
+/** The bundled file for a kind, if it has one. */
+export const bundledIconFile = (k: IconKey): BundledIconFile | undefined =>
+  (Object.keys(BUNDLED_ICON_KINDS) as BundledIconFile[]).find((f) => BUNDLED_ICON_KINDS[f] === k);
+
+export type IconSource = "private" | "bundled" | "generated";
+/** Where a kind's picture comes from: a private override beats the bundled art, which beats the generated icon. */
+export function iconSource(k: IconKey, files: readonly string[] = privateFiles()): IconSource {
+  if (k !== "here" && files.includes(privateIconFile(k))) return "private";
+  return bundledIconFile(k) ? "bundled" : "generated";
+}
 
 /** Shared colours. `.` is transparent; `k` is the dark outline every icon has, so it reads on the parchment. */
 const BASE: Record<string, string> = { k: "#24150e" };
@@ -252,18 +277,32 @@ export function paintIcon(ctx: CanvasRenderingContext2D, k: IconKey, ox = 0, oy 
 
 /** Every icon that has a private override file present (by the build-time listing). */
 export const privateIcons = (files: readonly string[] = privateFiles()): IconKey[] =>
-  (Object.keys(ICONS) as IconKey[]).filter((k) => k !== "here" && files.includes(privateIconFile(k)));
+  (Object.keys(ICONS) as IconKey[]).filter((k) => iconSource(k, files) === "private");
 
-/** Preload hook: queue the private PNGs that exist. Call from the scene's `preload`. */
-export function loadPrivateIcons(scene: Phaser.Scene): void {
-  for (const k of privateIcons()) scene.load.image(iconKey(k), privateUrl(privateIconFile(k)));
+/** Phaser's FilterMode.NEAREST (this file stays free of a runtime Phaser import). */
+const NEAREST = 1;
+
+/**
+ * Preload hook: queue the private PNGs that exist, else the bundled ones (`bundledUrl`, from bundledIcons.ts). A file that
+ * fails to load leaves its key free, and ensureIcons draws the generated icon.
+ */
+export function loadIcons(scene: Phaser.Scene, bundledUrl: (k: IconKey) => string | undefined): void {
+  for (const k of Object.keys(ICONS) as IconKey[]) {
+    const src = iconSource(k);
+    const url = src === "private" ? privateUrl(privateIconFile(k)) : src === "bundled" ? bundledUrl(k) : undefined;
+    if (url) scene.load.image(iconKey(k), url);
+  }
 }
 
-/** Create hook: draw the generated texture for every icon without a (loaded) private one. Returns which are private. */
+/** Create hook: draw the generated texture for every icon without a (loaded) picture, nearest-neighbour for the loaded ones. Returns which are private. */
 export function ensureIcons(scene: Phaser.Scene): Set<IconKey> {
   const priv = new Set<IconKey>();
   for (const k of Object.keys(ICONS) as IconKey[]) {
-    if (scene.textures.exists(iconKey(k))) { if (privateIcons().includes(k)) priv.add(k); continue; }
+    if (scene.textures.exists(iconKey(k))) {
+      scene.textures.get(iconKey(k)).setFilter(NEAREST);
+      if (iconSource(k) === "private") priv.add(k);
+      continue;
+    }
     const tex = scene.textures.createCanvas(iconKey(k), ICON_SIZE, ICON_SIZE)!;
     paintIcon(tex.getContext(), k);
     tex.refresh();

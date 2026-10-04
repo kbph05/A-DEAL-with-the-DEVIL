@@ -1,6 +1,6 @@
 # The map scene (`src/mapscene/`)
 
-The act map as a game screen, in the style of Slay the Spire's map: a vertical parchment you scroll, the act's entry at the bottom, the boss as a big icon near the top and the stairs (or, on the last act, the final door) above it. Every node is a small pixel-art icon, drawn in code like the rest of the game's placeholder art (src/world/textures.ts). There are no image files and no emoji.
+The act map as a game screen, in the style of Slay the Spire's map: a vertical parchment you scroll, the act's entry at the bottom, the boss as a big icon near the top and the stairs (or, on the last act, the final door) above it. Every node is a small pixel-art icon: the designer's PNGs (assets/map/) for six kinds, and icons drawn in code (src/world/textures.ts style) for the rest. No emoji.
 
 - **Paths** are dotted ink. The ways out of your node are dashed and darker, and the paths you have walked are solid ink.
 - **Visited nodes** are circled in ink and faded.
@@ -15,7 +15,8 @@ Files:
 | File | What |
 | --- | --- |
 | `layout.ts` | `layoutMap(dag, seed, act)`: pure, Node-tested. It turns the DAG model into world positions with seeded jitter and edge polylines |
-| `icons.ts` | the icons as 16×16 palette grids (`ICONS`), painted onto canvas textures, plus the private-art hook |
+| `icons.ts` | the icons as 16×16 palette grids (`ICONS`), painted onto canvas textures, the file↔kind table and precedence (pure, Node-tested), and the private-art hook |
+| `bundledIcons.ts` | the designer's PNGs (`assets/map/`), imported through Vite; Vite-only |
 | `MapScene.ts` | the Phaser scene: the parchment texture, edges, icons, legend, camera and input |
 | `index.ts` | `mountMap`: the Phaser game plus the DOM around it (accessible buttons, tooltip, lock hint) |
 | `mapscene.css` | the DOM layer's styles |
@@ -77,7 +78,9 @@ map.debug();                            // test hook: { dag, layout, screenOf(id
 
 ## Icons
 
-Each icon is a 16×16 grid of palette letters in `ICONS` (`src/mapscene/icons.ts`). `.` is transparent and `k` is the shared dark outline, so every icon reads on the parchment. Edit the strings to redraw an icon.
+Each icon has a generated 16×16 grid of palette letters in `ICONS` (`src/mapscene/icons.ts`). `.` is transparent and `k` is the shared dark outline. Edit the strings to redraw an icon.
+
+**Precedence per kind: a private override > the bundled art > the generated icon.** The bundled art is Big Chungus's `assets/map/*.png` (8b31d8d), all 16×16, the same box as the generated icons, so they scale to the node and legend sizes identically (nearest-neighbour). The file to kind table is `BUNDLED_ICON_KINDS` in `icons.ts`: `boss.png` = boss, `fire.png` = campfire, `stairs.png` = stairs, `sword.png` = fight, `village.png` = village, `well.png` = well. There is no art for `deal` or `final` (nor the star and token), so those stay generated. The play page's panel titles and notice icons (campfire, well, fight) draw the same art. A bundled file that fails to load falls back to the generated icon. Tests: `src/mapscene/icons.test.ts`.
 
 | Key | Picture | Shown for |
 | --- | --- | --- |
@@ -96,13 +99,13 @@ Visited nodes are tinted parchment-brown, and far nodes are tinted and faded. Th
 
 ## Private art
 
-Drop PNGs into the gitignored `public/assets/private/map/`, named after the key: `campfire.png`, `fight.png`, `deal.png`, `well.png`, `village.png`, `boss.png`, `final.png`, `stairs.png`, and `rewritten.png` for the star. Each one replaces the generated icon, on the map and in the legend. This is the same hook as the world scene (docs/world.md):
+Drop PNGs into the gitignored `public/assets/private/map/`, named after the key: `campfire.png`, `fight.png`, `deal.png`, `well.png`, `village.png`, `boss.png`, `final.png`, `stairs.png`, and `rewritten.png` for the star. Each one replaces the bundled and the generated icon, on the map and in the legend. This is the same hook as the world scene (docs/world.md):
 
 - `vite.config.ts` lists that folder into `__PRIVATE_ASSETS__` at startup, so only files that exist are requested. Restart the dev server after adding files.
 - A file that fails to load falls back to the generated icon.
 - Any size works: the scene fits the longer side to the node's size.
 - `pixelArt` is on, so small pixel art stays crisp.
-- `map.debug().privateArt` lists which icons were replaced.
+- `map.debug().privateArt` lists which icons were replaced by a private file (not the bundled art).
 
 The `here` token has no hook yet.
 
