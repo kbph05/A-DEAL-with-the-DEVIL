@@ -372,7 +372,8 @@ export type PanelKind = "devil" | "shop" | "choose" | "fight";
  * `resolved` after one action, and the well's blessing is not a shop), plus the Devil's table while he is there and still
  * listening (every campfire, where a deal is the third choice; a well where he turned up). Anything else has no panel.
  */
-export function panelKinds(o: Pick<Observation, "kind" | "enemy"> & Partial<Pick<Observation, "devilPresent" | "asksLeft" | "offer">>): PanelKind[] {
+export function panelKinds(o: Pick<Observation, "kind" | "enemy"> & Partial<Pick<Observation, "devilPresent" | "asksLeft" | "offer" | "dying">>): PanelKind[] {
+  if (o.dying) return ["devil"]; // death's door: his offer for the soul, whatever the node
   if (o.enemy) return ["fight"];
   switch (o.kind) {
     case "deal": return ["devil"];
@@ -418,8 +419,8 @@ export function lastStrike(log: readonly GameEvent[]): DevilStrike | null {
 
 export type DevilPhase = "ask" | "offer" | "struck" | "walked" | "settled";
 /** Where the deal at this node stands. `settled` = resolved, but the log cannot say how. (A well's `resolved` is its blessing.) */
-export function devilPhase(o: Pick<Observation, "resolved" | "offer"> & Partial<Pick<Observation, "kind">>, end: DealEnd): DevilPhase {
-  if (o.resolved && o.kind !== "well") return end ?? "settled";
+export function devilPhase(o: Pick<Observation, "resolved" | "offer"> & Partial<Pick<Observation, "kind" | "dying">>, end: DealEnd): DevilPhase {
+  if (o.resolved && o.kind !== "well" && !o.dying) return end ?? "settled";
   return o.offer ? "offer" : "ask";
 }
 export const DEVIL_END_TEXT: Record<"struck" | "walked" | "settled", { head: string; body: string }> = {

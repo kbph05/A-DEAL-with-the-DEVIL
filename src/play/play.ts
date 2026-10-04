@@ -163,7 +163,7 @@ let leaving = 0; // he left laughing: the portrait lingers, fading, until this t
 const reducedMotion = (): boolean => window.matchMedia?.("(prefers-reduced-motion: reduce)").matches === true;
 function updatePose(): void {
   const reduce = reducedMotion();
-  portrait.set(devilPose({ now: performance.now(), since: pose.since, typing: pose.engaged || wish.trim() !== "", offerAt: pose.offerAt, laughUntil: pose.laughUntil, reducedMotion: reduce }), reduce);
+  portrait.set(devilPose({ now: performance.now(), since: pose.since, typing: pose.engaged || wish.trim() !== "", offerAt: pose.offerAt, laughUntil: pose.laughUntil, reducedMotion: reduce, dying: session.game().view().dying }), reduce);
 }
 function laughNow(): void { pose.laughUntil = performance.now() + POSE_MS.laugh; }
 function stopTyping(): void {
@@ -253,6 +253,15 @@ async function fight(): Promise<void> {
   mounted?.destroy(); mounted = null; // the next render puts the backdrop back (under the map, or the revival panel)
   if (session.game() !== g) { render(); return; }
   const r = g.fightResult(report ?? {}); // nothing reported: an unfinished fight, nothing changes
+  let death: GameEvent[] = [];
+  if (g.gameState.pending) { // died with the soul: the devil comes for it (his opener at death's door)
+    local = setLocal(local, g.view().nodeId, { busy: "devil" });
+    session.emit([...pre, ...r.events]); pre = []; // the fall shows at once, under "The devil considers…"
+    try { death = (await g.answerDevil())?.events ?? []; } finally { local = { ...local, busy: null }; }
+    if (session.game() !== g) return;
+    session.emit(death);
+    return;
+  }
   session.emit([...pre, ...r.events]);
 }
 
@@ -417,7 +426,8 @@ function renderDevil(v: View, f: Flow): void {
   const card = h("div", "play-card");
   const canAsk = v.actions.some((c) => c.cmd === "deal");
   const busy = local.busy === "devil" || v.pending;
-  card.append(h("h2", "", `The devil, ${WHERE[v.kind] ?? "here"}`));
+  card.append(h("h2", "", v.dying ? "Death's door" : `The devil, ${WHERE[v.kind] ?? "here"}`));
+  if (v.dying) card.append(h("p", "lead", "You fall. Your soul is still yours, and he wants it: sell it and live, or refuse and die."));
   const strike = lastStrike(log);
   if (strike) card.append(h("p", "strike", `The devil strikes! ${strike.dialogue}`));
   const line = busy ? "The devil considers…" : v.offer ? `“${v.offer.dialogue}”` : canAsk ? "“Well? Name your wish.”" : v.questionsLeft <= 0 ? "“I have heard enough from you this run.”" : "“We are done here.”";
@@ -451,8 +461,9 @@ function renderDevil(v: View, f: Flow): void {
     card.append(form);
   }
   const row = h("div", "row");
-  if (v.offer && !busy) row.append(button("Accept", () => void send({ cmd: "accept" })), button("Refuse", () => void send({ cmd: "refuse" }), "quiet"));
-  if (!v.offer && !busy) row.append(button("Walk away", () => patch(CLOSE_DEVIL), "quiet"));
+  if (v.offer && !busy && v.dying) row.append(button("Accept", () => void send({ cmd: "accept" }), "", "Sell your soul, live"), button("Refuse", () => void send({ cmd: "refuse" }), "quiet", "Die"));
+  else if (v.offer && !busy) row.append(button("Accept", () => void send({ cmd: "accept" })), button("Refuse", () => void send({ cmd: "refuse" }), "quiet"));
+  if (!v.offer && !busy && !v.dying) row.append(button("Walk away", () => patch(CLOSE_DEVIL), "quiet"));
   card.append(row);
   devil.replaceChildren(portrait.el, card);
   updatePose();
