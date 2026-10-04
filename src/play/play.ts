@@ -5,14 +5,14 @@
  * goes through the one shared `Session`; what is on screen is derived from `flow(view, local)` (flow.ts) on each render.
  */
 import "./play.css";
-import { HttpDevil, ONE_CHOICE, describe, execute, setDevil, type Command, type GameEvent, type View } from "../game";
+import { HttpDevil, ONE_CHOICE, execute, setDevil, type Command, type GameEvent, type View } from "../game";
 import { createSession } from "../game/session";
 import { runForestFight } from "../fight";
 import { mountHud } from "../hud/hud";
 import { hudModel } from "../hud/model";
 import { mountMap, type MapHandle } from "../mapscene";
 import { paintIcon, type IconKey } from "../mapscene/icons";
-import { effectChips, curseText, lastStrike, outcomeEvents, questionsText } from "../ui/logic";
+import { effectChips, curseText, eventText, kindLookup, lastStrike, outcomeEvents, questionsText, rewriteText } from "../ui/logic";
 import { mountScene, sceneById, type SceneHandle, type SceneZone } from "../world";
 import { shopPrompt } from "../world/shopZone";
 import { CLOSE_DEVIL, LOCAL, OPEN_DEVIL, arrived, flow, setLocal, wantsOpener, type Flow, type Local } from "./flow";
@@ -98,7 +98,8 @@ function patch(p: Partial<Local>): void { local = setLocal(local, session.game()
 function say(events: GameEvent[]): void {
   // The devil's own words are in his overlay; the toast carries everything else (and a lone rejection).
   const shown = outcomeEvents(events).filter((e) => e.type !== "deal_offered" && e.type !== "devil_struck" && (e.type !== "rejected" || events.length === 1));
-  const text = shown.map(describe).filter(Boolean).join(" ");
+  const kindOf = kindLookup(session.game().view().map);
+  const text = shown.map((e) => eventText(e, kindOf)).filter(Boolean).join(" ");
   if (!text) return;
   toast.textContent = text;
   toast.hidden = false;
@@ -280,7 +281,7 @@ function renderDevil(v: View, f: Flow): void {
     const chips = h("div", "chips");
     for (const c of effectChips(v.offer.effects)) chips.append(h("span", `chip ${c.tone}`, c.text));
     if (v.offer.curse) chips.append(h("span", "chip bad", `Curse, ${curseText(v.offer.curse)}`));
-    if (v.offer.rewrite) chips.append(h("span", "chip bad", `Rewrites ${v.offer.rewrite.nodeId} into a ${v.offer.rewrite.to}`));
+    if (v.offer.rewrite) chips.append(h("span", "chip bad", `Rewrites the road: ${rewriteText(v.offer.rewrite, kindLookup(v.map))}`));
     card.append(chips);
   }
   card.append(h("p", "count", `${questionsText(v.questionsLeft)} · asks left here: ${v.asksLeft}`));

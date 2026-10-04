@@ -11,6 +11,7 @@ import { mountDag } from "./dag";
 import {
   chooseCards, curseText, dagModel, DEVIL_END_TEXT, devilPhase, effectChips, fightLabel, askBlockReason, haggleText, lockReason, STRIKE_HEAD, questionsText, PANEL_TITLE, panelKinds, shopItems,
   type Actions, type ChooseCard, type DealEnd, type DevilStrike, type FireChoice, type PanelKind, type ShopItem,
+  kindLookup, rewriteText,
 } from "./logic";
 
 export interface Choices { render(v: View, A: Actions, busy: boolean, end: DealEnd, fire?: FireChoice, strike?: DevilStrike | null): void }
@@ -65,7 +66,7 @@ export function mountChoices(el: HTMLElement, send: (c: Command) => void, fight?
       if (eff.length) for (const c of eff) gives.append(chip(c.text, c.tone)); else gives.append(chip(fmtDeltas(d.effects), "none"));
       const card = h("div", { class: "offer-card" }, h("h4", { text: "The devil's offer" }), h("blockquote", { text: `“${d.dialogue}”` }), gives);
       if (d.curse) card.append(h("p", { class: "callout ev-curse", text: `Curse: ${curseText(d.curse)}` }));
-      if (d.rewrite) card.append(h("p", { class: "callout ev-rewrite", text: `Rewrites the map: ${d.rewrite.nodeId} becomes ${d.rewrite.to}` }));
+      if (d.rewrite) card.append(h("p", { class: "callout ev-rewrite", text: `Rewrites the map: ${rewriteText(d.rewrite, kindLookup(o.map))}` }));
       card.append(h("div", { class: "row" }, btn("Accept", { cmd: "accept" }, A.locked, "choice primary accept"), btn("Refuse", { cmd: "refuse" }, A.locked, "choice primary refuse")));
       kids.push(card);
     }

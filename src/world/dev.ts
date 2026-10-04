@@ -4,7 +4,8 @@
 //        &seed=<run seed>&gold=<n> (lab only: start the run with n gold, to try every stall)
 // It also runs a real engine game (createGame with the StubDevil) under the HUD: shop zones show a buy prompt
 // (shopZone.ts), and every command updates the HUD. The map is not wired: exits only say so.
-import { StubDevil, createGame, describe, restoreGame, type Command, type Game } from "../game";
+import { StubDevil, createGame, restoreGame, type Command, type Game } from "../game";
+import { eventText } from "../ui/logic";
 import { mountHud } from "../hud/hud";
 import { hudModel } from "../hud/model";
 import { SCENES, mountScene, parseSceneDef, type SceneDef, type SceneHandle, type SceneZone, type WorldDebug } from "./index";
@@ -136,7 +137,7 @@ function leaveZone(z: SceneZone): void {
 /** Send one engine command, show its result text, and update the HUD and the prompt. */
 function send(cmd: Command): void {
   const r = game.step(cmd);
-  state.result = r.events.map(describe).filter(Boolean).join(" ");
+  state.result = r.events.map((e) => eventText(e)).filter(Boolean).join(" ");
   refreshHud();
   renderPrompt();
   if (shop.hidden && state.result) event.textContent = state.result;

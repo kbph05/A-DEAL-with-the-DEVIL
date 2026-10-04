@@ -277,18 +277,51 @@ const GO_TEXT: Record<Kind, string> = {
   fight: "You press on towards a fight.", boss: "You face the way down, and what guards it.", final: "You reach the final door.",
 };
 
+/** "a fight", "a campfire": what a node kind is called in a sentence. */
+const KIND_A: Record<Kind, string> = { campfire: "a campfire", village: "a village", well: "a well", deal: "a devil's table", fight: "a fight", boss: "a boss", final: "the final door" };
+export const kindA = (k: Kind): string => KIND_A[k] ?? "a stop";
+
+/** Looks up what a node id is on the current act's map (so wording can say "a fight" instead of "a0n3"). */
+export function kindLookup(map: MapView): (id: string) => Kind | undefined {
+  const nodes = nodeIndex(map);
+  return (id) => nodes.get(id)?.kind;
+}
+
 /**
- * What the Outcome and History panels say about an event. `describe()` is console text (it mentions commands such as
- * accept() and node ids); the UI words the few events where that leaks, and falls back to `describe()` for the rest.
+ * A devil's rewrite in words, with no node id: "a fight ahead becomes a campfire". `kindOf` (see `kindLookup`) says what
+ * the node is now; without it the text says "a stop ahead".
  */
-export function eventText(e: GameEvent): string {
+export function rewriteText(r: { nodeId: string; to: Kind }, kindOf?: (id: string) => Kind | undefined): string {
+  const from = kindOf?.(r.nodeId);
+  return `${from ? kindA(from) : "a stop"} ahead becomes ${kindA(r.to)}`;
+}
+
+/**
+ * An engine rejection in words: drops the console hints ("fight()", "accept() or refuse()", "send fight_result") and ends
+ * with a full stop. "the devil is waiting for your answer: accept() or refuse()" becomes "the devil is waiting for your answer."
+ */
+export function rejectedText(reason: string): string {
+  if (/^no exit\b/.test(reason)) return "That way is not open.";
+  const clean = reason
+    .replace(/[;:]?\s*\b\w+\(\)(?:\s+or\s+\w+\(\))*(?:\s+first)?/g, "")
+    .replace(/[;:]\s*(?:send fight_result|fight with realtime first)/g, "")
+    .trim().replace(/[.;:,]+$/, "");
+  return `${clean || "That is not possible right now"}.`;
+}
+
+/**
+ * What the Outcome and History panels, and the play page's toast, say about an event. `describe()` is console text (it
+ * mentions commands such as accept() and node ids); the UI words the events where that leaks, and falls back to
+ * `describe()` for the rest. `kindOf` (see `kindLookup`) lets a devil's rewrite say what the node is. Never shows an id.
+ */
+export function eventText(e: GameEvent, kindOf?: (id: string) => Kind | undefined): string {
   switch (e.type) {
     case "moved": return GO_TEXT[e.kind];
     case "deal_offered": {
       const d = e.deal;
       return [`The devil: "${d.dialogue}"`, `  He gives: ${deltaText(d.effects)}`,
         ...(d.curse ? [`  The price, a curse: ${curseText(d.curse)}`] : []),
-        ...(d.rewrite ? [`  He will change the road ahead: ${d.rewrite.nodeId} becomes a ${d.rewrite.to}`] : []),
+        ...(d.rewrite ? [`  He will change the road ahead: ${rewriteText(d.rewrite, kindOf)}`] : []),
         "  Accept or refuse?"].join("\n");
     }
     case "devil_struck": return [`The devil strikes: "${e.dialogue}"`, `  You take ${deltaText(e.effects)}`].join("\n");
@@ -296,6 +329,10 @@ export function eventText(e: GameEvent): string {
     case "curse_added": return `A curse settles on you: ${curseText(e.curse)}.`;
     case "curse_fired": return `The curse fires (${curseText({ trigger: e.trigger, effect: e.effect })}): ${deltaText(e.changes)}.`;
     case "bought": return `Bought ${e.item} for ${e.cost}g: ${deltaText(e.changes)}.`;
+    case "node_rewritten": return `The devil turned ${kindA(e.change.from)} ahead into ${kindA(e.change.to)}${e.change.polarityFlip ? " (good turned bad, or the reverse)" : ""}.`;
+    case "rewrite_failed": return "The devil tried to change the road ahead, but it would not bend.";
+    case "rejected": return rejectedText(e.reason);
+    case "enemy_appeared": return `${e.enemy.boss ? "A boss bars the way" : "An enemy appears"}: ${e.enemy.name} (${e.enemy.hp} HP).`;
     default: return describe(e);
   }
 }

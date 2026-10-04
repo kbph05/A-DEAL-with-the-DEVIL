@@ -3,7 +3,7 @@ import type { MapView, Observation } from "../game";
 import assert from "node:assert/strict";
 import { createGame, describe } from "../game";
 import type { Command, GameEvent } from "../game";
-import { availableActions, blurbOf, chooseCards, fireChoice, type FireChoice, dealEnd, devilPhase, askBlockReason, haggleText, questionsText, panelKinds, shopItems, buyLabel, curseText, effectChips, eventClass, afterKinds, dagModel, exitNumber, fightLabel, lockReason, moveLock, nodeState, nodeTitle, eventText, outcomeEvents, pct, STAIRS_ID, topId } from "./logic";
+import { availableActions, blurbOf, chooseCards, fireChoice, type FireChoice, dealEnd, devilPhase, askBlockReason, haggleText, questionsText, panelKinds, shopItems, buyLabel, curseText, effectChips, eventClass, afterKinds, dagModel, exitNumber, fightLabel, lockReason, moveLock, nodeState, nodeTitle, eventText, kindLookup, rejectedText, rewriteText, outcomeEvents, pct, STAIRS_ID, topId } from "./logic";
 import { diffDeal } from "./dealDiff";
 import { lastStrike, STRIKE_HEAD } from "./logic";
 import { sanitizeDeal } from "../game/deal";
@@ -477,4 +477,38 @@ test("chooseCards: at a well, asking the devil closes the blessing, with the rea
   const [c] = chooseCards({ ...o, asksLeft: MAX_ASKS - 1 }, { ...A, buy: [] });
   assert.equal(c.state, "closed");
   assert.match(c.note!, /chose the devil/);
+});
+
+test("eventText: no node ids in any event, whatever the engine's console text says", () => {
+  const events: GameEvent[] = [
+    { type: "moved", from: "a0n1", to: "a0n6", kind: "deal", act: 0 },
+    { type: "node_rewritten", change: { nodeId: "a0n6", from: "fight", to: "campfire", polarityFlip: true } },
+    { type: "rewrite_failed", nodeId: "a0n6", reason: "unknown node a0n6" },
+    { type: "deal_offered", deal: { dialogue: "A bargain.", effects: { gold: 5 }, rewrite: { nodeId: "a0n6", to: "fight" } } },
+    { type: "rejected", reason: "drowned monk blocks the way; fight()" },
+    { type: "rejected", reason: "no exit 3; choose 1..2" },
+    { type: "enemy_appeared", enemy: { name: "ash hound", hp: 9, maxHp: 9, boss: false } },
+  ];
+  for (const e of events) assert.ok(!/\ba\d+n\d+\b|\(\)|->|fight_result/.test(eventText(e)), `${e.type}: ${eventText(e)}`);
+  assert.equal(eventText(events[0]), "You come to the devil's table.");
+  assert.equal(eventText(events[1]), "The devil turned a fight ahead into a campfire (good turned bad, or the reverse).");
+  assert.match(eventText(events[3]), /a stop ahead becomes a fight/);
+});
+
+test("rewriteText says what the node is when the map is known, and never its id", () => {
+  const m = fixture(); // b is a fight
+  assert.equal(rewriteText({ nodeId: "b", to: "campfire" }, kindLookup(m)), "a fight ahead becomes a campfire");
+  assert.equal(rewriteText({ nodeId: "nope", to: "well" }, kindLookup(m)), "a stop ahead becomes a well");
+  assert.equal(rewriteText({ nodeId: "b", to: "well" }), "a stop ahead becomes a well");
+  assert.match(eventText({ type: "deal_offered", deal: { dialogue: "x", effects: {}, rewrite: { nodeId: "b", to: "campfire" } } }, kindLookup(m)), /a fight ahead becomes a campfire/);
+});
+
+test("rejectedText drops console hints and ends with a full stop", () => {
+  assert.equal(rejectedText("the devil is waiting for your answer: accept() or refuse()"), "the devil is waiting for your answer.");
+  assert.equal(rejectedText("rat blocks the way; fight()"), "rat blocks the way.");
+  assert.equal(rejectedText("nobody asked the devil anything; deal() first"), "nobody asked the devil anything.");
+  assert.equal(rejectedText("the fight is still on; send fight_result"), "the fight is still on.");
+  assert.equal(rejectedText("no exit 3; choose 1..2"), "That way is not open.");
+  assert.equal(rejectedText("the embers are spent"), "the embers are spent.");
+  assert.equal(rejectedText("fight()"), "That is not possible right now.");
 });
