@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { mulberry32 } from "../map/rng";
 import {
   ARENA, PLAYER, STEP_MS, burstDamage, canBeHit, clampStick, clampToArena, contactDamage, d3, dist, enemyParams, enemyTier,
-  fightLayout, inSwingArc, isReady, knockback, lungeDamage, moveDir, newBrain, nextEnemyMode, norm, playerHitDamage,
+  fightLayout, relayout, inSwingArc, isReady, knockback, lungeDamage, moveDir, newBrain, nextEnemyMode, norm, playerHitDamage,
   pushOutOfRect, sanitizeInput, stickDir, sub, tick, tickBrain, type EnemyBrain, type FightInput,
 } from "./logic";
 import { FightSim, NO_CONTROLS, type FightControls } from "./sim";
@@ -143,6 +143,19 @@ test("layout fits landscape and portrait screens, controls clear of each other",
     for (const c of cs) assert.ok(c.x - c.r >= 0 && c.x + c.r <= L.width && c.y + c.r <= L.height, `control on screen ${w}x${h}`);
     for (let i = 0; i < cs.length; i++) for (let j = i + 1; j < cs.length; j++) assert.ok(dist(cs[i], cs[j]) > cs[i].r + cs[j].r);
   }
+});
+
+test("relayout: a turned phone gets the other layout, a same-shaped box gets none", () => {
+  const portrait = fightLayout(390, 700);
+  assert.equal(relayout(portrait, 390, 700), null);
+  assert.equal(relayout(portrait, 392, 704), null, "small jitter keeps the layout");
+  const turned = relayout(portrait, 788, 320);
+  assert.ok(turned && !turned.portrait, "portrait -> landscape");
+  assert.deepEqual(turned, fightLayout(788, 320));
+  const back = relayout(turned, 390, 700);
+  assert.ok(back && back.portrait && back.width === portrait.width && back.height === portrait.height, "and back again");
+  assert.equal(relayout(portrait, 0, 0), null, "a collapsed box changes nothing");
+  assert.equal(relayout(portrait, 390, 0), null);
 });
 
 test("sim: a swing hits for attack + d3 and knocks the enemy back", () => {

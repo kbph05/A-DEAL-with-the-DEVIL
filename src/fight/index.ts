@@ -13,7 +13,7 @@ import { encounterFor, type Encounter, type ForestRequest } from "./encounters";
 import { forestWorld } from "./forest";
 import { FightScene } from "./FightScene";
 import { ForestScene, type ForestView } from "./ForestScene";
-import { fightLayout, sanitizeInput, type FightInput, type FightResult } from "./logic";
+import { fightLayout, relayout, sanitizeInput, type FightInput, type FightResult } from "./logic";
 import type { FightSim } from "./sim";
 
 export type { FightInput, FightResult, FightPlayerInput, FightEnemyInput } from "./logic";
@@ -34,7 +34,7 @@ export interface RunFightOptions {
 export function runFight(parent: HTMLElement, input: FightInput, options: RunFightOptions = {}): Promise<FightResult> {
   const clean = sanitizeInput(input);
   const box = parent.getBoundingClientRect();
-  const layout = fightLayout(box.width || window.innerWidth, box.height || window.innerHeight);
+  let layout = fightLayout(box.width || window.innerWidth, box.height || window.innerHeight);
   const touch = options.touch ?? (navigator.maxTouchPoints > 0 || "ontouchstart" in window);
   return new Promise((resolve) => {
     let ended = false;
@@ -47,6 +47,7 @@ export function runFight(parent: HTMLElement, input: FightInput, options: RunFig
         setTimeout(() => {
           let done = false;
           const finish = () => { if (!done) { done = true; resolve(result); } };
+          stopWatching();
           game.events.once(Phaser.Core.Events.DESTROY, finish);
           game.destroy(true);
           setTimeout(finish, 1000); // the loop may be paused (hidden tab): don't hang on the event
@@ -65,6 +66,22 @@ export function runFight(parent: HTMLElement, input: FightInput, options: RunFig
       scale: { mode: Phaser.Scale.FIT, autoCenter: Phaser.Scale.CENTER_BOTH, width: layout.width, height: layout.height },
       scene: [scene],
     });
+    // Turning a phone (or resizing the window) changes the stage's shape: pick a new layout and move the controls, so the
+    // arena does not shrink to a strip. The fight itself keeps running.
+    let pending = 0;
+    const watch = new ResizeObserver(() => {
+      cancelAnimationFrame(pending);
+      pending = requestAnimationFrame(() => {
+        const b = parent.getBoundingClientRect();
+        const next = relayout(layout, b.width, b.height);
+        if (!next) return;
+        layout = next;
+        scene.relayout(next);
+        game.scale.setGameSize(next.width, next.height);
+      });
+    });
+    watch.observe(parent);
+    const stopWatching = () => { cancelAnimationFrame(pending); watch.disconnect(); };
   });
 }
 
@@ -109,6 +126,7 @@ export function runForestFight(parent: HTMLElement, request: ForestRequest, opti
         setTimeout(() => {
           let done = false;
           const finish = () => { if (!done) { done = true; resolve(result); } };
+          stopWatching();
           game.events.once(Phaser.Core.Events.DESTROY, finish);
           game.destroy(true);
           setTimeout(finish, 1000);
@@ -128,5 +146,17 @@ export function runForestFight(parent: HTMLElement, request: ForestRequest, opti
       scale: { mode: Phaser.Scale.RESIZE, width: Math.round(box.width || window.innerWidth), height: Math.round(box.height || window.innerHeight) },
       scene: [scene],
     });
+    // RESIZE mode follows window resizes and rotation by itself; this also catches the container changing size on
+    // its own (the page around it reflowing). The scene re-lays out on the scale manager's resize event.
+    let pending = 0;
+    const watch = new ResizeObserver(() => {
+      cancelAnimationFrame(pending);
+      pending = requestAnimationFrame(() => {
+        const b = parent.getBoundingClientRect();
+        if (b.width > 0 && b.height > 0 && (Math.round(b.width) !== game.scale.width || Math.round(b.height) !== game.scale.height)) game.scale.refresh();
+      });
+    });
+    watch.observe(parent);
+    const stopWatching = () => { cancelAnimationFrame(pending); watch.disconnect(); };
   });
 }

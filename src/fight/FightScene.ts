@@ -50,7 +50,6 @@ export class FightScene extends Phaser.Scene {
   }
 
   create(): void {
-    const L = this.cfg.layout;
     this.sim = new FightSim(this.cfg.input);
     this.cfg.onDebug?.(this.sim);
     this.g = this.add.graphics();
@@ -68,17 +67,38 @@ export class FightScene extends Phaser.Scene {
 
     const font = (size: number, color = COL.text) => ({ fontFamily: "system-ui, sans-serif", fontSize: `${size}px`, color });
     const e = this.sim.enemy;
+    const t = (text: string, f: ReturnType<typeof font>) => this.add.text(0, 0, text, f).setDepth(2);
     this.texts = {
-      hp: this.add.text(L.arena.x + 4, 14, "", font(20)).setDepth(2),
-      foe: this.add.text(L.arena.x + ARENA - 4, 14, "", font(20)).setOrigin(1, 0).setDepth(2),
-      clock: this.add.text(L.arena.x + ARENA - 4, 40, "", font(18, COL.dim)).setOrigin(1, 0).setDepth(2),
-      help: this.add.text(L.width / 2, L.arena.y + ARENA + 6, "Move: WASD / arrows   Attack: Space / click   Dash: Shift", font(16, COL.dim)).setOrigin(0.5, 0).setDepth(2),
-      name: this.add.text(0, 0, e.name, font(e.boss ? 18 : 14, COL.dim)).setOrigin(0.5, 1).setDepth(2),
-      banner: this.add.text(L.arena.x + ARENA / 2, L.arena.y + ARENA / 2, "", { ...font(64), fontStyle: "bold", stroke: "#000", strokeThickness: 8 }).setOrigin(0.5).setDepth(3).setVisible(false),
-      attack: this.add.text(L.attackBtn.x, L.attackBtn.y, "Attack", font(24)).setOrigin(0.5).setDepth(2),
-      dash: this.add.text(L.dashBtn.x, L.dashBtn.y, "Dash", font(20)).setOrigin(0.5).setDepth(2),
+      hp: t("", font(20)),
+      foe: t("", font(20)).setOrigin(1, 0),
+      clock: t("", font(18, COL.dim)).setOrigin(1, 0),
+      help: t("Move: WASD / arrows   Attack: Space / click   Dash: Shift", font(16, COL.dim)).setOrigin(0.5, 0),
+      name: t(e.name, font(e.boss ? 18 : 14, COL.dim)).setOrigin(0.5, 1),
+      banner: this.add.text(0, 0, "", { ...font(64), fontStyle: "bold", stroke: "#000", strokeThickness: 8 }).setOrigin(0.5).setDepth(3).setVisible(false),
+      attack: t("Attack", font(24)).setOrigin(0.5),
+      dash: t("Dash", font(20)).setOrigin(0.5),
     };
+    this.placeTexts();
     this.render();
+  }
+
+  /** The screen changed shape (phone turned): move everything that sits at a fixed screen position. The fight itself carries on. */
+  relayout(layout: FightLayout): void {
+    this.cfg.layout = layout;
+    this.stick = new FloatingStick(layout.stick, layout);
+    this.attackPtr = null;
+    if (this.texts) this.placeTexts();
+  }
+
+  private placeTexts(): void {
+    const L = this.cfg.layout, x = L.arena.x, T = this.texts;
+    T.hp.setPosition(x + 4, 14);
+    T.foe.setPosition(x + ARENA - 4, 14);
+    T.clock.setPosition(x + ARENA - 4, 40);
+    T.help.setPosition(L.width / 2, L.arena.y + ARENA + 6);
+    T.banner.setPosition(x + ARENA / 2, L.arena.y + ARENA / 2);
+    T.attack.setPosition(L.attackBtn.x, L.attackBtn.y);
+    T.dash.setPosition(L.dashBtn.x, L.dashBtn.y);
   }
 
   update(_time: number, delta: number): void {

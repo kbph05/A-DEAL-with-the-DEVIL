@@ -216,3 +216,15 @@ export function fightLayout(parentW: number, parentH: number): FightLayout {
     dashBtn: { x: width - 330, y: cy - 90, r: 58 },
   };
 }
+
+/**
+ * The layout for a parent box that changed size (a phone turned, a window resized), or null when the current one still
+ * fits (same orientation, logical size within 2%: Scale.FIT absorbs that), so the caller only rebuilds when something
+ * moved.
+ */
+export function relayout(current: FightLayout, parentW: number, parentH: number): FightLayout | null {
+  if (!(parentW > 0 && parentH > 0)) return null; // hidden or collapsed: keep what we have
+  const next = fightLayout(parentW, parentH);
+  const near = (a: number, b: number) => Math.abs(a - b) <= 0.02 * b;
+  return next.portrait === current.portrait && near(next.width, current.width) && near(next.height, current.height) ? null : next;
+}

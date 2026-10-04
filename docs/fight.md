@@ -37,6 +37,7 @@ Fights are a short realtime 2D brawl in a top-down room, not menu choices (Big C
 - The touch controls show when the device reports touch input. They also appear on the first touch.
 - Multi-touch works: you can hold the joystick and Attack together.
 - **Screen fit:** the game picks a logical size from the container's shape. In landscape the controls sit beside the 720×720 arena; in portrait (phones) they sit below it. Phaser `Scale.FIT` then scales the canvas to the container.
+- **Rotation and resizing:** a `ResizeObserver` on the container picks a new layout when its shape changes enough (`relayout` in `logic.ts`: the other orientation, or a logical size more than 2% off), resizes the game and moves the HUD and touch controls (`FightScene.relayout`). The fight carries on. The observer and its pending frame are cleared when the fight ends.
 
 ## Enemy AI
 
@@ -222,7 +223,7 @@ Measured with a bot that walks at the nearest enemy swinging and never dodges (2
 - **It ends** when every enemy is down (banner PATH CLEAR) or you are at 0 HP (DEFEATED). The result comes about 1.1 s later, as in the arena.
 - **Drawing:** the scene texture, then the enemies and the player sorted by their feet, then the canopy; HP bars and names sit above the canopy, so the trees never hide them. The telegraphs are the arena's: the yellow swell and lane (the lunge), an aim line (the archer), the pink ring (the boss burst), the white flash once the aim locks, a dizzy ring while an enemy recovers or is stunned. A stunned player turns blue.
 - **Controls** are the arena's (keyboard, mouse aim, the floating stick, Attack and Dash buttons) and the HUD is the same (your HP and dash bars; foes left, their HP, the clock).
-- **Screen fit and rotation:** forest mode uses Phaser's RESIZE scale mode. The canvas is the container's size, and every resize (a window, a phone rotating mid-fight) re-lays out the camera zoom and bounds, the HUD and the touch controls (`forestLayout`): about 220 world pixels across the short side in landscape, 300 in portrait, where the short side runs along the path. The arena's rotation fix is a separate patch.
+- **Screen fit and rotation:** forest mode uses Phaser's RESIZE scale mode. The canvas is the container's size, and every resize (a window, a phone rotating mid-fight) re-lays out the camera zoom and bounds, the HUD and the touch controls (`forestLayout`): about 220 world pixels across the short side in landscape, 300 in portrait, where the short side runs along the path. A `ResizeObserver` on the container also refreshes the scale manager when the container changes size without the window doing so.
 
 ### The API, and how kbph wires it
 
