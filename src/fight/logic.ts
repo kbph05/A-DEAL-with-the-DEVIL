@@ -4,6 +4,10 @@
  * world step on top of this; `FightScene.ts` only reads input and draws.
  */
 import type { Rng } from "../map/rng";
+import { norm, type Vec } from "../input/dir";
+
+// Movement input moved to src/input/dir.ts (shared with the world scene); re-exported so existing imports keep working.
+export { ZERO, clampStick, moveDir, norm, stickDir, type Vec } from "../input/dir";
 
 // ---------------------------------------------------------------------------------------------------------------
 // Public shapes
@@ -26,7 +30,6 @@ export interface FightResult {
   enemyHpLeft: number;
 }
 
-export interface Vec { x: number; y: number }
 export interface Rect { x: number; y: number; w: number; h: number }
 
 // ---------------------------------------------------------------------------------------------------------------
@@ -169,33 +172,9 @@ export function tickBrain(b: EnemyBrain, dtMs: number, gap: number, p: EnemyPara
 // ---------------------------------------------------------------------------------------------------------------
 // Vectors and geometry
 
-export const ZERO: Vec = { x: 0, y: 0 };
 export const len = (v: Vec): number => Math.hypot(v.x, v.y);
 export const sub = (a: Vec, b: Vec): Vec => ({ x: a.x - b.x, y: a.y - b.y });
 export const dist = (a: Vec, b: Vec): number => Math.hypot(a.x - b.x, a.y - b.y);
-export function norm(v: Vec): Vec {
-  const l = len(v);
-  return l > 1e-9 ? { x: v.x / l, y: v.y / l } : { x: 0, y: 0 };
-}
-
-/** Keyboard to an 8-way unit vector (opposite keys cancel; diagonals are normalized, so not faster). */
-export function moveDir(k: { up: boolean; down: boolean; left: boolean; right: boolean }): Vec {
-  return norm({ x: (k.right ? 1 : 0) - (k.left ? 1 : 0), y: (k.down ? 1 : 0) - (k.up ? 1 : 0) });
-}
-
-/** Joystick knob offset to an 8-way unit vector: zero inside the dead zone, else snapped to the nearest 45 degrees. */
-export function stickDir(dx: number, dy: number, radius: number, deadZone = 0.25): Vec {
-  if (Math.hypot(dx, dy) < radius * deadZone) return { x: 0, y: 0 };
-  const a = Math.round(Math.atan2(dy, dx) / (Math.PI / 4)) * (Math.PI / 4);
-  const r = (n: number) => (Math.abs(n) < 1e-9 ? 0 : n);
-  return { x: r(Math.cos(a)), y: r(Math.sin(a)) };
-}
-
-/** Clamp a knob offset to the stick radius. */
-export function clampStick(dx: number, dy: number, radius: number): Vec {
-  const l = Math.hypot(dx, dy);
-  return l <= radius ? { x: dx, y: dy } : { x: (dx / l) * radius, y: (dy / l) * radius };
-}
 
 /** Does a swing from `origin` facing `facing` (unit) reach a circle at `target`? */
 export function inSwingArc(origin: Vec, facing: Vec, reach: number, halfAngle: number, target: Vec, targetRadius: number): boolean {

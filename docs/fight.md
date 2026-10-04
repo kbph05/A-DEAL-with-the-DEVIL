@@ -164,5 +164,5 @@ interface FightResult {
 4. **Fleeing and timeouts.** Should there be a time limit or an escape? The engine still forbids leaving a live enemy. It already accepts an "unfinished" result: partial damage sticks and the enemy stays. A flee button or a timeout could report that.
 5. **Enemy variety.** Today all enemies of an act share one behaviour. Should the roster names get distinct patterns (rat: fast and weak; hollow knight: slow lunges and a shield)? And should each boss get its own second pattern instead of the shared radial burst?
 6. **Arena.** It is a 720×720 room with one of four pillar layouts picked from the seed (bosses get open or four pillars). Tiled maps or OpenGameArt art later?
-7. **Joystick.** It is hand-written (about 30 lines in `FightScene`) instead of rexrainbow's VirtualJoystick, to avoid a dependency. Fine to keep?
+7. **Joystick.** It is hand-written (`FloatingStick` in `src/input/stick.ts`, shared with the world scene; keyboard and stick directions are in `src/input/dir.ts`) instead of rexrainbow's VirtualJoystick, to avoid a dependency. Fine to keep?
 8. **Quick fight in the final game.** Auto-resolve (the old round-based fight) is offered in test builds only, and as a fallback when the fight fails to load. Should players get it too, for example as an accessibility option?

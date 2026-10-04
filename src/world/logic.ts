@@ -1,0 +1,80 @@
+/**
+ * World scene rules that don't need Phaser: walking speed and smoothing, facing, the screen layout. Tested in node.
+ * Distances are world pixels (a tile is TILE_SIZE = 16), times are seconds.
+ */
+import { norm, type Vec } from "../input/dir";
+import { TILE_SIZE } from "./tiles";
+
+export const WALK = {
+  /** Top speed: 5 tiles a second. */
+  speed: 5 * TILE_SIZE,
+  /** Speeding up and slowing down (px/s²): full speed in about 0.1 s, a stop in about 0.07 s. */
+  accel: 800,
+  decel: 1200,
+  /** Below this speed (px/s) the walk animation stops. */
+  animMin: 8,
+};
+
+/** The player's collision box, world pixels, relative to the 16×16 placeholder sprite's top-left: the feet. */
+export const FEET = { w: 10, h: 6, x: 3, y: 10 };
+
+/**
+ * Move velocity `v` toward the target `dir * speed` by at most `accel * dt` (or `decel * dt` when letting go):
+ * smooth starts and stops, no overshoot. `dir` is normalised first, so diagonals are not faster.
+ */
+export function stepVelocity(v: Vec, dir: Vec, dt: number, p = WALK): Vec {
+  const d = norm(dir);
+  const target = { x: d.x * p.speed, y: d.y * p.speed };
+  const idle = d.x === 0 && d.y === 0;
+  const max = (idle ? p.decel : p.accel) * Math.max(0, dt);
+  const dx = target.x - v.x;
+  const dy = target.y - v.y;
+  const l = Math.hypot(dx, dy);
+  if (l <= max || l < 1e-9) return target;
+  return { x: v.x + (dx / l) * max, y: v.y + (dy / l) * max };
+}
+
+export type Facing = "down" | "up" | "left" | "right";
+export const FACINGS: readonly Facing[] = ["down", "left", "right", "up"];
+
+/**
+ * Four-way facing from a direction. No movement keeps the old facing; on an exact diagonal the old facing is kept
+ * if it is one of the two parts (no flicker while walking diagonally), else the horizontal one wins.
+ */
+export function facingOf(dir: Vec, prev: Facing): Facing {
+  const ax = Math.abs(dir.x);
+  const ay = Math.abs(dir.y);
+  if (ax < 1e-6 && ay < 1e-6) return prev;
+  const h: Facing = dir.x < 0 ? "left" : "right";
+  const v: Facing = dir.y < 0 ? "up" : "down";
+  if (Math.abs(ax - ay) < 1e-6) return prev === h || prev === v ? prev : h;
+  return ax > ay ? h : v;
+}
+
+// ---------------------------------------------------------------------------------------------------------------
+// Screen layout
+
+export interface WorldLayout {
+  /** Logical canvas size (Scale.FIT scales it to the parent). */
+  width: number;
+  height: number;
+  portrait: boolean;
+  /** Integer camera zoom: one world pixel is `zoom` canvas pixels (crisp pixel art). */
+  zoom: number;
+  /** Where the touch stick rests (canvas pixels). */
+  stick: { x: number; y: number; r: number };
+}
+
+const SHORT = 540;
+
+/** Logical size with the parent's aspect (within limits) so FIT wastes little room; zoom 3 shows ~11 tiles across the short side. */
+export function worldLayout(parentW: number, parentH: number): WorldLayout {
+  const aspect = parentW > 0 && parentH > 0 ? parentW / parentH : 16 / 10;
+  const zoom = 3;
+  if (aspect >= 1) {
+    const width = Math.round(Math.min(1280, Math.max(SHORT, SHORT * aspect)));
+    return { width, height: SHORT, portrait: false, zoom, stick: { x: 130, y: SHORT - 130, r: 80 } };
+  }
+  const height = Math.round(Math.min(1280, Math.max(SHORT, SHORT / aspect)));
+  return { width: SHORT, height, portrait: true, zoom, stick: { x: SHORT / 2, y: height - 170, r: 95 } };
+}

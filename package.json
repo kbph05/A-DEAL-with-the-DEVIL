@@ -5,10 +5,13 @@
   "type": "module",
   "scripts": {
     "dev": "vite --mode test",
+    "game": "vite --mode test --open /world.html",
     "build": "tsc && vite build",
     "build:test": "tsc && vite build --mode test --outDir dist-test",
     "preview": "vite preview",
     "preview:test": "vite preview --outDir dist-test",
+    "build:game": "npm run build:test",
+    "preview:game": "vite preview --outDir dist-test --open /world.html",
     "mock:devil": "tsx scripts/mock-devil-server.ts",
     "test": "tsx --test src/**/*.test.ts",
     "play": "tsx src/game/repl.ts",

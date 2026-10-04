@@ -1,5 +1,6 @@
 import Phaser from "phaser";
-import { ARENA, PLAYER, STEP_MS, clampStick, moveDir, stickDir, type Circle, type FightLayout, type FightResult, type Vec } from "./logic";
+import { FloatingStick } from "../input/stick";
+import { ARENA, PLAYER, STEP_MS, moveDir, type Circle, type FightLayout, type FightResult, type Vec } from "./logic";
 import { FightSim, type FightControls } from "./sim";
 import type { FightInput } from "./logic";
 
@@ -37,9 +38,7 @@ export class FightScene extends Phaser.Scene {
   private dashQueued = false;
   private mouseDown = false;
   private mouseAim: Vec | null = null;
-  private stickPtr: number | null = null;
-  private stickBase: Vec;
-  private knob: Vec = { x: 0, y: 0 };
+  private stick: FloatingStick;
   private attackPtr: number | null = null;
   private texts!: { hp: Phaser.GameObjects.Text; foe: Phaser.GameObjects.Text; clock: Phaser.GameObjects.Text; help: Phaser.GameObjects.Text; name: Phaser.GameObjects.Text; banner: Phaser.GameObjects.Text; attack: Phaser.GameObjects.Text; dash: Phaser.GameObjects.Text };
 
@@ -47,7 +46,7 @@ export class FightScene extends Phaser.Scene {
     super({ key: "fight" });
     this.cfg = cfg;
     this.touchUI = cfg.touch;
-    this.stickBase = { x: cfg.layout.stick.x, y: cfg.layout.stick.y };
+    this.stick = new FloatingStick(cfg.layout.stick, cfg.layout);
   }
 
   create(): void {
@@ -112,8 +111,8 @@ export class FightScene extends Phaser.Scene {
       up: k.W.isDown || k.UP.isDown, down: k.S.isDown || k.DOWN.isDown,
       left: k.A.isDown || k.LEFT.isDown, right: k.D.isDown || k.RIGHT.isDown,
     });
-    if (this.stickPtr !== null) {
-      const s = stickDir(this.knob.x, this.knob.y, this.cfg.layout.stick.r);
+    if (this.stick.active) {
+      const s = this.stick.dir();
       if (s.x !== 0 || s.y !== 0) move = s;
     }
     const mouse = this.mouseDown || (this.attackQueued && this.mouseAim !== null);
@@ -135,13 +134,8 @@ export class FightScene extends Phaser.Scene {
       this.touchUI = true;
       if (inCircle(p, L.attackBtn, 1.2)) { this.attackPtr = p.id; this.attackQueued = true; return; }
       if (inCircle(p, L.dashBtn, 1.2)) { this.dashQueued = true; return; }
-      if (p.x < L.width / 2 && this.stickPtr === null) {
-        // Floating stick: it re-centres where the thumb lands (kept on screen) and springs back on release.
-        const r = L.stick.r;
-        this.stickBase = { x: Math.min(L.width - r, Math.max(r, p.x)), y: Math.min(L.height - r, Math.max(r, p.y)) };
-        this.knob = clampStick(p.x - this.stickBase.x, p.y - this.stickBase.y, r);
-        this.stickPtr = p.id;
-      }
+      // Floating stick: it re-centres where the thumb lands (kept on screen) and springs back on release.
+      if (p.x < L.width / 2) this.stick.grab(p);
       return;
     }
     this.mouseAim = this.toArena(p);
@@ -149,16 +143,12 @@ export class FightScene extends Phaser.Scene {
   }
 
   private pointerMove(p: Phaser.Input.Pointer): void {
-    if (p.id === this.stickPtr) this.knob = clampStick(p.x - this.stickBase.x, p.y - this.stickBase.y, this.cfg.layout.stick.r);
-    else if (!p.wasTouch) this.mouseAim = this.toArena(p);
+    if (this.stick.move(p)) return;
+    if (!p.wasTouch) this.mouseAim = this.toArena(p);
   }
 
   private pointerUp(p: Phaser.Input.Pointer): void {
-    if (p.id === this.stickPtr) {
-      this.stickPtr = null;
-      this.knob = { x: 0, y: 0 };
-      this.stickBase = { x: this.cfg.layout.stick.x, y: this.cfg.layout.stick.y };
-    }
+    this.stick.release(p);
     if (p.id === this.attackPtr) this.attackPtr = null;
     if (!p.wasTouch) this.mouseDown = false;
   }
@@ -254,9 +244,7 @@ export class FightScene extends Phaser.Scene {
     this.texts.attack.setVisible(this.touchUI);
     this.texts.dash.setVisible(this.touchUI);
     if (this.touchUI) {
-      const st = L.stick;
-      g.fillStyle(0xffffff, 0.08).fillCircle(this.stickBase.x, this.stickBase.y, st.r).lineStyle(3, 0xffffff, 0.35).strokeCircle(this.stickBase.x, this.stickBase.y, st.r);
-      g.fillStyle(0xffffff, this.stickPtr !== null ? 0.6 : 0.35).fillCircle(this.stickBase.x + this.knob.x, this.stickBase.y + this.knob.y, st.r * 0.42);
+      this.stick.draw(g);
       button(g, L.attackBtn, this.attackPtr !== null ? 0.45 : 0.22, 1);
       button(g, L.dashBtn, 0.22, 1 - p.dashCdMs / PLAYER.dashCdMs);
     }
