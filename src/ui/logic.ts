@@ -205,7 +205,7 @@ function permutations<T>(xs: readonly T[]): T[][] {
 
 /**
  * Left-to-right order for each layer (bottom layer first) with the fewest edge crossings — zero whenever the act's
- * graph can be drawn planar. Exact: layers are at most 4 wide (and an act has at most 8 nodes), so a pruned search over
+ * graph can be drawn planar. Exact: layers are at most 4 wide (and an act has at most 14 nodes), so a pruned search over
  * all orders is cheap. Ties keep the generator's original order (stable, deterministic). Generated acts are planar in
  * slot order by construction, so this keeps their order; it still matters for hand-made or future maps.
  */

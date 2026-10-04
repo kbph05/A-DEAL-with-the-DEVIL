@@ -10,13 +10,18 @@ export const ACTS = 3;
 export const START_KIND: Kind = "village";
 /** Lanes per layer (kbph: more branches). */
 export const MAX_WIDTH = 4;
-/** Fewest lanes in a middle layer (entry and exit layers are always 1). Raise to 2+ for maps that always branch. */
+/** Fewest lanes in a middle layer (entry and exit layers are always 1). At most 2, so a layer can still step down to the exit. */
 export const MIN_WIDTH = 1;
+/** Nodes per act, entry and exit included (kbph, 3 Oct: longer acts, more decisions). */
+export const MIN_NODES = 12;
+export const MAX_NODES = 14;
 /**
- * Chance that a pair of adjacent layers gets one cross-link between lanes, beyond the fewest edges that connect them
- * (kbph, 3 Oct: "each direction should be more of a dedication of where you're going"). At most one per layer pair.
+ * Layers per act, drawn first (seeded, uniform). Alternating acts need an even count: the entry (layer 0) is good and
+ * the exit boss sits on an odd layer. 6 layers can only make 12 nodes, as 1-2-3-3-2-1.
  */
-export const CROSS_LINK_P = 0.2;
+const LAYER_COUNTS = { alternate: [6, 8], free: [6, 7, 8] } as const;
+/** Width walks tried per act before settling for the one closest to MIN_NODES..MAX_NODES (see buildShape). */
+const WIDTH_TRIES = 256;
 const pick = <T>(rng: Rng, xs: readonly T[]): T => xs[Math.floor(rng() * xs.length)];
 const layerPolarity = (layer: number): Polarity => (layer % 2 === 0 ? "good" : "bad");
 
@@ -24,48 +29,68 @@ const layerPolarity = (layer: number): Polarity => (layer % 2 === 0 ? "good" : "
 const crosses = (e: readonly [number, number], f: readonly [number, number]): boolean => (e[0] - f[0]) * (e[1] - f[1]) < 0;
 
 /**
- * Edges (as slot pairs) joining a layer of `m` nodes to one of `n`: planar in slot order by construction. A monotone
- * staircase from (0, 0) to (m-1, n-1) gives every node a parent and a child with the fewest edges, max(m, n): parallel
- * lanes where the widths match, a split or merge where they differ (placed at random). Then, with CROSS_LINK_P, one
- * extra edge that crosses none of the others (only the corners of a diagonal step qualify).
+ * Clamp bounds for the width of layer `i` of `layerCount`: the entry and exit are 1; a middle layer is MIN_WIDTH to
+ * MAX_WIDTH but never wider than `layerCount - i`, so the widths can still narrow by one per layer to the single exit.
  */
-function linkLayers(rng: Rng, m: number, n: number): Array<[number, number]> {
-  const di = m - 1, dj = n - 1, steps: Array<"i" | "j" | "ij"> = [];
-  for (let k = Math.min(di, dj); k > 0; k--) steps.push("ij");
-  for (let k = Math.abs(di - dj); k > 0; k--) steps.push(di > dj ? "i" : "j");
-  for (let k = steps.length - 1; k > 0; k--) { const r = Math.floor(rng() * (k + 1)); [steps[k], steps[r]] = [steps[r], steps[k]]; }
-  const edges: Array<[number, number]> = [[0, 0]];
-  let [i, j] = [0, 0];
-  for (const st of steps) { if (st !== "j") i++; if (st !== "i") j++; edges.push([i, j]); }
-  if (rng() < CROSS_LINK_P) {
-    const has = (a: number, b: number) => edges.some(([x, y]) => x === a && y === b);
-    const free: Array<[number, number]> = [];
-    for (let a = 0; a < m; a++) for (let b = 0; b < n; b++)
-      if (!has(a, b) && edges.every((e) => !crosses(e, [a, b]))) free.push([a, b]);
-    if (free.length) edges.push(pick(rng, free));
+export function widthBounds(i: number, layerCount: number): [number, number] {
+  if (i === 0 || i === layerCount - 1) return [1, 1];
+  const hi = Math.min(MAX_WIDTH, layerCount - i);
+  return [Math.min(MIN_WIDTH, hi), hi];
+}
+
+/**
+ * Designer's walk (Big Chungus, 4 Oct): each layer is the previous width plus or minus 1 (a coin flip), clamped to
+ * widthBounds. So widths change by exactly 1, except where the clamp holds them (at MIN_WIDTH, at MAX_WIDTH, or at the
+ * narrowing cap), and always end on 1. With alternation (even layer count) every act has at least one such hold,
+ * because plain +-1 steps from 1 can only get back to 1 after an even number of steps.
+ */
+function walkWidths(rng: Rng, layerCount: number): number[] {
+  const widths = [1];
+  for (let i = 1; i < layerCount; i++) {
+    const [lo, hi] = widthBounds(i, layerCount);
+    widths.push(Math.max(lo, Math.min(hi, widths[i - 1] + (rng() < 0.5 ? -1 : 1))));
+  }
+  return widths;
+}
+
+/**
+ * Edges (as slot pairs) joining a layer of `m` nodes to the next one of `n`, planar in slot order by construction
+ * (designer's rule, 4 Oct). First pass: each of the `m` nodes picks one random new node, and the picks are dealt out
+ * left to right in sorted order, so the targets never decrease and no two edges cross. Second pass: each new node left
+ * without a parent, left to right, gets one, picked at random among the old nodes whose edge to it would cross none
+ * so far (there is always at least one: the old nodes on either side of the gap it sits in). The first `m` edges
+ * returned are the first pass, in slot order; the rest are the second.
+ */
+export function linkLayers(rng: Rng, m: number, n: number): Array<[number, number]> {
+  const picks = Array.from({ length: m }, () => Math.floor(rng() * n)).sort((a, b) => a - b);
+  const edges = picks.map((t, i): [number, number] => [i, t]);
+  for (let j = 0; j < n; j++) {
+    if (picks.includes(j)) continue;
+    const ok = Array.from({ length: m }, (_, a) => a).filter((a) => edges.every((e) => !crosses(e, [a, j])));
+    edges.push([pick(rng, ok), j]);
   }
   return edges;
 }
 
-/** Layered DAG: one node in the first and last layer, 1..MAX_WIDTH in between, edges only layer n -> n+1, never crossing. */
+/**
+ * Layered DAG: one node in the first and last layer, widths from walkWidths in between, edges only layer n -> n+1 via
+ * linkLayers, never crossing. The layer count is drawn first; then width walks are drawn until one totals
+ * MIN_NODES..MAX_NODES. That takes about 8 tries for 6 layers and 3 for 8, so WIDTH_TRIES (256) never runs out with
+ * the shipped constants; if it does (other MIN_WIDTH/MAX_WIDTH), the walk closest to the range is used, still a legal shape.
+ */
 function buildShape(rng: Rng, actIndex: number, alternate: boolean): MapNode[][] {
-  const total = 12 + Math.floor(rng() * 3); // 12..14 (kbph: longer acts, more decisions)
-  // Exit must be bad (boss), so with alternation its layer index is odd: 6 or 8 layers.
-  const r = rng();
-  const layerCount = alternate ? (r < 0.5 ? 6 : 8) : 6 + Math.floor(r * 3); // even when alternating: entry good, exit bad
-  // Middle layers start at MIN_WIDTH; if that can't fit the node budget, fall back to fewer layers.
-  let lc = layerCount;
-  while (lc > 4 && 2 + (lc - 2) * MIN_WIDTH > total) lc -= alternate ? 2 : 1;
-  const widths = Array.from({ length: lc }, (_, i) => (i === 0 || i === lc - 1 ? 1 : MIN_WIDTH));
-  for (let extra = total - widths.reduce((a, b) => a + b, 0); extra > 0; extra--) {
-    const open = widths.map((w, i) => (i > 0 && i < lc - 1 && w < MAX_WIDTH ? i : -1)).filter((i) => i >= 0);
-    widths[pick(rng, open)]++;
+  const layerCount = pick(rng, alternate ? LAYER_COUNTS.alternate : LAYER_COUNTS.free);
+  const miss = (ws: number[]) => { const t = ws.reduce((a, b) => a + b, 0); return Math.max(MIN_NODES - t, t - MAX_NODES, 0); };
+  let widths = walkWidths(rng, layerCount);
+  for (let t = 1; t < WIDTH_TRIES && miss(widths) > 0; t++) {
+    const w = walkWidths(rng, layerCount);
+    if (miss(w) < miss(widths)) widths = w;
   }
   let n = 0;
   const layers = widths.map((w, layer) =>
     Array.from({ length: w }, (_, slot): MapNode => ({ id: `a${actIndex}n${n++}`, kind: "fight", layer, slot, next: [] })),
   );
-  for (let l = 0; l < lc - 1; l++) {
+  for (let l = 0; l < layerCount - 1; l++) {
     const [from, to] = [layers[l], layers[l + 1]];
     for (const [a, b] of linkLayers(rng, from.length, to.length)) from[a].next.push(to[b].id);
     for (const a of from) a.next.sort((x, y) => to.findIndex((t) => t.id === x) - to.findIndex((t) => t.id === y)); // exits left to right

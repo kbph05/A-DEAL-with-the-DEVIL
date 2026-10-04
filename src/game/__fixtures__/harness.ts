@@ -167,11 +167,14 @@ export async function contractShapes(opts: { includeNew?: boolean } = {}): Promi
   return Object.fromEntries(Object.entries(out).filter(keep).sort(([a], [b]) => (a < b ? -1 : 1)));
 }
 
-/** The REPL's `--json` output lines, driven through a real child process. */
+/**
+ * The REPL's `--json` output lines, driven through a real child process. The scripted walk on "contract-a" must reach a
+ * deal node and accept an offer (offer, curse and log shapes); 8 rounds do on the 4 Oct map (6 did on the old one).
+ */
 export function replShapes(extraArgs: string[] = [], prefix = "repl", extraLines: string[] = []): Record<string, string[]> {
   const lines = [...extraLines,
     '{"cmd":"look"}', '{"cmd":"map"}', '{"cmd":"help"}', "not a command", '{"cmd":"go"}', '{"nope":1}',
-    ...Array.from({ length: 6 }, () => ['{"cmd":"fight"}', '{"cmd":"rest"}', '{"cmd":"buy","item":"blessing"}', '{"cmd":"buy","item":"heal"}',
+    ...Array.from({ length: 8 }, () => ['{"cmd":"fight"}', '{"cmd":"rest"}', '{"cmd":"buy","item":"blessing"}', '{"cmd":"buy","item":"heal"}',
       '{"cmd":"deal","text":"gold"}', '{"cmd":"deal"}', '{"cmd":"accept"}', '{"cmd":"refuse"}', '{"cmd":"go","n":1}', "fight", "go 2", "buy blade", "deal gold", "accept"]).flat(),
     '{"cmd":"new","seed":"contract-b"}', "new contract-c", '{"cmd":"quit"}',
   ];

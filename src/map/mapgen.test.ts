@@ -1,16 +1,17 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import {
-  ACTS, CROSS_LINK_P, KINDS, MAX_WIDTH, START_KIND, generateAct, markVisited, mulberry32, polarity, rewriteNode,
-  type Act, type Kind, type Modifiers,
+  ACTS, KINDS, MAX_NODES, MAX_WIDTH, MIN_NODES, MIN_WIDTH, START_KIND, generateAct, markVisited, mulberry32, polarity,
+  rewriteNode, type Act, type Kind, type Modifiers,
 } from "./index";
+import { linkLayers } from "./mapgen";
 
 // Independent oracle: checks every structural invariant from the spec.
 function checkInvariants(act: Act): void {
   const { nodes } = act;
   const byId = new Map(nodes.map((n) => [n.id, n]));
   assert.equal(byId.size, nodes.length, "unique ids");
-  assert.ok(nodes.length >= 12 && nodes.length <= 14, `node count ${nodes.length}`);
+  assert.ok(nodes.length >= MIN_NODES && nodes.length <= MAX_NODES, `node count ${nodes.length}`);
   const incoming = new Map<string, string[]>(nodes.map((n) => [n.id, []]));
   for (const n of nodes) for (const t of n.next) {
     assert.ok(byId.has(t), `edge to unknown ${t}`);
@@ -34,17 +35,29 @@ function checkInvariants(act: Act): void {
   assert.ok(nodes.every((n) => n.kind !== "final"));
   const slots = new Set(nodes.map((n) => `${n.layer}:${n.slot}`));
   assert.equal(slots.size, nodes.length, "unique (layer, slot)");
-  // Lanes: at most MAX_WIDTH (4) per layer, and planar by construction: no two edges between the same layers cross in
-  // slot order. Between two layers there are the fewest edges that connect them, max(m, n), plus at most one cross-link.
+  // Widths (designer's walk): entry and exit 1, middle layers MIN_WIDTH..MAX_WIDTH, and each layer is the previous one
+  // plus or minus 1. It may only stay the same where one of the two steps was clamped away: below the floor, above
+  // MAX_WIDTH, or wider than the layers left can narrow back to 1 from (layer i of L may be at most L - i wide).
   const layers: Array<typeof nodes> = [];
   for (const n of nodes) (layers[n.layer] ??= []).push(n);
-  assert.equal(layers[0].length, 1); assert.equal(layers[layers.length - 1].length, 1);
-  for (let l = 0; l + 1 < layers.length; l++) {
-    assert.ok(layers[l].length <= MAX_WIDTH, `layer ${l} width ${layers[l].length}`);
+  const L = layers.length, w = layers.map((l) => l.length);
+  assert.equal(w[0], 1); assert.equal(w[L - 1], 1);
+  if (act.alternate) assert.equal(L % 2, 0, "alternating acts have an even layer count (boss on an odd layer)");
+  for (let i = 1; i < L; i++) {
+    const exit = i === L - 1, lo = exit ? 1 : MIN_WIDTH, hi = exit ? 1 : Math.min(MAX_WIDTH, L - i);
+    assert.ok(w[i] >= lo && w[i] <= hi, `layer ${i} of ${L} width ${w[i]}`);
+    const d = w[i] - w[i - 1];
+    assert.ok(Math.abs(d) <= 1, `width step ${w[i - 1]} -> ${w[i]} at layer ${i}`);
+    if (d === 0) assert.ok(w[i - 1] - 1 < lo || w[i - 1] + 1 > hi, `width held at ${w[i]} on layer ${i} without a clamp`);
+  }
+  // Edges: planar in slot order (no two edges between the same layers cross), every node but the exit has a child and
+  // every node but the entry a parent (checked above via single root/leaf), each node's exits numbered left to right.
+  for (let l = 0; l + 1 < L; l++) {
     const es = layers[l].flatMap((n) => n.next.map((t) => [n.slot, byId.get(t)!.slot] as const));
     for (const [i, e] of es.entries()) for (const f of es.slice(i + 1))
       assert.ok((e[0] - f[0]) * (e[1] - f[1]) >= 0, `edges ${e} and ${f} cross between layers ${l} and ${l + 1}`);
-    assert.ok(es.length <= Math.max(layers[l].length, layers[l + 1].length) + 1, `at most one cross-link between layers ${l} and ${l + 1}`);
+    // First pass gives each old node one edge; the second at most one per new node it missed.
+    assert.ok(es.length <= w[l] + w[l + 1] - 1, `too many edges between layers ${l} and ${l + 1}`);
     for (const n of layers[l]) assert.deepEqual(n.next, [...n.next].sort((a, b) => byId.get(a)!.slot - byId.get(b)!.slot), "exits numbered left to right");
   }
   if (act.alternate) for (const n of nodes) for (const t of n.next)
@@ -58,15 +71,29 @@ function checkInvariants(act: Act): void {
 const count = (act: Act, k: Kind) => act.nodes.filter((n) => n.kind === k).length;
 
 test("node count is 12-14 and all three sizes occur", () => {
+  assert.deepEqual([MIN_NODES, MAX_NODES], [12, 14]);
   const sizes = new Set<number>();
   for (let s = 0; s < 200; s++) sizes.add(generateAct(s, 0).nodes.length);
   assert.deepEqual([...sizes].sort((a, b) => a - b), [12, 13, 14]);
 });
 
-test("lanes: widths up to 4 occur; few cross-links, so a branch mostly commits you to its lane (planar via checkInvariants)", () => {
+test("linkLayers: each old node links to one new node, targets non-decreasing; then one parent per missed new node, planar", () => {
+  const rng = mulberry32(7);
+  for (let k = 0; k < 5000; k++) {
+    const m = 1 + Math.floor(rng() * MAX_WIDTH), n = Math.max(1, Math.min(MAX_WIDTH, m + Math.floor(rng() * 3) - 1));
+    const edges = linkLayers(rng, m, n), first = edges.slice(0, m), extra = edges.slice(m);
+    assert.deepEqual(first.map(([a]) => a), Array.from({ length: m }, (_, i) => i), "first pass: one edge per old node, in slot order");
+    for (let i = 1; i < m; i++) assert.ok(first[i][1] >= first[i - 1][1], "first-pass targets never decrease");
+    const missed = Array.from({ length: n }, (_, j) => j).filter((j) => !first.some(([, t]) => t === j));
+    assert.deepEqual(extra.map(([, t]) => t), missed, "second pass: exactly one parent for each missed new node, left to right");
+    for (const [i, e] of edges.entries()) for (const f of edges.slice(i + 1)) assert.ok((e[0] - f[0]) * (e[1] - f[1]) >= 0, `${e} crosses ${f}`);
+    for (const [a, b] of edges) assert.ok(a >= 0 && a < m && b >= 0 && b < n);
+  }
+});
+
+test("lanes: widths 2 and 3 occur, the walk narrows to 1, few forks (planar and width rules via checkInvariants)", () => {
   assert.equal(MAX_WIDTH, 4);
-  assert.ok(CROSS_LINK_P <= 0.25, "fewer cross-links than the old 25%-per-node-pair rule");
-  const widths = new Set<number>();
+  const widths = new Set<number>(), layerCounts = new Set<number>();
   let nonExit = 0, out = 0, middle = 0, branching = 0;
   for (let s = 0; s < 1000; s++) for (let a = 0; a < ACTS; a++) {
     const act = generateAct(`lanes-${s}`, a);
@@ -74,16 +101,20 @@ test("lanes: widths up to 4 occur; few cross-links, so a branch mostly commits y
     const perLayer = new Map<number, number>();
     for (const n of act.nodes) perLayer.set(n.layer, (perLayer.get(n.layer) ?? 0) + 1);
     widths.add(Math.max(...perLayer.values()));
+    layerCounts.add(perLayer.size);
     for (const n of act.nodes) {
       if (n.id === act.exit) continue;
       nonExit++; out += n.next.length;
       if (n.id !== act.entry) { middle++; if (n.next.length > 1) branching++; }
     }
   }
-  assert.deepEqual([...widths].sort(), [2, 3, 4]);
-  // Measured on 3 Oct: avg out-degree 1.31 (was 1.39 with 3 wide and 25% cross-links), middle nodes with a fork 12% (was 21%).
+  // Width 4 needs at least 1+2+3+4+3+2+1 = 16 nodes under +-1 steps, so a 12-14 node act never reaches MAX_WIDTH.
+  assert.deepEqual([...widths].sort(), [2, 3]);
+  assert.deepEqual([...layerCounts].sort(), [6, 8]);
+  // Measured on 4 Oct (designer's walk, seeds run-0..999): avg out-degree 1.30, middle nodes with a fork 23%
+  // (staircase plus cross-links before: 1.32 and 17%).
   assert.ok(out / nonExit <= 1.35, `average out-degree ${(out / nonExit).toFixed(3)}`);
-  assert.ok(branching / middle <= 0.2, `middle nodes with more than one exit: ${(branching / middle).toFixed(3)}`);
+  assert.ok(branching / middle <= 0.28, `middle nodes with more than one exit: ${(branching / middle).toFixed(3)}`);
 });
 
 test("structure: single root/leaf, reachability, boss exit, alternation (both option values)", () => {
