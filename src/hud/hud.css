@@ -1,0 +1,56 @@
+/* In-game HUD overlay (src/hud/hud.ts, docs/hud.md). Dark theme in the test UI's palette (src/ui/ui.css).
+   Everything is scoped under .hud and driven by the custom properties below: restyle by overriding them. */
+.hud {
+  --hud-bg: rgba(18, 10, 10, .82); --hud-panel: #1d1111; --hud-ink: #f3e8e8; --hud-muted: #b3a0a0; --hud-line: #4a2e2e;
+  --hud-hp: #c0392b; --hud-hp-low: #ff5a3c; --hud-gold: #ffd27a; --hud-curse: #8a3a80; --hud-accent: #ffd27a;
+  --hud-gap: 8px; --hud-slot: 64px;
+  position: absolute; inset: 0; z-index: 10; pointer-events: none; container-type: size;
+  color: var(--hud-ink); font: 14px/1.25 system-ui, sans-serif; font-variant-numeric: tabular-nums;
+}
+.hud [hidden] { display: none !important; }
+.hud .hud-sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+
+/* Top-left stats strip */
+.hud-stats {
+  position: absolute; top: max(var(--hud-gap), env(safe-area-inset-top)); left: max(var(--hud-gap), env(safe-area-inset-left));
+  width: min(340px, calc(100% - 2 * var(--hud-gap))); box-sizing: border-box; display: flex; flex-direction: column; gap: 6px;
+  padding: 8px 10px; background: var(--hud-bg); border: 1px solid var(--hud-line); border-radius: 10px;
+}
+.hud-where { color: var(--hud-muted); font-size: 12px; text-transform: uppercase; letter-spacing: .06em; }
+.hud-hp { position: relative; height: 22px; background: #0c0606; border: 1px solid #5a3a3a; border-radius: 6px; overflow: hidden; display: flex; align-items: center; justify-content: center; }
+.hud-hp-fill { position: absolute; inset: 0 auto 0 0; background: var(--hud-hp); transition: width .25s ease-out; }
+.hud-hp.low .hud-hp-fill { background: var(--hud-hp-low); }
+.hud-hp-text { position: relative; font-weight: 700; text-shadow: 0 1px 2px #000; }
+.hud-row { display: flex; flex-wrap: wrap; gap: 4px 12px; }
+.hud-stat { display: inline-flex; gap: 4px; align-items: baseline; }
+.hud-stat small { color: var(--hud-muted); font-size: 12px; }
+.hud-stat b { font-size: 16px; }
+.hud-gold b { color: var(--hud-gold); }
+.hud-stat.lost b { color: #ff9a8a; }
+.hud-devil { font-size: 13px; color: #e0b8ff; }
+.hud-curses { list-style: none; margin: 0; padding: 0; display: flex; flex-wrap: wrap; gap: 4px; }
+.hud-curse { pointer-events: auto; cursor: help; padding: 1px 8px; border-radius: 999px; font-size: 12px; background: #3a1030; border: 1px solid var(--hud-curse); color: #ffc4f0; }
+.hud-status { font-weight: 700; color: var(--hud-accent); }
+
+/* Item bar: bottom-right in landscape (the stick is bottom-left) */
+.hud-items {
+  position: absolute; right: max(var(--hud-gap), env(safe-area-inset-right)); bottom: max(var(--hud-gap), env(safe-area-inset-bottom));
+  display: flex; gap: var(--hud-gap); max-width: 55%; flex-wrap: wrap-reverse; justify-content: flex-end;
+}
+.hud-slot {
+  pointer-events: auto; position: relative; box-sizing: border-box; width: var(--hud-slot); min-width: 44px; min-height: max(44px, var(--hud-slot));
+  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 1px; padding: 4px;
+  font: inherit; color: var(--hud-ink); background: var(--hud-panel); border: 2px solid var(--hud-gold); border-radius: 10px; cursor: pointer;
+}
+.hud-slot:hover:not(:disabled) { background: #3a2a22; }
+.hud-slot:focus-visible { outline: 3px solid var(--hud-accent); outline-offset: 2px; }
+.hud-slot:disabled { cursor: not-allowed; opacity: .6; border-style: dashed; border-color: #6a4444; }
+.hud-slot-name { font-weight: 700; font-size: 13px; }
+.hud-slot-tag { font-size: 12px; color: var(--hud-gold); }
+.hud-slot-hint { font-size: 10px; color: var(--hud-muted); text-align: center; line-height: 1.1; max-width: 100%; overflow-wrap: anywhere; }
+
+/* Portrait: the stick rests bottom-centre, so the items stack up the right edge instead */
+@container (orientation: portrait) {
+  .hud-items { flex-direction: column-reverse; flex-wrap: nowrap; max-width: none; }
+  .hud-stats { width: min(300px, calc(100% - 2 * var(--hud-gap))); }
+}
