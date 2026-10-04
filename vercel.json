@@ -1,0 +1,17 @@
+{
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "framework": "vite",
+  "installCommand": "npm ci",
+  "buildCommand": "npm run build",
+  "outputDirectory": "dist",
+  "build": {
+    "env": {
+      "VITE_DEVIL_URL": "/api/deal"
+    }
+  },
+  "functions": {
+    "api/deal.ts": {
+      "maxDuration": 30
+    }
+  }
+}

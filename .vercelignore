@@ -1,0 +1,8 @@
+# Not uploaded by `vercel` CLI deploys (git deploys never see these anyway: they're gitignored).
+.env
+.env.*
+node_modules
+dist
+dist-test
+public/assets/private
+assets/private-src
