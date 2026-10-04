@@ -89,18 +89,18 @@ kbph asked for it (4 Oct): "make a pause menu with what controls are used, and t
 - **Opening it:** Esc or P, or the pause button (two bars, 44 px) at the top right, under the Map button. In a fight it sits lower, under the fight's title and enemy count. It is hidden while the devil's overlay or the ending card is up; Esc and P still work over the devil when focus is not in the wish box.
 - **Escape order:** an open map (village) closes first. Then Escape pauses. In the menu it resumes, and in the quit question it goes back to the menu. A forced map can't close, so Escape pauses there. P pauses and resumes, but does nothing in the quit question. Keys typed in a text box are text, and no key works on the title screen or the ending card.
 - **Pausing pauses the game:** the village's or the fight's `Phaser.Game` is paused (`game.pause()`: no update, no render, so no movement, no enemy actions and no fight clock). Its keyboard is switched off, so Space can press the menu's buttons and isn't replayed as an attack. Keys are reset on resume, so one released during the pause doesn't stick. Nothing new starts behind the menu (the auto-fight, the devil's opener); renders behind it don't take focus.
-- **The menu** is a dialog (`role="dialog"`, `aria-modal`, labelled by its title) with "Paused", the keyboard and touch controls (`CONTROLS` in `pause.ts`, checked against the code), **Resume** and **Quit game**. Tab is trapped in it; focus returns where it was on Resume (in a fight, not to a button, since Space attacks).
+- **The menu** is a dialog (`role="dialog"`, `aria-modal`, labelled by its title) with "Paused" and four buttons: **Resume**, **Controls**, **Credits** and **Quit game** (kbph, 4 Oct). **Controls** opens a sub-menu with the keyboard and touch lists below (`CONTROLS` in `pause.ts`, checked against the code) and **Back**; Esc in it goes back to the menu (focus on Controls), and Esc again resumes. Tab is trapped in the menu, the sub-menu and the credits; focus returns where it was on Resume (in a fight, not to a button, since Space attacks).
 
 | Keyboard | | Touch | |
 | --- | --- | --- | --- |
 | WASD / arrow keys | Move | Drag | The stick: anywhere in the village, the left half in a fight |
-| Space / left click | Attack (fights) | Attack, Dash | The buttons at the bottom right (fights) |
+| Space / left click | Attack (fights): the way you are moving; standing still, a click aims at the cursor | Attack, Dash | The buttons at the bottom right (fights) |
 | Shift | Dash (fights) | Map | The Map button, top right (village) |
 | M | Open or close the map (village) | Buy | The Buy button at a stall |
 | E / Enter | Buy at a stall | Pause | The pause button, top right |
-| Esc / P | Pause; Esc closes the map first | | |
+| Esc / P | Pause; Esc closes the top layer first (credits, the map, a sub-menu) | | |
 
-- **Quit game** asks "Quit this run? Progress will be lost." (Cancel, the default, or Quit game). Quitting tears the run's scenes down (a fight in progress is destroyed with its game) and shows the **title screen**: "A DEAL with the DEVIL" and **New game**, which starts a fresh run with a new seed. There is no credits screen yet, so no Credits button. Quit is the only way to the title screen, besides `?title=1`.
+- **Quit game** asks "Quit this run? Progress will be lost." (Cancel, the default, or Quit game). Quitting tears the run's scenes down (a fight in progress is destroyed with its game) and shows the **title screen**: "A DEAL with the DEVIL" and **New game**, which starts a fresh run with a new seed. The title screen also has **Credits**. Quit is the only way to the title screen, besides `?title=1`.
 - `pauseStep(state, action)` and `pauseKey(state, key, context)` are pure; `src/play/pause.test.ts` covers the transitions, the key order and the controls list.
 
 ## The controller (`flow.ts`)

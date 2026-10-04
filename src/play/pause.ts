@@ -10,8 +10,10 @@ export interface PauseState {
   screen: PauseScreen;
   /** The pause menu is open (and the scene's Phaser game paused). */
   paused: boolean;
-  /** The menu asks "Quit this run?" instead of showing the controls. */
+  /** The menu asks "Quit this run?" instead of its buttons. */
   confirmQuit: boolean;
+  /** The Controls sub-menu is open (the keyboard and touch lists, with Back). Absent: closed. */
+  controls?: boolean;
 }
 
 export const RUNNING: PauseState = { screen: "run", paused: false, confirmQuit: false };
@@ -22,14 +24,18 @@ export function startState(search: string): PauseState {
   return new URLSearchParams(search).get("title") === "1" ? TITLE : RUNNING;
 }
 
-export type PauseAction = "pause" | "resume" | "quit" | "cancelQuit" | "confirmQuit" | "newGame";
+export type PauseAction = "pause" | "resume" | "quit" | "cancelQuit" | "confirmQuit" | "newGame" | "controls" | "back";
+
+const MENU: PauseState = { screen: "run", paused: true, confirmQuit: false };
 
 /** The next state. Actions that make no sense where you are change nothing (the same object comes back). */
 export function pauseStep(s: PauseState, a: PauseAction): PauseState {
   switch (a) {
     case "pause": return s.screen === "run" && !s.paused ? { ...s, paused: true, confirmQuit: false } : s;
     case "resume": return s.paused ? RUNNING : s;
-    case "quit": return s.paused && !s.confirmQuit ? { ...s, confirmQuit: true } : s;
+    case "quit": return s.paused && !s.confirmQuit && !s.controls ? { ...s, confirmQuit: true } : s;
+    case "controls": return s.paused && !s.confirmQuit && !s.controls ? { ...MENU, controls: true } : s;
+    case "back": return s.controls ? MENU : s;
     case "cancelQuit": return s.confirmQuit ? { ...s, confirmQuit: false } : s;
     case "confirmQuit": return s.confirmQuit ? TITLE : s;
     case "newGame": return s.screen === "title" ? RUNNING : s;
@@ -60,7 +66,7 @@ export function pauseKey(s: PauseState, key: string, ctx: KeyContext): PauseActi
   if (ctx.credits) return esc ? "closeCredits" : null; // nothing else under the credits answers a key
   if (s.screen === "title") return null;
   if (!esc && !p) return null;
-  if (s.paused) return s.confirmQuit ? (esc ? "cancelQuit" : null) : "resume";
+  if (s.paused) return s.confirmQuit ? (esc ? "cancelQuit" : null) : s.controls && esc ? "back" : "resume";
   if (esc && ctx.map === "open") return "closeMap";
   return canPause(s, ctx.ending) ? "pause" : null;
 }
@@ -69,11 +75,11 @@ export function pauseKey(s: PauseState, key: string, ctx: KeyContext): PauseActi
 export const CONTROLS: { keyboard: [string, string][]; touch: [string, string][] } = {
   keyboard: [
     ["WASD / arrow keys", "Move"],
-    ["Space / left click", "Attack (fights)"],
+    ["Space / left click", "Attack (fights): the way you are moving; standing still, a click aims at the cursor"],
     ["Shift", "Dash (fights)"],
     ["M", "Open or close the map (village)"],
     ["E / Enter", "Buy at a stall"],
-    ["Esc / P", "Pause; Esc closes the map first"],
+    ["Esc / P", "Pause; Esc closes the top layer first (credits, the map, a sub-menu)"],
   ],
   touch: [
     ["Drag", "Move: the stick (anywhere in the village, the left half in a fight)"],

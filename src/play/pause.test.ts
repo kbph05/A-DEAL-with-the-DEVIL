@@ -75,3 +75,20 @@ test("Escape: the topmost open layer first: credits, then the map, then the paus
   assert.equal(pauseKey(RUNNING, "Escape", ctx()), "pause");
   assert.equal(pauseKey(RUNNING, "Escape", ctx({ credits: true, typing: true })), null, "typing still wins");
 });
+
+test("pause: the Controls sub-menu opens from the menu; Esc goes back to the menu, Esc again resumes; P resumes", () => {
+  const CONTROLS_OPEN = pauseStep(PAUSED, "controls");
+  assert.deepEqual(CONTROLS_OPEN, { ...PAUSED, controls: true });
+  assert.equal(pauseKey(CONTROLS_OPEN, "Escape", ctx()), "back");
+  assert.deepEqual(pauseStep(CONTROLS_OPEN, "back"), PAUSED);
+  assert.equal(pauseKey(PAUSED, "Escape", ctx()), "resume");
+  assert.equal(pauseKey(CONTROLS_OPEN, "p", ctx()), "resume");
+  assert.deepEqual(pauseStep(CONTROLS_OPEN, "resume"), RUNNING);
+  assert.equal(pauseKey(CONTROLS_OPEN, "Escape", ctx({ credits: true })), "closeCredits", "credits over the sub-menu");
+  // Out of place: not from the quit question, not twice, not while running; Back only from the sub-menu; no quitting from it.
+  assert.equal(pauseStep(ASKING, "controls"), ASKING);
+  assert.equal(pauseStep(CONTROLS_OPEN, "controls"), CONTROLS_OPEN);
+  assert.equal(pauseStep(RUNNING, "controls"), RUNNING);
+  assert.equal(pauseStep(PAUSED, "back"), PAUSED);
+  assert.equal(pauseStep(CONTROLS_OPEN, "quit"), CONTROLS_OPEN);
+});

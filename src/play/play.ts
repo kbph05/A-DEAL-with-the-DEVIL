@@ -570,9 +570,10 @@ function quitRun(): void {
 }
 
 let pauseKeyState = "";
+let pauseFromControls = false; // the sub-menu was just closed: focus goes back to the Controls button
 function renderPause(): void {
   pauseLayer.hidden = !ps.paused;
-  if (!ps.paused) { pauseKeyState = ""; return; }
+  if (!ps.paused) { pauseKeyState = ""; pauseFromControls = false; return; }
   const key = JSON.stringify(ps);
   if (key === pauseKeyState) return;
   pauseKeyState = key;
@@ -592,21 +593,37 @@ function renderPause(): void {
     no.focus(); // the safe choice first
     return;
   }
-  for (const [head, list] of [["Keyboard", CONTROLS.keyboard], ["Touch", CONTROLS.touch]] as const) {
-    const sec = h("section", "controls");
-    sec.setAttribute("aria-label", `${head} controls`);
-    const dl = h("dl");
-    for (const [k, what] of list) dl.append(h("dt", "", k), h("dd", "", what));
-    sec.append(h("h3", "", head), dl);
-    card.append(sec);
+  if (ps.controls) {
+    // The Controls sub-menu: the keyboard and touch lists, and Back (Esc goes back too).
+    title.textContent = "Controls";
+    for (const [head, list] of [["Keyboard", CONTROLS.keyboard], ["Touch", CONTROLS.touch]] as const) {
+      const sec = h("section", "controls");
+      sec.setAttribute("aria-label", `${head} controls`);
+      const dl = h("dl");
+      for (const [k, what] of list) dl.append(h("dt", "", k), h("dd", "", what));
+      sec.append(h("h3", "", head), dl);
+      card.append(sec);
+    }
+    const back = button("Back", () => doPause("back"));
+    back.setAttribute("aria-keyshortcuts", "Escape");
+    row.append(back);
+    card.append(row);
+    pauseLayer.replaceChildren(card);
+    back.focus();
+    pauseFromControls = true;
+    return;
   }
   const resume = button("Resume", () => doPause("resume"));
   resume.setAttribute("aria-keyshortcuts", "Escape P");
+  const controls = button("Controls", () => doPause("controls"), "quiet");
   const quit = button("Quit game", () => doPause("quit"), "quiet");
-  row.append(resume, creditsButton(), quit);
+  row.classList.add("menu");
+  row.append(resume, controls, creditsButton(), quit);
   card.append(row);
   pauseLayer.replaceChildren(card);
-  resume.focus();
+  // Back from the sub-menu: focus returns to its button; else to Resume.
+  (pauseFromControls ? controls : resume).focus();
+  pauseFromControls = false;
 }
 // Focus trap: Tab and Shift+Tab cycle through the menu's buttons.
 pauseLayer.addEventListener("keydown", (e) => {
@@ -616,6 +633,12 @@ pauseLayer.addEventListener("keydown", (e) => {
   const i = list.indexOf(document.activeElement as HTMLElement);
   const next = e.shiftKey ? (i <= 0 ? list.length - 1 : i - 1) : (i === list.length - 1 ? 0 : i + 1);
   list[next].focus();
+  e.preventDefault();
+});
+// The credits dialog keeps focus too (its only control is Close).
+credits.addEventListener("keydown", (e) => {
+  if (e.key !== "Tab") return;
+  credits.querySelector<HTMLElement>("button")?.focus();
   e.preventDefault();
 });
 // Focus that leaves the open menu by other means (a click on its backdrop) comes back to it.

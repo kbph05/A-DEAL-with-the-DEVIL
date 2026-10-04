@@ -116,3 +116,6 @@ body { overflow: hidden; }
 .play-credits h3 { font-size: 14px; margin: 12px 0 4px; color: #f0c060; }
 .play-credits pre { white-space: pre-wrap; word-break: break-word; font: 13px/1.4 system-ui, sans-serif; color: #ddd; margin: 0; }
 .play-ending-row, .play-title-row { display: flex; gap: 10px; justify-content: center; flex-wrap: wrap; }
+/* The pause menu: Resume, Controls, Credits, Quit game, one per row. */
+.play-pause .row.menu { flex-direction: column; }
+.play-pause .row.menu button { flex: 0 0 auto; }
