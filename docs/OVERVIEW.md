@@ -173,8 +173,8 @@ For a final build, set it at build time: `VITE_DEVIL_URL=https://your.host/deal 
 - **Opener**: the devil's free opening offer when he appears. No player text; it uses no question.
 - **Ask / question**: one message to the devil. At most 3 per node and 10 per run. A haggle counts too.
 - **Strike**: the devil lashes out instead of offering (`forced: true`). HP loss only, capped by `MAX_STRIKE_HP`. No accept step.
-- **Soul**: 1 while yours, 0 once sold or spent. It revives you once.
-- **Revive**: at 0 HP with the soul kept, you come back at half HP and the soul is spent. A second death ends the run.
+- **Soul**: 1 while yours, 0 once sold or spent. Selling it at death's door buys one more life.
+- **Death's door / revive**: at 0 HP with the soul kept, the devil offers another life for it (`context.kind` "death"). Accept (or haggle for extras, priced on top) and you come back at half HP or more, soul gone; refuse and the run ends ("lose"). A death without the soul ends the run. See [engine.md](engine.md), "Death's door".
 - **Hell ending**: you reach the final door after the soul is gone. You win, but in hell.
 - **Seed**: the text that fixes a run's map and dice. Same seed, same run.
 - **View**: the engine's read-only summary of the state for screens (`view` in `src/game/view.ts`).

@@ -29,7 +29,8 @@ Each node kind has a screen:
 | Node | Screen | The map |
 | --- | --- | --- |
 | Village | The village scene (walk, shop at the stalls). | A **Map** button (top right, or the M key) opens it. Walking into the "Leave the village" exit opens it too. Here it can be closed again (Close map, Escape, M) to keep shopping. Picking a pulsing node goes there. |
-| Fight, boss | The forest path, with the realtime fight (`runForestFight`) started on arrival. | **Forced** after a won fight. A revival shows "Fight on" (same enemy, the HP it was left on). A death goes to the ending card. |
+| Fight, boss | The forest path, with the realtime fight (`runForestFight`) started on arrival. | **Forced** after a won fight. A death with the soul brings the devil (Death's door, below); after selling it, "Fight on" (same enemy, the HP it was left on). A death without it goes to the ending card. |
+| Death's door (any node) | The devil's overlay over the dimmed scene, titled **Death's door**: his offer (your soul for another life), the haggle box, **Accept: sell your soul, live** and **Refuse: die**. No Walk away; Escape opens the pause menu and never dismisses it. He leans in (`lean_in`) until it is settled and laughs on Accept. | None until it is settled (docs/engine.md, "Death's door"). |
 | Campfire | A panel over a dim backdrop: **Rest** (heal 40% of max HP), **Sharpen Weapon** (+1 attack) or **Deal**. One of three: the engine locks the others once you pick. | **Forced** once the choice is resolved: rested, trained, or the deal accepted, refused or ended. Ended means the asks ran out with no offer standing, or you walked away after asking. Walking away before asking just returns to the three choices. |
 | Well | The designer's `assets/well.png` as the full-bleed backdrop (cover, nearest-neighbour, a slight dark vignette), with a panel low on the screen: **Pay for a blessing (8g)** (once per well), **Hear the devil out** (opens the devil's overlay) and **Move on**. "Hear the devil out" is always shown: when the engine says no one is there (`devilPresent` false) it is disabled with "No one is at the well" (a rule decision on whether he is always there is pending; engine unchanged). One choice per well: once the blessing is bought, the devil button is disabled with its reason, and once the devil is asked, the blessing is (docs/engine.md). | **Forced** after Move on. |
 | Deal | The devil's full-screen overlay. | **Forced** once the deal is accepted, refused or ended, or you walk away. |
@@ -115,6 +116,7 @@ kbph asked for it (4 Oct): "make a pause menu with what controls are used, and t
 - the map forced after a campfire choice (each way it resolves), after Move on at a well, after a won fight, and after a deal node is accepted, refused, ended or walked away from;
 - opening and closing the devil's overlay at a campfire and a well;
 - no map while the devil is speaking, an offer stands or a fight is pending;
+- death's door: the overlay over a forest fight, with no map, prompts or Walk away, then "Fight on" after Accept, the ending after Refuse;
 - the endings.
 
 A property test plays 150 random legal runs on the real engine. At every state it checks that an open or forced map always has a legal `go`, that the map is never open while something blocks the way, and that every prompt is legal.
