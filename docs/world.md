@@ -60,7 +60,7 @@ A scene is plain JSON data (`SceneDef` in `src/world/scene.ts`). The example bel
 - actors stand inside `size` (they may be outside `bounds`: shopfronts on the edge);
 - enemy `spawns` lie inside `bounds`.
 
-**The samples** are in `src/world/scenes/`: `village.json` (960×540, the default: the first entry of `SCENES`; see "The village and shop zones" below), and `forest.json` (1280×560, wider than the view, so the camera scrolls and clamps: the forest path the fights play on, drawn on the designer's band (see "Art"), with its bounds on the band's dirt path, six enemy `spawns` and an exit at the far end; the world lab can walk it too). There are only these two scenes. To add one, drop a JSON file there and list it in `scenes/index.ts`. The lab can also load any SceneDef JSON by URL (see below).
+**The samples** are in `src/world/scenes/`: `village.json` (768×512, the designer's 384×256 `assets/village.png` at exactly 2×, the default: the first entry of `SCENES`; see "The village and shop zones" below), and `forest.json` (1280×560, wider than the view, so the camera scrolls and clamps: the forest path the fights play on, drawn on the designer's band (see "Art"), with its bounds on the band's dirt path, six enemy `spawns` and an exit at the far end; the world lab can walk it too). There are only these two scenes. To add one, drop a JSON file there and list it in `scenes/index.ts`. The lab can also load any SceneDef JSON by URL (see below).
 
 ## The village and shop zones
 
@@ -68,11 +68,11 @@ kbph (4 Oct): the village scene, the one the game starts with, contains the shop
 
 `src/world/scenes/village.json`:
 
-- **Shops are on the edge, in a line** (kbph, 4 Oct: "shops shall be on edges, like a line; outside of walkable area so you can't walk through them"). Three stalls, as actors `stall-healer`, `stall-smith` and `stall-shrine` (labelled "Healer", "Smith" and "Shrine"), stand in an evenly spaced row (x = 280, 480, 680) with their feet just above the top edge of `bounds` (y = 148; the rectangle starts at 150), so the stalls are outside it and can't be walked into or through. Two cottages (`house-west`, `house-east`) flank the row.
-- In front of each stall, inside `bounds` and touching its top edge, a zone `{ "kind": "shop", "item": "heal" | "blade" | "blessing", "label": ... }`. Walk up to the edge in front of a stall and its prompt opens.
-- An exit zone `leave` ("Leave the village") on the east edge, the spawn in the middle (480, 390), the usual canopy overlay.
-- Actors outside `bounds` are allowed by the validator (it only checks them against `size`). Zones must still touch `bounds`, and the spawn must lie inside it.
-- The placeholder background gives a stall or cottage that stands outside `bounds` a small grass clearing (`sceneTiles`), instead of leaving it in the forest.
+- **The art is the designer's** (Big Chungus, `assets/village.png`, 384×256, imported through Vite in `bandArt.ts` like `forest.png`; the scene is sized 768×512 so it lays as one copy at exactly 2×, nearest-neighbour). It replaces the generated placeholder background, overlay and stalls: the def has no `overlay` and no `actors`, because the shopfronts are in the picture. The picture, left to right along the top: a plain house, the shop (a coin and a shelf in its window), a fenced pen, and the healer (a red cross), then a path, grass and a stream along the bottom.
+- **Shops stay on the edge, outside the walkable area** (kbph, 4 Oct). `bounds` is the grass and path strip under the buildings (y = 180, below their front edge at 176; it stops above the stream). The buildings are above it, so they can't be walked into or through.
+- In front of each shop, inside `bounds` and touching its top edge, a zone `{ "kind": "shop", "item": "blade" | "heal", "label": ... }`: `shop-blade` ("Smith", under the shop) and `shop-heal` ("Healer", under the cross). The picture's "shop" is the Smith. There is **no Shrine** here: the art has none, and blessings are sold at wells (see the well panel in docs/play.md).
+- An exit zone `leave` ("Leave the village") on the east edge, the spawn in the middle (384, 240).
+- Zones must still touch `bounds`, and the spawn must lie inside it. `shopZone.test.ts` checks the zones against the shopfronts' x ranges in the picture.
 
 `src/world/shopZone.ts` is the glue, pure and tested:
 
@@ -82,7 +82,7 @@ shopPrompt(zone, game.view()) // → { title, price, desc, enabled, reason?, com
 
 - `enabled` is true exactly when the engine's legal `actions` contain `{cmd:"buy", item: zone.item}`. Then `command` is that command.
 - Otherwise `reason` says why: "Not enough gold: need 12g, you have 10g", "Only sold at a well, not in the village", "Not at a shop (this is a fight node)", "The well has given what it will give", "The run is over", "The devil is speaking".
-- So at the village the Shrine stall is always disabled: the engine's rules (unchanged) sell blessings at wells. If the team wants it buyable here, that is an engine change (`legalActions` and `rejection`).
+- The village has no blessing stall: the engine's rules (unchanged) sell blessings at wells only. A `blessing` zone at the village would always be disabled ("Only sold at a well, not in the village"); if the team wants one buyable here, that is an engine change (`legalActions` and `rejection`).
 - `exitPrompt(zone)` is "Leave the village (map: coming soon)".
 
 **In the world lab** (`dev.ts`): walk into a stall's zone and a prompt appears at the bottom: item, price, effect and a Buy button (E or Enter also buys). Buy sends the command with `game.step`, shows the engine's result text (`describe` of the events, e.g. "Bought blade for 12g: Attack +1."), and updates the HUD and the prompt. Leaving the zone hides it. The HUD's own item bar buys too, through the same path. A new run has 10 gold, so only the Healer is affordable; use `?gold=40` to try the Smith.
@@ -217,7 +217,7 @@ Other options:
 - The pure layout is `bandLayout` in `scene.ts`. `forest.test.ts` checks that the bounds, the archers' band and the spawn sit on the band's dirt path (measured at rows 144 to 192 of the 256).
 - The band brings its own trees, so the placeholder canopy overlay is left out over it (`debug.art.overlay` is `"none"`; `art.background` is `"bundled"`).
 - **Precedence:** a private `scenes/forest/background.png` (below) > the band > the def's key or URL > the placeholder. If the band fails to load, the placeholder background and its canopy come back.
-- The village has no art of its own yet, so it keeps the placeholders. The duplicate `forest.png` at the repo root (an earlier commit) is not used.
+- The village uses `assets/village.png` the same way (384×256, one copy at exactly 2× in the 768×512 scene, no overlay). The duplicate `forest.png` at the repo root (an earlier commit) is not used.
 
 Nothing comes from generative models. Where there is no real art, the placeholders are generated pixel art, drawn in code (`scenePlaceholders.ts`):
 

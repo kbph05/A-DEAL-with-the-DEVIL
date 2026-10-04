@@ -151,7 +151,7 @@ test("placeholder art: actors named stall-… and house-… get a stall and a co
   assert.equal(actorShape("house-mill"), "house");
   assert.equal(actorShape("devil"), "figure");
   const village = sceneById("village")!;
-  assert.equal(village.actors!.filter((a) => actorShape(a.id) === "stall").length, 3);
+  assert.equal((village.actors ?? []).filter((a) => actorShape(a.id) === "stall").length, 0, "the village's shopfronts are in the designer's picture, not drawn on top of it");
 });
 
 test("SceneDef: enemy spawns (fight scenes) are optional points inside bounds", () => {

@@ -19,6 +19,7 @@ import { effectChips, curseText, eventText, kindLookup, lastStrike, outcomeEvent
 import { mountScene, sceneById, type SceneHandle, type SceneZone, type WorldDebug } from "../world";
 import { shopPrompt } from "../world/shopZone";
 import { CLOSE_DEVIL, LOCAL, OPEN_DEVIL, arrived, flow, setLocal, wantsOpener, wellChoice, wishToSend, type Flow, type Local } from "./flow";
+import wellArt from "../../assets/well.png";
 import { mountDevilArt } from "./devilArt";
 import { POSE_MS, devilPose } from "./devilPose";
 import { CONTROLS, pauseKey, pauseStep, startState, type PauseAction, type PauseState } from "./pause";
@@ -300,8 +301,10 @@ function renderScene(v: View, f: Flow): void {
     return;
   }
   const bd = h("div", "play-layer play-backdrop");
+  if (v.kind === "well") bd.style.setProperty("--well-art", `url("${wellArt}")`); // the designer's well, full-bleed (play.css .play-well)
   const kind: IconKey = v.kind === "final" ? "final" : v.kind;
-  bd.append(icon(kind));
+  bd.classList.toggle("play-well", v.kind === "well");
+  if (v.kind !== "well") bd.append(icon(kind));
   sceneLayer.append(bd);
   mounted = { key, destroy: () => bd.remove() };
 }
@@ -324,6 +327,7 @@ function renderPanel(v: View, f: Flow): void {
   const show = (f.screen === "campfire" || f.screen === "well" || (f.screen === "fight" && f.prompts.includes("fight") && autoFought === v.nodeId))
     && f.map === "closed" && !f.devil;
   panel.hidden = !show;
+  panel.classList.toggle("well", f.screen === "well");
   if (!show) { panelKey = ""; return; }
   const key = JSON.stringify([v.nodeId, f.prompts, v.state.gold, v.resolved, v.state.hp]);
   if (key === panelKey) return;
@@ -345,16 +349,18 @@ function renderPanel(v: View, f: Flow): void {
     card.append(title, h("p", "lead", v.devilPresent && chose !== "devil" ? "Someone sits on the rim of the well, smiling." : "Cold water, and an old coin slot."));
     const p = shopPrompt({ id: "well", kind: "shop", item: "blessing", label: "Well", x: 0, y: 0, w: 1, h: 1 }, v);
     const locked = chose === "devil" && v.resolved ? capital(ONE_CHOICE.well.devil) : p.reason; // his offer accepted, not the blessing
-    const buy = button(`Buy a blessing (${p.price}g)`, () => { if (p.command) void send(p.command); }, "", p.enabled ? p.desc : locked);
+    const buy = button(`Pay for a blessing (${p.price}g)`, () => { if (p.command) void send(p.command); }, "", p.enabled ? p.desc : locked);
     buy.disabled = !p.enabled;
     list.append(buy);
-    if (f.prompts.includes("deal")) list.append(button("Deal", () => patch(OPEN_DEVIL), "", "Talk to the devil at the well"));
-    else if (v.devilPresent) { // one choice per well: say why the devil is closed
-      const why = chose === "devil" ? "the devil has gone" : v.resolved ? ONE_CHOICE.well.spent : v.questionsLeft <= 0 ? "the devil has heard enough from you this run" : "the devil has gone";
-      const deal = button("Deal", () => undefined, "", capital(why));
+    // Always shown, so the player sees what the well offers; disabled with the engine's reason when he can't be heard.
+    const deal = button("Hear the devil out", () => patch(OPEN_DEVIL), "", "Talk to the devil at the well");
+    if (!f.prompts.includes("deal")) {
+      const why = !v.devilPresent ? "No one is at the well"
+        : capital(chose === "devil" ? "the devil has gone" : v.resolved ? ONE_CHOICE.well.spent : v.questionsLeft <= 0 ? "the devil has heard enough from you this run" : "the devil has gone");
       deal.disabled = true;
-      list.append(deal);
+      deal.querySelector("small")!.textContent = why;
     }
+    list.append(deal);
     list.append(button("Move on", () => patch({ movedOn: true }), "quiet", "Choose the next stop on the map"));
   } else {
     title.append(icon("fight"), "Back on your feet");

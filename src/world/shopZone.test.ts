@@ -6,36 +6,38 @@ import { sceneById } from "./scenes";
 import { pointIn, type SceneZone } from "./scene";
 
 const village = sceneById("village")!;
-const zone = (item: string): SceneZone => village.zones!.find((z) => z.kind === "shop" && z.item === item)!;
+// The village has no shrine (blessings are sold at wells), so a blessing zone is a stand-in for the well panel's own.
+const zone = (item: string): SceneZone => village.zones!.find((z) => z.kind === "shop" && z.item === item) ?? { id: item, kind: "shop", item, label: item, x: 0, y: 0, w: 1, h: 1 };
 const withGold = (s: GameState, gold: number): GameState => ({ ...s, player: { ...s.player, gold } });
 const withHp = (s: GameState, hp: number): GameState => ({ ...s, player: { ...s.player, hp } });
 
-test("village: three stalls, one shop zone per engine ware, and an exit", () => {
+test("village: the Healer and the Smith (the designer's two shopfronts), and an exit; no shrine, blessings are a well's", () => {
   const shops = village.zones!.filter((z) => z.kind === "shop");
-  assert.deepEqual(shops.map((z) => z.item).sort(), Object.keys(WARES).sort());
-  assert.deepEqual(shops.map((z) => z.label), ["Healer", "Smith", "Shrine"]);
-  for (const z of shops) assert.ok(village.actors!.some((a) => a.label === z.label && a.id.startsWith("stall-")), z.id);
+  assert.deepEqual(shops.map((z) => z.item).sort(), ["blade", "heal"]);
+  assert.deepEqual(shops.map((z) => z.label).sort(), ["Healer", "Smith"]);
+  assert.ok(!village.zones!.some((z) => z.item === "blessing"));
   const exit = village.zones!.find((z) => z.kind === "exit")!;
   assert.equal(exit.label, "Leave the village");
   assert.equal(exitPrompt(exit), "Leave the village (map: coming soon)");
 });
 
-test("village: the stalls form an evenly spaced row on the top edge, outside bounds; each buy zone is in front of its stall", () => {
+test("village: the shopfronts are drawn in assets/village.png (2x), above the walkable strip; each buy zone is in front of its shop", () => {
   const b = village.bounds;
-  const stalls = village.actors!.filter((a) => a.id.startsWith("stall-")).sort((p, q) => p.x - q.x);
-  assert.equal(stalls.length, 3);
-  const gaps = stalls.slice(1).map((a, i) => a.x - stalls[i].x);
-  assert.ok(gaps.every((g) => g === gaps[0]), "even spacing");
-  for (const a of stalls) {
-    assert.ok(a.y < b.y && !pointIn(a, b), `${a.id} stands just above the bounds' top edge, not in the walkable area`);
-    assert.equal(a.y, stalls[0].y, "one line");
-    const z = village.zones!.find((q) => q.kind === "shop" && q.label === a.label)!;
-    assert.equal(z.y, b.y, `${z.id} touches the bounds' top edge`);
+  assert.deepEqual(village.size, { w: 768, h: 512 }, "the 384x256 picture at exactly 2x");
+  assert.ok(!village.actors || village.actors.length === 0, "no generated stalls drawn over the art");
+  // Shopfront spans in picture pixels (x ranges, from the image), times 2: the Smith's 112-188 and the Healer's 270-338.
+  const front = { Smith: [224, 376], Healer: [540, 676] } as const;
+  const BUILDING_FRONT_Y = 176; // the buildings' bottom edge, 88 px x 2
+  assert.ok(b.y >= BUILDING_FRONT_Y, "the walkable rect starts below the buildings, so you can't walk into them");
+  for (const z of village.zones!.filter((q) => q.kind === "shop")) {
+    const [x0, x1] = front[z.label as keyof typeof front];
+    assert.equal(z.y, b.y, `${z.id} touches the bounds' top edge, in front of its shop`);
     assert.ok(z.x >= b.x && z.x + z.w <= b.x + b.w && z.y + z.h <= b.y + b.h, `${z.id} lies inside bounds`);
-    assert.ok(Math.abs(z.x + z.w / 2 - a.x) <= 1, `${z.id} is centred on its stall`);
+    assert.ok(z.x >= x0 && z.x + z.w <= x1, `${z.id} lies under its shopfront (${x0}-${x1})`);
   }
   assert.ok(pointIn(village.spawn, b));
-  assert.ok(village.actors!.every((a) => a.y < b.y || !a.id.startsWith("house-")), "cottages are on the edge too");
+  const exit = village.zones!.find((z) => z.kind === "exit")!;
+  assert.ok(exit.x + exit.w === b.x + b.w, "the exit is on the east edge");
 });
 
 test("shopPrompt: enabled exactly when the engine lists the buy, and Buy sends it", () => {

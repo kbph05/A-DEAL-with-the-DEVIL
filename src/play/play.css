@@ -8,6 +8,9 @@ body { overflow: hidden; }
 .play-scene { z-index: 0; }
 .play-backdrop { display: flex; align-items: center; justify-content: center; background: radial-gradient(ellipse at 50% 60%, #2a1712 0%, #0b0707 70%); }
 .play-backdrop canvas { width: min(40vmin, 220px); image-rendering: pixelated; opacity: .35; }
+/* The well (the designer's assets/well.png, imported in play.ts): full-bleed, cover, nearest-neighbour, with a slight dark
+   vignette (and a little overall dimming) so the panel reads. The panel sits low so the well itself stays in view. */
+.play-well { background: radial-gradient(ellipse at 50% 45%, rgba(0, 0, 0, 0) 35%, rgba(0, 0, 0, .5) 100%), linear-gradient(rgba(0, 0, 0, .1), rgba(0, 0, 0, .1)), var(--well-art) center / cover no-repeat; image-rendering: pixelated; }
 .play-map { z-index: 5; background: #0b0707; }
 .play .hud { z-index: 10; }
 /* The page's own buttons only: the HUD's item slots (lab pages) and the map's Legend toggle keep their own styles (their padding and colours were being overridden). */
@@ -28,6 +31,8 @@ body { overflow: hidden; }
 .play-prompt p { margin: 0; flex-basis: 100%; color: #cbb; font-size: 13px; }
 .play-prompt .why { color: #e99; }
 .play-dim { z-index: 30; display: flex; align-items: center; justify-content: center; background: rgba(5, 2, 2, .55); padding: 12px; box-sizing: border-box; }
+.play-dim.well { align-items: flex-end; background: none; padding-bottom: max(16px, env(safe-area-inset-bottom)); }
+@media (min-aspect-ratio: 1/1) and (max-height: 540px) { .play-dim.well { align-items: center; justify-content: flex-end; } }
 .play-card { width: min(94vw, 460px); max-height: calc(100dvh - 24px); overflow: auto; box-sizing: border-box; background: #1d1111; border: 1px solid #6a3030; border-radius: 12px; padding: 16px; box-shadow: 0 8px 40px #000; }
 .play-card h2 { margin: 0 0 4px; font-size: 20px; display: flex; gap: 10px; align-items: center; }
 .play-card h2 canvas { width: 32px; height: 32px; image-rendering: pixelated; }
