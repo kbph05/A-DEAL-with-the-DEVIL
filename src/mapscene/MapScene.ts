@@ -219,7 +219,8 @@ export class MapScene extends Phaser.Scene {
     this.drawParchment(m);
     this.drawEdges(m);
     for (const n of L.nodes) this.drawNode(n, m);
-    if (this.legendOnMap) this.drawLegend(MAP_WIDTH / 2, L.height - 50, false);
+    // On the parchment the legend hugs the left edge, so the HUD's item column (right edge, portrait) does not cover it.
+    if (this.legendOnMap) this.drawLegend(16, L.height - 50, false);
     this.drawLegendSide();
     this.drawCursor();
     this.cameras.main.setBackgroundColor("#1d1210");
@@ -328,12 +329,12 @@ export class MapScene extends Phaser.Scene {
     }
   }
 
-  /** The legend as a parchment card centred at (cx, top), in world units (on the map) or pixels (beside it). */
-  private drawLegend(cx: number, top: number, side: boolean): void {
+  /** The legend as a parchment card: centred on `x` beside the map (pixels), or with its left edge at `x` on it (world units). */
+  private drawLegend(x0: number, top: number, side: boolean): void {
     const add = <T extends Phaser.GameObjects.GameObject>(o: T): T => (side ? this.inUi(o) : this.inWorld(o));
-    const cols = side ? 1 : 2, rowH = side ? 30 : 28, colW = side ? 160 : 150, icon = side ? 26 : SIZE.legend;
+    const cols = side ? 1 : 2, rowH = side ? 30 : 28, colW = side ? 160 : 128, icon = side ? 26 : SIZE.legend;
     const rows = Math.ceil(LEGEND.length / cols), w = cols * colW + 16, h = 40 + rows * rowH;
-    const left = cx - w / 2;
+    const left = side ? x0 - w / 2 : x0, cx = left + w / 2;
     const g = add(this.add.graphics().setDepth(9));
     g.fillStyle(0xe4d1a8, 1).fillRect(left, top, w, h);
     g.lineStyle(3, 0x5a3a1e, 1).strokeRect(left, top, w, h);
