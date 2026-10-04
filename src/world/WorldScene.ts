@@ -10,6 +10,8 @@ import {
 import { addBand, bundledKey, preloadBand } from "./bandArt";
 import { actorPlaceholder, backgroundPlaceholder, overlayPlaceholder } from "./scenePlaceholders";
 import { HERO_COLS, HERO_ROWS, HERO_SIZE, PLACEHOLDER_HERO, ensurePlaceholderTextures } from "./textures";
+import { buildCharacter, preloadCharacters, type CharacterArt } from "../render/spriteArt";
+import { fitScale, roleArt } from "../render/sprites";
 
 /**
  * Where a texture came from: a private file, the team's bundled band (bandArt.ts; backgrounds only), a URL in the def,
@@ -34,7 +36,8 @@ export interface WorldDebug {
   /** Current depths: the player, each actor by id, the overlay. */
   depth: { player: number; actors: Record<string, number>; overlay: number };
   /** Which art is in use. */
-  art: { player: "private" | "placeholder"; background: Art; overlay: Art | "none"; actors: Record<string, Art> };
+  /** player: "private" is the local player-idle/walk hook (assets.ts), "soldier" the licensed Soldier (src/render/sprites.ts). */
+  art: { player: "private" | "soldier" | "placeholder"; background: Art; overlay: Art | "none"; actors: Record<string, Art> };
   frames: number;
 }
 
@@ -77,6 +80,12 @@ export class WorldScene extends Phaser.Scene {
   private help!: Phaser.GameObjects.Text;
   private failed = new Set<string>();
   private privatePlayer = false;
+  /** The Soldier's sheets (the encrypted art, with ASSET_KEY), when the local player hook isn't there; else null. */
+  private soldier: CharacterArt | null = null;
+  /** Its feet box and mirroring, sheet pixels: set in create. */
+  private soldierFeet = { w: 0, h: 0, cx: 0, feet: 0, fw: 1, fh: 1 };
+  private soldierLeft = false;
+  private soldierPlaced = false;
   private zones: ZoneTracker;
   private walk: typeof WALK;
   private debug: WorldDebug;
@@ -120,6 +129,8 @@ export class WorldScene extends Phaser.Scene {
       if (src && src.kind !== "key") this.load.image(this.partKey(name), src.url);
     }
     if (!privateSceneFile(files, this.def.id, "background")) preloadBand(this, this.def);
+    // The Soldier (Big Chungus, 4 Oct), unless the local player hook above is in use.
+    if (!(have.has(P.idle.file) && have.has(P.walk.file))) preloadCharacters(this, ["soldier"]);
   }
 
   private parts(): [string, string | undefined][] {
@@ -153,8 +164,9 @@ export class WorldScene extends Phaser.Scene {
     const world: Phaser.GameObjects.GameObject[] = [];
     ensurePlaceholderTextures(this);
     this.privatePlayer = this.loaded(KEY.idle) && this.loaded(KEY.walk);
+    this.soldier = this.privatePlayer ? null : buildCharacter(this, "soldier");
     const art = this.debug.art;
-    art.player = this.privatePlayer ? "private" : "placeholder";
+    art.player = this.privatePlayer ? "private" : this.soldier ? "soldier" : "placeholder";
 
     // Background, depth 0: a private file or the def's art, stretched to the scene size; else the bundled band, laid
     // along the scene (bandArt.ts), which brings its own trees, so the placeholder canopy overlay is left out.
@@ -189,6 +201,7 @@ export class WorldScene extends Phaser.Scene {
     this.createAnims();
     const spec = this.privatePlayer
       ? { key: KEY.idle, fw: PRIVATE_PLAYER.frameWidth, fh: PRIVATE_PLAYER.frameHeight, feet: PRIVATE_PLAYER.feet, scale: PRIVATE_PLAYER.scale }
+      : this.soldier ? this.soldierSpec(this.soldier)
       : { key: PLACEHOLDER_HERO, fw: HERO_SIZE, fh: HERO_SIZE, feet: FEET, scale: 1 };
     const half = { x: (spec.scale * spec.feet.w) / 2, y: (spec.scale * spec.feet.h) / 2 };
     const start = clampToBounds(def.spawn, def.bounds, half);
@@ -196,6 +209,7 @@ export class WorldScene extends Phaser.Scene {
     this.player = this.physics.add.sprite(start.x - fx, start.y + half.y, spec.key, 0);
     this.player.setOrigin(0.5, (spec.feet.y + spec.feet.h) / spec.fh).setScale(spec.scale);
     this.player.body.setSize(spec.feet.w, spec.feet.h, false).setOffset(spec.feet.x, spec.feet.y);
+    if (this.soldier) this.player.setOrigin(this.soldierFeet.cx / this.soldierFeet.fw, this.soldierFeet.feet / this.soldierFeet.fh);
     // The playable rect, not the texture size: the feet box can't leave it.
     this.physics.world.setBounds(def.bounds.x, def.bounds.y, def.bounds.w, def.bounds.h);
     this.player.setCollideWorldBounds(true);
@@ -273,10 +287,41 @@ export class WorldScene extends Phaser.Scene {
     }
   }
 
+  /**
+   * The Soldier's spec, like PRIVATE_PLAYER's: its idle frame, a feet box as wide as the generated hero's (in world
+   * pixels) under the visible figure, and the scale that makes the figure the hero's height.
+   */
+  private soldierSpec(art: CharacterArt): { key: string; fw: number; fh: number; feet: { w: number; h: number; x: number; y: number }; scale: number } {
+    const fig = art.idle.fig, fw = art.idle.fw, fh = art.idle.fh;
+    const scale = fitScale(fig.h, roleArt("player")?.height ?? HERO_SIZE);
+    const w = Math.max(1, Math.round(FEET.w / scale)), h = Math.max(1, Math.round(FEET.h / scale));
+    const cx = fig.x + fig.w / 2, feet = fig.y + fig.h;
+    this.soldierFeet = { w, h, cx, feet, fw, fh };
+    // The start position below assumes origin x 0.5; the figure's own centre is used instead (setOrigin after), so the
+    // feet box is given centred on the frame here and moved under the figure once the sprite exists.
+    return { key: art.idle.key, fw, fh, feet: { w, h, x: fw / 2 - w / 2, y: feet - h }, scale };
+  }
+
+  /** The Soldier mirrors around its figure: origin and feet box follow it (the body stays put under the feet). */
+  private faceSoldier(left: boolean): void {
+    const F = this.soldierFeet, pl = this.player;
+    const cx = left ? F.fw - F.cx : F.cx;
+    pl.setFlipX(left).setOrigin(cx / F.fw, F.feet / F.fh);
+    pl.body.setOffset(cx - F.w / 2, F.feet - F.h);
+  }
+
   /** Pick the animation (or still frame) for the current facing and whether we're walking. */
   private setPose(walking: boolean): void {
     const f = this.debug.facing;
     const pl = this.player;
+    if (this.soldier) {
+      // Side view: left mirrors; up and down keep the last side.
+      if (f === "left" || f === "right") this.soldierLeft = f === "left";
+      if (pl.flipX !== this.soldierLeft || !this.soldierPlaced) { this.faceSoldier(this.soldierLeft); this.soldierPlaced = true; }
+      const keys = this.soldier.anims[walking ? "walk" : "idle"] ?? this.soldier.anims.idle!;
+      pl.anims.play(keys[0], true);
+      return;
+    }
     if (this.privatePlayer) {
       const side = PRIVATE_PLAYER.layout === "side";
       pl.setFlipX(side && f === "left");

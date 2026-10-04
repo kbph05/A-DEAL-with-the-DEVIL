@@ -172,7 +172,7 @@ export interface FrameOverride { frameWidth?: number; frameHeight?: number; fram
 export const FRAME_OVERRIDES: Readonly<Record<string, FrameOverride>> = {};
 
 /** Frame widths to try when a sheet isn't a strip of square frames (common sizes, nearest the height first). */
-export const CANDIDATE_WIDTHS: readonly number[] = [64, 69, 80, 96, 100, 128, 48, 32, 120, 144, 160, 192];
+export const CANDIDATE_WIDTHS: readonly number[] = [64, 69, 80, 96, 100, 128];
 
 /** More frames than this in one strip is suspicious. */
 const MAX_FRAMES = 30;
@@ -201,6 +201,37 @@ export function detectFrames(w: number, h: number, override?: FrameOverride): Fr
     return { frameWidth: fw, frameHeight: H, frames: W / fw, how: "candidate", odd: `not square frames: guessed ${fw}×${H} (${W / fw} frames)${fits.length > 1 ? `; ${fits.slice(1).join(", ")} also divide ${W}` : ""}` };
   }
   return { frameWidth: W, frameHeight: H, frames: 1, how: "single", odd: `${W}×${H}: no frame width found, used as one frame` };
+}
+
+const gcd = (a: number, b: number): number => (b === 0 ? a : gcd(b, a % b));
+
+/**
+ * Frame layouts for all of one character's sheets at once. A character's sheets share one frame grid, so a sheet that
+ * is not a strip of square frames takes the frame width that divides every non-square sheet of the same height (a
+ * candidate width, nearest the height; else their greatest common divisor, if it is a plausible frame, 0.5 to 4
+ * times the height). That stops one sheet whose width happens to divide by some other candidate from being cut
+ * wrong. Square strips and overrides are as `detectFrames`; a sheet left over is detected on its own.
+ */
+export function detectCharacterFrames(sheets: readonly { file: string; w: number; h: number }[]): Map<string, FrameLayout> {
+  const out = new Map<string, FrameLayout>();
+  const rest: { file: string; w: number; h: number }[] = [];
+  for (const sh of sheets) {
+    const o = FRAME_OVERRIDES[sh.file];
+    const L = detectFrames(sh.w, sh.h, o);
+    if (L.how === "override" || L.how === "square") out.set(sh.file, L);
+    else rest.push(sh);
+  }
+  for (const h of new Set(rest.map((r) => r.h))) {
+    const group = rest.filter((r) => r.h === h);
+    const common = CANDIDATE_WIDTHS.filter((c) => group.every((r) => r.w % c === 0 && c <= r.w)).sort((a, b) => Math.abs(a - h) - Math.abs(b - h) || a - b);
+    const g = group.map((r) => r.w).reduce(gcd);
+    const fw = group.length > 1 ? (common[0] ?? (g >= h / 2 && g <= h * 4 ? g : 0)) : 0;
+    for (const r of group) {
+      if (fw > 0) out.set(r.file, { frameWidth: fw, frameHeight: h, frames: r.w / fw, how: "candidate", odd: `not square frames: ${fw}×${h} (${r.w / fw} frames), the width shared by ${group.length} sheets` });
+      else out.set(r.file, detectFrames(r.w, r.h));
+    }
+  }
+  return out;
 }
 
 // ---------------------------------------------------------------------------------------------------------------

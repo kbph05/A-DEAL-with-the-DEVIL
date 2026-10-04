@@ -4,7 +4,7 @@ import { readFileSync } from "node:fs";
 import { ENCOUNTER_BANDS } from "../fight/encounters";
 import { ENEMY_IDS } from "../fight/enemies";
 import {
-  CHARACTERS, FRAME_OVERRIDES, PACKS, ROLES, attributionFile, characterFiles, characterListed, detectFrames, enemyAnim, feetOrigin,
+  CHARACTERS, FRAME_OVERRIDES, detectCharacterFrames, PACKS, ROLES, attributionFile, characterFiles, characterListed, detectFrames, enemyAnim, feetOrigin,
   fitScale, listedPacks, opaqueBBox, playerAnim, privateAssetUrl, roleArt, roleScale, unionBox, type AnimName, type CharacterId,
 } from "./sprites";
 
@@ -37,6 +37,20 @@ test("frame detection: non-square sheets fall back to a common frame width that 
   assert.deepEqual([none.frameWidth, none.frameHeight, none.frames, none.how], [301, 47, 1, "single"]);
   assert.ok(none.odd);
   assert.equal(detectFrames(0, 0).frames, 1, "an empty image doesn't throw");
+});
+
+test("frame detection per character: non-square sheets share one frame width (69×44 warrior-style sheets)", () => {
+  // 6, 8, 4, 5 and 7 frames of 69×44; on its own, 552 also divides by 69 only, but 640 (say) would read as 64 or 80.
+  const sheets = [6, 8, 4, 5, 7].map((n, i) => ({ file: `w${i}.png`, w: 69 * n, h: 44 }));
+  const L = detectCharacterFrames(sheets);
+  for (const [i, n] of [6, 8, 4, 5, 7].entries()) assert.deepEqual([L.get(`w${i}.png`)!.frameWidth, L.get(`w${i}.png`)!.frames], [69, n]);
+  // A frame width outside the candidates: the common divisor, when it is a plausible frame.
+  const odd = detectCharacterFrames([{ file: "a", w: 72 * 5, h: 50 }, { file: "b", w: 72 * 7, h: 50 }]);
+  assert.deepEqual([odd.get("a")!.frameWidth, odd.get("b")!.frames], [72, 7]);
+  // Square strips are left alone, and a lone non-square sheet falls back to detectFrames.
+  const mixed = detectCharacterFrames([{ file: "sq", w: 600, h: 100 }, { file: "lone", w: 414, h: 44 }]);
+  assert.equal(mixed.get("sq")!.how, "square");
+  assert.equal(mixed.get("lone")!.frameWidth, 69);
 });
 
 test("frame detection: an override wins (by frame width or by count)", () => {
