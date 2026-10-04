@@ -310,7 +310,7 @@ test("engine: hostile command objects are rejected, never thrown on (bug fix)", 
   assert.match((step(initialState("f4"), { cmd: "go", n: Object.create(null) } as unknown as Command).events[0] as { reason: string }).reason, /^no exit object; choose/);
 });
 
-test("engine: the player's text is cut to MAX_PLAYER_TEXT before it is stored or sent (bug fix), without splitting an emoji", () => {
+test("engine: the player's text is cut to MAX_PLAYER_TEXT before it is stored or sent (bug fix), well-formed, without splitting an emoji", () => {
   assert.equal(MAX_PLAYER_TEXT, 2000);
   const r = step(onDeal("t1"), { cmd: "deal", text: "gold ".repeat(100_000) });
   assert.equal(r.awaiting!.devil!.playerText!.length, MAX_PLAYER_TEXT);
@@ -319,6 +319,9 @@ test("engine: the player's text is cut to MAX_PLAYER_TEXT before it is stored or
   assert.equal(e.length, MAX_PLAYER_TEXT - 1);
   assert.ok(!/[\uD800-\uDBFF]$/.test(e));
   assert.equal(step(onDeal("t3"), { cmd: "deal", text: "short" }).awaiting!.devil!.playerText, "short", "short text untouched");
+  const lone = step(onDeal("t4"), { cmd: "deal", text: "gold \uD83D please \uDE08 😈" }).awaiting!.devil!.playerText!;
+  assert.equal(lone, "gold \uFFFD please \uFFFD 😈", "lone surrogates become U+FFFD; whole pairs stay");
+  assert.equal(sanitizeDeal({ dialogue: "x\uD800y", effects: {} }).dialogue, "x\uFFFDy");
 });
 
 test("a devil that hangs or throws on hostile text: the engine falls back to silence and the run continues", async () => {

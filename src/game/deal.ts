@@ -2,8 +2,14 @@ import { isKind } from "../map";
 import type { CurseTrigger, Deal } from "./devil";
 import { sanitizeEffects } from "./state";
 
-/** Cut to `max` code units without leaving half a surrogate pair (a split emoji) at the end. */
-export const cut = (t: string, max: number): string => (t.length <= max ? t : t.slice(0, max).replace(/[\uD800-\uDBFF]$/, ""));
+const LONE_SURROGATE = /[\uD800-\uDBFF](?![\uDC00-\uDFFF])|(?<![\uD800-\uDBFF])[\uDC00-\uDFFF]/g;
+/**
+ * Cut to `max` code units without leaving half a surrogate pair (a split emoji) at the end, and replace any other lone
+ * surrogate with U+FFFD, so the text is well-formed Unicode (a lone surrogate makes some JSON parsers, llama.cpp's for
+ * one, reject the whole request).
+ */
+export const cut = (t: string, max: number): string =>
+  (t.length <= max ? t : t.slice(0, max).replace(/[\uD800-\uDBFF]$/, "")).replace(LONE_SURROGATE, "\uFFFD");
 
 const TRIGGERS: readonly CurseTrigger[] = ["on_hit", "on_enter", "on_fight", "next_node"];
 const MAX_DIALOGUE = 600;
