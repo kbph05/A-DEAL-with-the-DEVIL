@@ -1,4 +1,5 @@
 /** Player state, clamping helpers, and the one place stat ranges live. */
+import { REVIVE_SHARE } from "./difficulty";
 import { MAX_DEAL_GOLD, START_GOLD } from "./economy";
 
 export interface PlayerState {
@@ -62,7 +63,7 @@ export function note(s: PlayerState, text: string): void {
 }
 
 /**
- * HP <= 0 loses, except the soul revives you once (soul -> 0, back to half HP). Call after anything that
+ * HP <= 0 loses, except the soul revives you once (soul -> 0, back to REVIVE_SHARE of max HP). Call after anything that
  * lowers hp. "revived" and "dead" are the only results that change the state.
  */
 export function settle(s: PlayerState): "alive" | "revived" | "dead" {
@@ -70,7 +71,7 @@ export function settle(s: PlayerState): "alive" | "revived" | "dead" {
   if (s.hp > 0) return "alive";
   if (s.soul === 1) {
     s.soul = 0;
-    s.hp = Math.max(1, Math.ceil(s.maxHp / 2));
+    s.hp = Math.max(1, Math.ceil(s.maxHp * REVIVE_SHARE));
     return "revived";
   }
   s.hp = 0;

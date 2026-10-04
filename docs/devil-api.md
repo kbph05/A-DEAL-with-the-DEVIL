@@ -4,12 +4,12 @@ The contract between the game (`src/game/httpDevil.ts`, `HttpDevil`) and the Gem
 
 ## Request
 
-`POST <url>` (default `http://localhost:8787/deal`), `Content-Type: application/json`. One request per ask: the player talked to the devil at a deal node, **a campfire, or a well** (4 Oct: he also sits at every campfire, where a deal is the third choice beside resting and sharpening, and at about half the wells; same rules everywhere). `context.kind` says which. **At a well** (`kind: "well"`) the devil and the blessing are one choice of the two: the first ask locks the blessing, even if the player then refuses. So the devil should try to talk the player out of the blessing ("Holy water? Dull. I can do better…") before making his offer; the StubDevil opens every well offer with such a line (`WELL_ENTICE` in `src/game/devil.ts`).
+`POST <url>` (default `http://localhost:8787/deal`), `Content-Type: application/json`. One request per ask: the player talked to the devil at a deal node, **a campfire, or a well** (4 Oct: he also sits at every campfire, where a deal is the third choice beside resting and sharpening, and at about half the wells; same rules everywhere). `context.kind` says which. **At a well** (`kind: "well"`) the devil and the blessing are one choice of the two: the first ask locks the blessing, even if the player then refuses. So the devil should try to talk the player out of the blessing ("Drinking from a hole in the ground? How desperate. I can do better…") before making his offer; the StubDevil opens every well offer with such a line (`WELL_ENTICE` in `src/game/devil.ts`).
 
 Body: `{ state, context, playerText }`
 
 - `state`: the player at the moment of asking: `hp`, `maxHp`, `gold`, `attack`, `soul` (1 = still theirs, 0 = sold/spent), `act` (0-based), `nodeId`, `log` (up to 100 short strings of past events, oldest first; grows over a run).
-- `context`: `seed` (run seed: stable per run, handy as a session key), `act`, `nodeId`, `kind` (where he is sitting: `"deal"` (his table), `"campfire"` or `"well"`; additive, older clients may omit it; use it to set the scene: "by the campfire...", "at the well..."), `askIndex` (how many times the devil has been asked this run, counting this ask and haggles: 1 on the first ask), `questionsLeft` (how many more questions the player may ask this run, after this one: 0 means this was the last; the game caps a run at 10 questions, `MAX_DEVIL_QUERIES`, so use it to taunt or wind down; additive field, older clients may omit it), `rewritable` (nodes the devil may rewrite: `{id, kind}`, ahead of the player, unvisited, never the boss), `curses` (already on the player: `{trigger, effect}`), `progress` (additive, 4 Oct: how far through the run the player is, 0 at the start of act 1 to 1 at the act-3 boss, `(act + layer / boss layer) / 3` with two decimals; use it to scale gold, see "Gold" below; older clients may omit it).
+- `context`: `seed` (run seed: stable per run, handy as a session key), `act`, `nodeId`, `kind` (where he is sitting: `"deal"` (his table), `"campfire"` or `"well"`; additive, older clients may omit it; use it to set the scene: "by the campfire...", "at the well..."), `askIndex` (how many times the devil has been asked this run, counting this ask and haggles: 1 on the first ask), `questionsLeft` (how many more questions the player may ask this run, after this one: 0 means this was the last; the game caps a run at 10 questions, `MAX_DEVIL_QUERIES`, so use it to taunt or wind down; additive field, older clients may omit it), `rewritable` (nodes the devil may rewrite: `{id, kind}`, ahead of the player, unvisited, never the boss), `curses` (already on the player: `{trigger, effect}`), `progress` (additive, 4 Oct: how far through the run the player is, 0 at the start of act 1 to 1 at the act-3 boss, `(act + layer / boss layer) / 3` with two decimals; use it to scale gold, see "Gold" below; older clients may omit it), `haggle` (additive, 4 Oct: how many offers the devil already made at this node before this one: 0 for the opener or a first ask, 1 for the first haggle, and so on; make each haggle worse for the player, see "Devil voice and pricing" below; older clients may omit it).
 - `playerText`: what the player typed, or `null` if nothing. Player-controlled and untrusted: treat as prompt-injection-prone input (see "Off-topic text and jailbreak attempts" below). The engine cuts it to 2000 UTF-16 code units (`MAX_PLAYER_TEXT` in `src/game/state-machine.ts`, never splitting an emoji, and any lone surrogate replaced with U+FFFD so the body is well-formed UTF-8) before storing or sending it; anything may still be in those 2000. A backend that cuts it shorter must not split a surrogate pair either: llama.cpp rejects the whole request with HTTP 400 when it does (seen in the red-team run).
 
 Example (real state from an earlier build, in which `createGame("demo")` opened on a deal node; `askIndex` set as the engine does at ask time). Act 1 now always opens on the village, so a real first request comes a few nodes in, with HP and gold changed by then; the shape is the same:
@@ -52,7 +52,8 @@ Example (real state from an earlier build, in which `createGame("demo")` opened 
       }
     ],
     "curses": [],
-    "progress": 0
+    "progress": 0,
+    "haggle": 0
   },
   "playerText": "I'd like some gold, and no strings"
 }
@@ -78,6 +79,30 @@ kbph: "make the devil less friendly with gold offers especially right at the beg
 - **Scale the amount with `context.progress`**: small early, larger later. The StubDevil pays 4 gold at the start up to 18 at the act-3 boss (`devilGold(progress)`). For scale: a blade costs 12, a heal 10, a blessing 8, a regular kill pays 2 to 7 and a boss 0 to 16.
 - **Make gold cost something real**: a stat loss (max HP, HP, attack) or a good node ahead turned into a fight, not only a curse (the player can have a curse struck by reading the fine print).
 - **The hard cap is 30 gold per deal** (`MAX_DEAL_GOLD` in `src/game/economy.ts`): `sanitizeDeal` clamps any larger gain to 30, for every devil. Stay well under it. A deal may still *take* up to 100 gold.
+
+## Devil voice and pricing (4 Oct)
+
+kbph: "devil is too nice to the player because LLMs are too nice to users. make it actually be not nice." Language models drift toward being helpful and warm; this devil must not. For the Gemini (or OAI) backend:
+
+**Voice.** Contemptuous and manipulative, never warm, never encouraging. He mocks weakness ("Bleeding on my table. Pathetic."), flatters only to sell, and talks about the player's life as his inventory. No "friend", no "good luck", no comfort, no advice that helps the player. He still may not lie outright (`devil_prompt.txt`): state the real terms, then use bad-faith framing ("You were going to die soft anyway; this way you die with a sharp sword"). No real religious references (no god, heaven, hell, prayer, saints, holy water). The StubDevil's lines in `src/game/devil.ts` (`OFFERS`, `openingOffer`, `WELL_ENTICE`) set the tone.
+
+**Pricing: never a good deal.** Every offer must be net-negative for the player, or at best break-even, over the rest of the run. Score your offer before sending it with **`dealValue(deal, state, context?)`** from `src/game/dealValue.ts` (also exported from `src/game/index.ts`; pure, no browser or map imports):
+
+```ts
+import { dealValue } from "../src/game/dealValue";
+// deal: your reply ({ effects, curse?, rewrite?, forced? }); state: the request's `state`; context: the request's `context` (optional)
+const v = dealValue(deal, state, context); // HP-equivalents for the player: > 0 helps them, 0 is break-even, < 0 helps you
+```
+
+The unit is HP-equivalents (+1 is as good as 1 HP of damage not taken), measured from win rates in forked bot runs. Rough weights at the start of the run / at the act-3 boss: +1 attack 11 / 3, +1 max HP 1.3 / 0.3 (a lost one costs 2.3 / 1), +1 HP while hurt 0.4 / 0.75, 1 gold 0.7 / 0.1, the soul 21 / 35, a good node turned into a fight -10. A curse counts in full (stat changes from a curse are permanent), unless the player already holds 5. If `dealValue > 0`, add costs until it is not. The StubDevil's rules (`priceDeal` in `src/game/devil.ts`) are a good default:
+
+- **The visible terms** (`effects`, `rewrite`) are at best break-even.
+- **His margin hides in the curse**: delayed costs (an `on_hit` HP loss, then max HP, then attack) rather than up-front ones. He keeps 2 HP-equivalents, plus up to 8 more when the player is weak (hurt, or low attack for the act).
+- **Haggling makes it worse**: 4 more per `context.haggle`, taken from the visible terms, and he says so ("Every time you ask, the price climbs").
+- **The fine print** (`fine print`, `loophole`, `clause`, `contract` in the text) still strikes the curse, but the whole margin moves into the visible terms: reading protects the player from surprises, not from the price.
+- **Soul pressure**: his soul offer (+10 max HP, +1 attack, gold late) is worth far less than the soul, and he pitches it whenever the player looks comfortable.
+
+`src/game/dealValue.test.ts` checks the stub this way over 20,000 offers (openers, wishes, the fine print, gibberish, haggles 0 to 2, random states).
 
 ## Response
 

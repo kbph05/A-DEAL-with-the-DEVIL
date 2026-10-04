@@ -92,7 +92,7 @@ Names in backticks are constants or functions you can search for. "Inline" means
 | 1 | Shop prices | `WARES` in `src/game/gameState.ts` |
 | 2 | What a ware does (heal 12, blade +1, blessing roll) | `buy()` in `src/game/state-machine.ts`. Also update the text copies: `WARE_INFO` in `src/hud/model.ts` and `WARE_TEXT` in `src/world/shopZone.ts` |
 | 3 | Gold from a won fight | Inline in `src/game/state-machine.ts`, twice: `fight()` and `fightResult()`. Change both |
-| 4 | Engine enemy HP and power per act | Inline in `enter()` in `src/game/state-machine.ts` (regular and boss) |
+| 4 | Engine enemy HP and power per act | `FOE` and `BOSS` in `src/game/difficulty.ts` |
 | 5 | Enemy and boss names | `FOES` and `BOSSES` in `src/game/gameState.ts` |
 | 6 | Realtime enemy stats (speed, cooldowns, aggro) | `ENEMIES` in `src/fight/enemies.ts` |
 | 7 | Enemy mix and scaling up the run | `ENCOUNTER_BANDS` and `SCALING` in `src/fight/encounters.ts` |
@@ -100,11 +100,11 @@ Names in backticks are constants or functions you can search for. "Inline" means
 | 9 | Which kinds exist, and good vs bad | `GOOD_KINDS`, `BAD_KINDS` in `src/map/types.ts` |
 | 10 | Campfire rules (rest heals 40%, train +1) | Rest is inline (`maxHp * 0.4`, case `"rest"` in `step`). Train is `TRAIN_ATTACK` in `src/game/gameState.ts` |
 | 11 | Well rules (blessing, one choice, devil chance) | `WELL_DEVIL_CHANCE`, `ONE_CHOICE` in `src/game/gameState.ts`. Blessing outcomes are inline in `buy()` |
-| 12 | Healing on stairs and after a boss | Inline `healBy` calls in `go()`, `fight()` and `fightResult()` in `src/game/state-machine.ts` |
+| 12 | Healing on stairs and after a boss; HP after the revival | `FREE_HEAL` and `REVIVE_SHARE` in `src/game/difficulty.ts` |
 | 13 | Starting stats | `newPlayer` in `src/game/state.ts` |
 | 14 | Hard limits on stats and deal sizes | `STAT_RANGE`, `DELTA_RANGE` in `src/game/state.ts`; `MAX_STRIKE_HP` in `src/game/deal.ts` |
 | 15 | Questions per node, per run, curses held | `MAX_ASKS`, `MAX_DEVIL_QUERIES`, `MAX_CURSES` in `src/game/gameState.ts` |
-| 16 | Stub devil offers and wording | `OFFERS` in `src/game/devil.ts` |
+| 16 | Stub devil offers and wording | `OFFERS` in `src/game/devil.ts`. His prices: `DEVIL_MARGIN`, `priceDeal` there, scored by `dealValue` (`src/game/dealValue.ts`) |
 | 17 | Stub devil opening offer | `openingOffer`, `OPENER_LOW_HP`, `OPENER_POOR` in `src/game/devil.ts` |
 | 18 | Stub devil anger and strikes | `ANGRY`, `STRIKE_LINES`, `STRIKE_CHANCE`, `OFF_TOPIC_STRIKE_CHANCE` in `src/game/devil.ts` |
 | 19 | Devil lines at wells | `WELL_ENTICE` in `src/game/devil.ts` |

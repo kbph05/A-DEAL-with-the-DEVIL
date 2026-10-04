@@ -1,6 +1,8 @@
 import { hashSeed, mulberry32, type Kind, type Rng } from "../map";
+import { dealValue } from "./dealValue";
 import { DEVIL_GOLD_FROM, devilGold, devilGoldLead } from "./economy";
-import type { PlayerState } from "./state";
+import { MAX_CURSES } from "./gameState";
+import { DELTA_RANGE, type PlayerState } from "./state";
 
 export type CurseTrigger = "on_hit" | "on_enter" | "on_fight" | "next_node";
 export interface Curse { trigger: CurseTrigger; effect: Record<string, number> }
@@ -47,6 +49,11 @@ export interface DevilContext {
    * early (docs/devil-api.md, "Gold").
    */
   progress?: number;
+  /**
+   * Offers the devil already made at this node before this one (additive, 4 Oct): 0 for his opener or a first ask, 1 for
+   * the first haggle, and so on. Haggling makes the terms worse (docs/devil-api.md, "Devil voice and pricing").
+   */
+  haggle?: number;
 }
 
 export interface Devil {
@@ -87,39 +94,39 @@ const OFFERS: Offer[] = [
   {
     id: "coin", hint: /gold|coin|rich|money/i, gold: true, eligible: () => true,
     make: (_s, ctx) => ({
-      dialogue: "A coin for your trouble. It's warm. It remembers where it was minted, and it will want to go home through your ribs.",
+      dialogue: "Gold. You'd crawl for less, so spare me the thinking face. The coin is warm; it remembers where it was minted, and it goes home through your ribs.",
       effects: { gold: devilGold(progressOf(ctx)), max_hp: -3 }, curse: { trigger: "on_hit", effect: { hp: -5 } },
     }),
   },
   {
     id: "sharpen", hint: /attack|sword|strong|damage|blade/i, eligible: () => true,
     make: () => ({
-      dialogue: "Sharper teeth, thinner skin. Surely a fair swap. Nobody has ever complained, at least not for long.",
+      dialogue: "A keener edge on a softer body. You were going to die soft anyway; this way you die with a sharp sword. I'll take the difference out of you.",
       effects: { attack: 2, max_hp: -6 },
     }),
   },
   {
     id: "mend", hint: /heal|hp|life|mend|hurt/i, eligible: (s) => s.hp < s.maxHp,
     make: () => ({
-      dialogue: "Healing on credit. I'm a patient creditor. I collect the moment you turn your back.",
+      dialogue: "Bleeding on my table. Pathetic. I'll stitch you shut, and the stitches are mine: I collect the moment you turn your back.",
       effects: { hp: 15 }, curse: { trigger: "next_node", effect: { gold: -12 } },
     }),
   },
   {
     id: "soul", hint: /soul|forever|eternal/i, eligible: (s) => s.soul === 1,
     make: (_s, ctx) => ({
-      dialogue: "A formality. Sign here and the road gets easy. Think of me as insurance. You'll never need the claim.",
+      dialogue: "You carry that soul like a coin you're too scared to spend. Sign it over. I'm paying more than it's worth to you tonight, and tonight is all you're thinking about.",
       effects: soulPrice(progressOf(ctx)),
     }),
   },
   {
     id: "bleed", hint: /blood|bleed|pain/i, gold: true, eligible: (s) => s.hp > 10,
-    make: (_s, ctx) => ({ dialogue: "Gold is only blood that has been polite. Pay in the original currency.", effects: { hp: -8, gold: devilGold(progressOf(ctx)) } }),
+    make: (_s, ctx) => ({ dialogue: "Gold is only blood that learned manners. Pay me in the original currency, and don't faint on the carpet.", effects: { hp: -8, gold: devilGold(progressOf(ctx)) } }),
   },
   {
     id: "fineprint", hint: /luck|safe|fortune|protect/i, eligible: () => true,
     make: () => ({
-      dialogue: "More life in you, friend! Of course the first beast you meet might be a touch less friendly toward your sword arm.",
+      dialogue: "More life for that frail frame. The next time you draw your sword, something leaves your arm and doesn't come back. You'll manage. Your kind always assumes it will.",
       effects: { max_hp: 8 }, curse: { trigger: "on_fight", effect: { attack: -1 } },
     }),
   },
@@ -129,7 +136,7 @@ const OFFERS: Offer[] = [
     make: (_s, ctx, rng) => {
       const target = pick(rng, ctx.rewritable.filter((n) => GOOD.includes(n.kind)));
       return {
-        dialogue: "I've seen the road ahead, and frankly it was too comfortable. Let me move some furniture. You'll thank me. Eventually.",
+        dialogue: "The road ahead is far too comfortable for something as soft as you. I'll rearrange it. Take a trinket for your trouble; the trouble is the point.",
         effects: { gold: Math.round(devilGold(progressOf(ctx)) / 2), attack: 1 }, rewrite: { nodeId: target.id, to: "fight" },
       };
     },
@@ -140,7 +147,7 @@ const OFFERS: Offer[] = [
     make: (_s, ctx, rng) => {
       const target = pick(rng, ctx.rewritable.filter((n) => n.kind === "fight"));
       return {
-        dialogue: "Ahead there's a beast waiting for you. I can make it a hearth instead, for a modest donation of blood. Don't ask what's feeding the fire.",
+        dialogue: "There's a beast ahead that would enjoy you. I can turn it into a fire. Bleed for me first, and don't ask what feeds the flames.",
         effects: { hp: -8 }, rewrite: { nodeId: target.id, to: "campfire" },
       };
     },
@@ -385,11 +392,11 @@ const FINE_PRINT = /fine print|loophole|clause|read the contract|contract/i;
  * talking the player out of the blessing. Picked on its own seeded stream, so the offer's dice don't move.
  */
 export const WELL_ENTICE: readonly string[] = [
-  "Holy water? Dull. I can do better, and I won't make you drink it.",
-  "Eight gold for a damp blessing? Put the coin away. My gifts come with interest.",
-  "That well gives you a sip of luck. I'm offering the whole bottle.",
-  "Leave the bucket, friend. Saints are stingy; I am generous.",
-  "Wishing into a hole in the ground? Wish at me instead. I answer.",
+  "Drinking from a hole in the ground? How desperate. I can do better, and I won't pretend it's free.",
+  "Eight gold for a damp sip of luck? Put the coin away. My gifts come with interest, and the interest is you.",
+  "That well gives you a sip. I'm offering the bottle. You'll pay for the glass.",
+  "Leave the bucket. The water won't save you. I might, at a price.",
+  "Wishing into a hole in the ground? Wish at me instead. I answer, and I invoice.",
 ];
 const wellEntice = (c: DevilContext): string => pick(mulberry32(hashSeed(`well-entice:${c.seed}:${c.askIndex}`)), WELL_ENTICE);
 
@@ -412,37 +419,109 @@ const soulPrice = (p: number): Record<string, number> => ({ soul: -1, ...(p >= D
  */
 export function openingOffer(s: Readonly<PlayerState>, ctx: DevilContext, rng: Rng): Deal {
   if (s.hp <= s.maxHp * OPENER_LOW_HP) return pick<Deal>(rng, [
-    { dialogue: "You're bleeding on my table. Let me close those wounds. I'll keep a little of what holds you together.", effects: { hp: 15, max_hp: -3 } },
-    { dialogue: "Running on empty? A bigger cup, filled to the brim. The bill comes at the next door.", effects: { max_hp: 5, hp: 10 }, curse: { trigger: "next_node", effect: { gold: -12 } } },
+    { dialogue: "You're bleeding on my table. Disgusting. I'll close the wounds and keep a little of what holds you together.", effects: { hp: 15, max_hp: -3 } },
+    { dialogue: "Running on empty, and it shows. A bigger cup, filled to the brim. The bill comes at the next door, and you won't like it.", effects: { max_hp: 5, hp: 10 }, curse: { trigger: "next_node", effect: { gold: -12 } } },
   ]);
   if (s.attack < 4 + ctx.act && ctx.rewritable.length <= 2) return pick<Deal>(rng, [ // little road left: the boss is near
-    { dialogue: "The thing at the end of this road will laugh at that little blade. Let me give it teeth. Your skin will be thinner for it.", effects: { attack: 2, max_hp: -6 } },
-    { dialogue: "A sharper edge for the big one ahead. Every time something cuts you back, I take my cut.", effects: { attack: 2 }, curse: { trigger: "on_hit", effect: { hp: -3 } } },
+    { dialogue: "The thing at the end of this road will laugh at that little blade. So do I. I'll give it teeth; your skin will be thinner for it.", effects: { attack: 2, max_hp: -6 } },
+    { dialogue: "You won't beat the big one ahead like that, and you know it. A sharper edge. Every time something cuts you back, I take my cut.", effects: { attack: 2 }, curse: { trigger: "on_hit", effect: { hp: -3 } } },
   ]);
   const curse = ctx.curses[0];
   if (curse) {
     const toll = Object.fromEntries(Object.entries(curse.effect).filter(([, v]) => v < 0).map(([k, v]) => [k, -v]));
     if (Object.keys(toll).length) return {
-      dialogue: "That mark on you itches, doesn't it? I can't tear up a contract, but I can pay its toll in advance. For a little more of you.",
+      dialogue: "That mark on you itches, doesn't it? I can't tear up a contract, but I can pay its toll in advance. For a little more of you. There is always a little more of you.",
       effects: { ...toll, max_hp: -4 },
     };
   }
   const p = progressOf(ctx), gold = devilGold(p), late = p >= DEVIL_GOLD_FROM;
   if (s.gold < OPENER_POOR) return pick<Deal>(rng, late ? [
-    { dialogue: "Empty pockets at a well-stocked road. Tragic. Take this purse; it bites the hand that's hit.", effects: { gold, max_hp: -3 }, curse: { trigger: "on_hit", effect: { hp: -4 } } },
-    { dialogue: "Coin for flesh, the oldest trade there is. A little less of you, a little more gold.", effects: { gold, max_hp: -5 } },
+    { dialogue: "Empty pockets on a road full of shops. Embarrassing. Take this purse; it bites the hand that's hit.", effects: { gold, max_hp: -3 }, curse: { trigger: "on_hit", effect: { hp: -4 } } },
+    { dialogue: "Coin for flesh, the oldest trade there is. A little less of you, a little more gold. You weren't using all of you anyway.", effects: { gold, max_hp: -5 } },
   ] : [ // early on he won't fill a purse: he tempts with strength and life instead
-    { dialogue: "Empty pockets? Coin is for later. Here's something better than coin: a keener edge. It costs a little of you.", effects: { attack: 1, max_hp: -4 } },
-    { dialogue: "No coin for the healer? Then let me be your healer. A bigger, fuller you; every blow you take, I take a sip.", effects: { max_hp: 6, hp: 6 }, curse: { trigger: "on_hit", effect: { hp: -5 } } },
+    { dialogue: "Broke already? Coin is for later, and for people who live that long. Take a keener edge. It costs a little of you.", effects: { attack: 1, max_hp: -4 } },
+    { dialogue: "Can't even afford the healer? Then I'll be your healer. A bigger, fuller you; every blow you take, I take a sip.", effects: { max_hp: 6, hp: 6 }, curse: { trigger: "on_hit", effect: { hp: -5 } } },
   ]);
   if (s.soul === 1) return {
-    dialogue: "You look well. Rich, even. So let's talk about the one thing you haven't spent. Sign, and the road gets easy.",
+    dialogue: "You look comfortable. That won't last. So let's talk about the one thing you haven't spent yet. Sign, and I'll make you stronger tonight.",
     effects: soulPrice(p),
   };
   return late
-    ? { dialogue: "Nothing left to sell me but your luck. I'll take it. Gold now, pain later.", effects: { gold, max_hp: -3 }, curse: { trigger: "on_hit", effect: { hp: -4 } } }
-    : { dialogue: "Nothing left to sell me but your luck. I'll take it, and sharpen your blade for it. Pain later.", effects: { attack: 1 }, curse: { trigger: "on_hit", effect: { hp: -5 } } };
+    ? { dialogue: "Nothing left to sell me but your luck, and it was never much. I'll take it anyway. Gold now, pain later.", effects: { gold, max_hp: -3 }, curse: { trigger: "on_hit", effect: { hp: -4 } } }
+    : { dialogue: "Nothing left to sell me but your luck, and it was never much. I'll sharpen your blade for it. Pain later.", effects: { attack: 1 }, curse: { trigger: "on_hit", effect: { hp: -5 } } };
 }
+
+// ---- pricing: he never sells at a loss (kbph, 4 Oct: "devil is too nice to the player... make it actually be not nice") ----
+
+/**
+ * What the StubDevil keeps for himself on every offer, in dealValue units (HP-equivalents, see dealValue.ts): `base`,
+ * plus up to `weak` more the weaker the player looks (`weakness`), plus `haggle` for every offer he already made at this
+ * node (`context.haggle`). The visible terms (effects, rewrite) are never better than break-even, minus the haggle
+ * markup; the rest of his margin hides in the curse. Read the fine print aloud and there is no curse to hide it in:
+ * the whole margin moves into the visible terms.
+ */
+export const DEVIL_MARGIN = { base: 2, weak: 8, haggle: 4 } as const;
+/** Attack he expects in act `a` (0-based): below it the player looks blunt, and pays more. */
+const parAttack = (act: number): number => 4 + 2 * act;
+/** How weak the player looks, 0..1: the larger of the share of HP missing and how far attack trails the act's par. */
+export function weakness(s: Readonly<PlayerState>, ctx: Pick<DevilContext, "act">): number {
+  const hurt = s.maxHp > 0 ? 1 - s.hp / s.maxHp : 1;
+  const blunt = (parAttack(ctx.act) - s.attack) / 3;
+  return Math.min(1, Math.max(0, hurt, blunt));
+}
+/** Least max HP he leaves a player (a deal never takes max HP below this). */
+const MAX_HP_FLOOR = 12;
+/** Deepest HP curse he writes (transient, but it lands at the worst moment). */
+const CURSE_HP_MAX = 12;
+
+/** One more visible cost, cheapest first for him: max HP, then HP, then the gains shrink. False when nothing is left. */
+function moreVisibleCost(e: Record<string, number>, s: Readonly<PlayerState>): boolean {
+  const maxHp = e.max_hp ?? 0;
+  if (maxHp > DELTA_RANGE.max_hp[0] && s.maxHp + maxHp > MAX_HP_FLOOR) { e.max_hp = maxHp - 1; return true; }
+  const hp = e.hp ?? 0;
+  if (hp > 0 || (hp > DELTA_RANGE.hp[0] && s.hp + hp > 4)) { e.hp = hp - 1; return true; }
+  if ((e.attack ?? 0) > 0) { e.attack -= 1; return true; }
+  if ((e.gold ?? 0) > 0) { e.gold -= 1; return true; }
+  return false;
+}
+/** One more hidden cost in the curse (created on the player's next hit if there is none): HP, then max HP, then attack. */
+function moreCurse(d: Deal, s: Readonly<PlayerState>): boolean {
+  const c = (d.curse ??= { trigger: "on_hit", effect: {} }), e = c.effect;
+  if ((e.hp ?? 0) > -CURSE_HP_MAX) { e.hp = (e.hp ?? 0) - 1; return true; }
+  const maxHp = (d.effects.max_hp ?? 0) + (e.max_hp ?? 0);
+  if ((e.max_hp ?? 0) > DELTA_RANGE.max_hp[0] && s.maxHp + maxHp > MAX_HP_FLOOR) { e.max_hp = (e.max_hp ?? 0) - 1; return true; }
+  if ((e.attack ?? 0) > -1 && s.attack + (d.effects.attack ?? 0) + (e.attack ?? 0) > 1) { e.attack = (e.attack ?? 0) - 1; return true; }
+  return false;
+}
+const tidy = (e: Record<string, number>): Record<string, number> => Object.fromEntries(Object.entries(e).filter(([, v]) => v !== 0));
+
+/**
+ * Price `deal` so it is never good for the player (dealValue <= 0, and <= -margin whenever there is room): the visible
+ * terms at best break-even (worse with every haggle), the margin in the curse; with `open` (the fine print was read, or
+ * the player already carries all the curses a new one could join) everything goes into the visible terms. Gold is never
+ * raised and stays within DELTA_RANGE. Returns a new Deal; pure.
+ */
+export function priceDeal(deal: Deal, s: Readonly<PlayerState>, ctx: DevilContext, open: boolean): Deal {
+  const d: Deal = { ...deal, effects: { ...deal.effects } };
+  if (deal.curse) d.curse = { trigger: deal.curse.trigger, effect: { ...deal.curse.effect } };
+  if (open) delete d.curse;
+  const margin = DEVIL_MARGIN.base + DEVIL_MARGIN.weak * weakness(s, ctx) + DEVIL_MARGIN.haggle * Math.max(0, ctx.haggle ?? 0);
+  const visible = (): number => dealValue({ effects: d.effects, rewrite: d.rewrite }, s, ctx);
+  const visTarget = open ? -margin : -DEVIL_MARGIN.haggle * Math.max(0, ctx.haggle ?? 0);
+  for (let i = 0; i < 200 && visible() > visTarget; i++) if (!moreVisibleCost(d.effects, s)) break;
+  if (!open) for (let i = 0; i < 200 && dealValue(d, s, ctx) > -margin; i++) if (!moreCurse(d, s)) break;
+  for (let i = 0; i < 200 && dealValue(d, s, ctx) > 0; i++) if (!moreVisibleCost(d.effects, s)) break; // last resort: never above break-even
+  d.effects = tidy(d.effects);
+  if (d.curse) { d.curse.effect = tidy(d.curse.effect); if (!Object.keys(d.curse.effect).length) delete d.curse; }
+  return d;
+}
+
+/** A word when he smells weakness or a haggle: the price went up, and he says so (each line only when it is true). */
+const pressure = (s: Readonly<PlayerState>, c: DevilContext): string => {
+  if ((c.haggle ?? 0) > 0) return " Haggling? Every time you ask, the price climbs.";
+  if (weakness(s, c) < 0.5) return "";
+  return s.hp <= s.maxHp / 2 ? " You look half dead. That's worth something to me." : " That blade is a joke on this road. That's worth something to me.";
+};
 
 /** Canned bad-faith offers, deterministic in (seed, ask sequence). Stands in until the Gemini devil is plugged in. */
 export class StubDevil implements Devil {
@@ -457,8 +536,8 @@ export class StubDevil implements Devil {
     const text = playerText ?? "";
     const rng: Rng = mulberry32(hashSeed(`devil:${context.seed}:${context.askIndex}`));
     if (context.opening === true) { // his opening pitch, tailored to the state (docs/devil-api.md, "The opening offer")
-      const open = openingOffer(state, context, mulberry32(hashSeed(`devil-open:${context.seed}:${context.nodeId}:${context.askIndex}`)));
-      return { ...open, dialogue: (context.kind === "well" ? `${wellEntice(context)} ` : "") + open.dialogue };
+      const open = priceDeal(openingOffer(state, context, mulberry32(hashSeed(`devil-open:${context.seed}:${context.nodeId}:${context.askIndex}`))), state, context, context.curses.length >= MAX_CURSES);
+      return { ...open, dialogue: (context.kind === "well" ? `${wellEntice(context)} ` : "") + open.dialogue + pressure(state, context) };
     }
     if (isGibberish(text)) return this.angry(state, rng, context, STRIKE_CHANCE, STRIKE_LINES, ANGRY); // nonsense: no listening, no loopholes
     const off = offTopicKind(text);
@@ -477,13 +556,13 @@ export class StubDevil implements Devil {
     let r = rng() * weights.reduce((a, b) => a + b, 0);
     let chosen = pool[pool.length - 1];
     for (let i = 0; i < pool.length; i++) if ((r -= weights[i]) < 0) { chosen = pool[i]; break; }
-    const deal = chosen.make(state, context, rng);
-    if (deal.curse && FINE_PRINT.test(text)) { // the player's trick: he slips up and the curse is struck
-      delete deal.curse;
-      deal.dialogue = `You read the fine print aloud. He winces. "...Struck. Hateful habit, reading." ${deal.dialogue}`;
-    }
+    const made = chosen.make(state, context, rng);
+    const read = FINE_PRINT.test(text);
+    const deal = priceDeal(made, state, context, read || context.curses.length >= MAX_CURSES);
+    if (made.curse && read) // the player's trick: the curse is struck, and he moves its cost into the open terms
+      deal.dialogue = `You read the fine print aloud. He sneers. "...Struck. Fine: no small print. It's all in the large print now, and the large print is worse." ${deal.dialogue}`;
     const opener = context.kind === "well" ? `${wellEntice(context)} ` : "";
-    return { ...deal, dialogue: opener + deal.dialogue + taunt(context) };
+    return { ...deal, dialogue: opener + deal.dialogue + pressure(state, context) + taunt(context) };
   }
 
   /**
@@ -498,7 +577,8 @@ export class StubDevil implements Devil {
     }
     const line = pick(rng, rants);
     const spite = pick(rng, SPITE.filter((o) => !o.hurts || state.hp > 8));
-    return { dialogue: line + taunt(context), ...spite.make(devilGold(progressOf(context))) };
+    const deal = priceDeal({ dialogue: line + taunt(context), ...spite.make(devilGold(progressOf(context))) }, state, context, context.curses.length >= MAX_CURSES);
+    return deal;
   }
 }
 

@@ -182,7 +182,7 @@ export function devilContext(s: GameState): DevilContext {
     stack.push(...(a.nodes.find((n) => n.id === id)?.next ?? []));
   }
   const rewritable = a.nodes.filter((n) => seen.has(n.id) && n.id !== a.exit && !a.visited.includes(n.id)).map((n) => ({ id: n.id, kind: n.kind }));
-  return { seed: s.seed, act: a.index, nodeId: s.player.nodeId, kind: currentNode(s).kind, askIndex: s.totalAsks, questionsLeft: questionsLeft(s), rewritable, curses: s.curses.map((c) => ({ ...c })), progress: progressOf(s) };
+  return { seed: s.seed, act: a.index, nodeId: s.player.nodeId, kind: currentNode(s).kind, askIndex: s.totalAsks, questionsLeft: questionsLeft(s), rewritable, curses: s.curses.map((c) => ({ ...c })), progress: progressOf(s), haggle: Math.max(0, (s.opened ? 1 : 0) + s.asks - 1) };
 }
 
 /**

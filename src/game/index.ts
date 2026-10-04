@@ -2,6 +2,7 @@ export { autoplay, simulate, botPolicy, execute, type AutoplayResult, type Comma
 export { sanitizeDeal } from "./deal";
 export { sanitizeFightResult, fightRequest, type FightRequest, type FightOutcome } from "./fightResult";
 export { HttpDevil, DEFAULT_DEVIL_URL, type DevilRequest, type Exchange } from "./httpDevil";
+export { dealValue, DEAL_WEIGHTS, REWRITE_VALUE } from "./dealValue";
 export { devilFor, setDevil, StubDevil, isGibberish, type Curse, type CurseTrigger, type Deal, type Devil, type DevilContext } from "./devil";
 export { describe, isSyncMarker, type GameEvent, type Result, type Ending } from "./events";
 export { createGame, restoreGame, Game, type MapView, type MapViewNode, type Observation, type View } from "./run";

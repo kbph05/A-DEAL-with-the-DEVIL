@@ -150,7 +150,7 @@ What happens on **entering any node**, in order: the `moved` event, then **`on_e
 ### 4.4 Well
 
 - Action: `buy("blessing")` for **8g**, once per well. The blessing is rolled (uniform) from three: **+3 max HP**, **+1 attack**, **+8 HP**. You do not get to choose and are told only after paying. Spend is checked after the "already used" check, so a failed buy costs nothing.
-- **The devil sometimes waits here** (kbph and Big Chungus, 4 Oct): with chance `WELL_DEVIL_CHANCE = 0.5` (`src/game/gameState.ts`), fixed per run seed and well by `devilAtWell(seed, nodeId)`, its own hashed roll, so the dice and the map are untouched. Entering such a well emits `devil_appears { nodeId, kind }` right after `moved`, and `deal` is legal there with the deal-node rules (4.1; context `kind: "well"`). Elsewhere `deal` is rejected ("the devil does not sit here"). **One choice per well** (kbph, 4 Oct: "the well option needs to be mutually exclusive"): buy the blessing, deal with the devil (only if he is there), or skip (move on). It works like the campfire (4.3, `ONE_CHOICE` in `src/game/gameState.ts`): buying the blessing rejects `deal` ("you took the well's blessing; the devil has nothing for you here"); the **first `deal` ask** rejects the blessing ("you chose the devil at this well"), whatever follows (haggles, a strike, accept, refuse, walking away). Deciding the deal sends the devil away (`GameState.devilGone`). The StubDevil opens every well offer by talking you out of the blessing ("Holy water? Dull. I can do better, and I won't make you drink it."; `WELL_ENTICE`, seeded per run and ask).
+- **The devil sometimes waits here** (kbph and Big Chungus, 4 Oct): with chance `WELL_DEVIL_CHANCE = 0.5` (`src/game/gameState.ts`), fixed per run seed and well by `devilAtWell(seed, nodeId)`, its own hashed roll, so the dice and the map are untouched. Entering such a well emits `devil_appears { nodeId, kind }` right after `moved`, and `deal` is legal there with the deal-node rules (4.1; context `kind: "well"`). Elsewhere `deal` is rejected ("the devil does not sit here"). **One choice per well** (kbph, 4 Oct: "the well option needs to be mutually exclusive"): buy the blessing, deal with the devil (only if he is there), or skip (move on). It works like the campfire (4.3, `ONE_CHOICE` in `src/game/gameState.ts`): buying the blessing rejects `deal` ("you took the well's blessing; the devil has nothing for you here"); the **first `deal` ask** rejects the blessing ("you chose the devil at this well"), whatever follows (haggles, a strike, accept, refuse, walking away). Deciding the deal sends the devil away (`GameState.devilGone`). The StubDevil opens every well offer by talking you out of the blessing ("Drinking from a hole in the ground? How desperate. I can do better, and I won't pretend it's free."; `WELL_ENTICE`, seeded per run and ask).
 
 ### 4.5 Fight
 
@@ -192,13 +192,13 @@ No miss chance, no crits, no dodge, no defense stat, no armor. A round's player 
 | | Act 1 | Act 2 | Act 3 |
 | --- | --- | --- | --- |
 | Regular names (one picked at random on entry) | cave rat, drowned monk, ash hound | bone mason, glass wolf, hollow knight | choir of moths, gilded wretch, the unlit |
-| Regular HP | 8 + d4(0..3) = **8 to 11** | **12 to 15** | **16 to 19** |
+| Regular HP | 8 + d4(0..3) = **8 to 11** | **12 to 15** | **18 to 21** |
 | Regular power (damage per hit) | 2 (+0..2) = **2 to 4** | 3 (+0..2) = **3 to 5** | 4 (+0..2) = **4 to 6** |
 | Boss | the Gatekeeper | the Cartographer of Ruin | the Devil's Left Hand |
-| Boss HP | **18** | **26** | **34** |
-| Boss power | 3 (+0..2) = **3 to 5** | 4 (+0..2) = **4 to 6** | 5 (+0..2) = **5 to 7** |
+| Boss HP | **18** | **28** | **34** |
+| Boss power | 3 (+0..2) = **3 to 5** | 5 (+0..2) = **5 to 7** | 5 (+0..2) = **5 to 7** |
 
-Formulas: regular HP `8 + 4*act + d4`, regular power `2 + act`, boss HP `18 + 8*act`, boss power `3 + act` (act 0-based). The names are flavour only; every enemy of an act has the same stat formula. **(first guess)** on all numbers.
+All in `src/game/difficulty.ts` (act 0-based): regular HP `FOE.hp[act] + d(FOE.hpSpread)` = [8, 12, 18] + d4, regular power `FOE.power[act]` = [2, 3, 4], boss HP `BOSS.hp[act]` = [18, 28, 34], boss power `BOSS.power[act]` = [3, 5, 5]; also the free heals `FREE_HEAL` (victory 10, stairs 6) and the revival's `REVIVE_SHARE` (half max HP). Difficulty pass, 4 Oct (kbph: "the game feels way too easy to beat"): act-3 regulars 16 → 18 base HP, the act-2 boss 26 → 28 HP and power 4 → 5; see 11. The names are flavour only; every enemy of an act has the same stat formula.
 
 ### 5.3 Rewards
 
@@ -266,6 +266,7 @@ The request has `state` (full player state: hp, maxHp, gold, attack, soul, act, 
 | `rewritable` | `{id, kind}` of nodes the devil may rewrite: reachable **ahead** of the player in this act, unvisited, not the act exit boss |
 | `curses` | curses currently on the player |
 | `progress` | how far through the run: 0 at the start of act 1, 1 at the act-3 boss, `(act + layer / boss layer) / 3`, two decimals (additive, 4 Oct; the devil should be stingy with gold early) |
+| `haggle` | offers he already made at this node before this one: 0 for the opener or a first ask, 1 for the first haggle (additive, 4 Oct; each haggle should cost the player more: 6.3) |
 
 The devil does **not** see: the full map shape (edges), future acts, the player's past deal history beyond the 100-entry log, or the enemy roster.
 
@@ -284,14 +285,16 @@ Deterministic in (seed, ask index): pure in the request, seeded by `devil:${seed
 | movefurniture | road, map, path, ahead, future | a rewritable good node exists | gold +G/2, attack +1 | none | a random rewritable **good** node becomes **fight** |
 | hearth | rest, camp, road, ahead, safe | hp > 8 and a rewritable fight exists | hp -8 | none | a random rewritable **fight** becomes **campfire** |
 
+**Pricing (4 Oct; kbph: "devil is too nice to the player... make it actually be not nice").** The table is each offer's starting package; every offer (openers and spite offers too) then goes through `priceDeal`, which scores it with `dealValue` (`src/game/dealValue.ts`, HP-equivalents measured from win rates; docs/devil-api.md, "Devil voice and pricing") and adds costs until it is never good for the player: the visible terms (effects, rewrite) at best break-even, first by taking max HP, then HP, then shrinking the gains (gold is never raised); then his margin, `DEVIL_MARGIN` = 2 plus up to 8 more the weaker the player looks (`weakness`: share of HP missing, or attack below 4 + 2 × act) plus 4 per haggle at this node (`context.haggle`), goes into the curse (an `on_hit` HP loss up to 12, then max HP, then 1 attack). With the fine print read, or 5 curses already held, there is no curse: the whole margin is in the visible terms. His dialogue says when the price went up ("Haggling? Every time you ask, the price climbs.", "You look half dead. That's worth something to me."). `src/game/dealValue.test.ts` checks that none of about 20,000 stub offers is worth more than 0 to the player. Measured (`sim-0..999`, scored with the same `dealValue`): the mean offer the bot heard went from -3.7 to -11.7, and the share of offers worth more than 0 to the player from 31% to 0%; accepting a non-soul offer (paired accept-vs-refuse playouts) went from +4.8 points of win rate for the bot to -6.9.
+
 Notes:
-- Each carries a flavoured dialogue line, written to hide or hint at the trick (for example `coin`: "...it will want to go home through your ribs.").
+- Each carries a contemptuous dialogue line that states the terms in bad faith but never lies (for example `coin`: "...it remembers where it was minted, and it goes home through your ribs."). Never warm: no "friend", no encouragement.
 - The `hearth` rewrite is the only offer that turns a bad node good. `movefurniture` always flips polarity (good to bad), so it clears the act's alternation flag.
 - Offers cost real value: every gold offer also takes something the fine print cannot strike (max HP, HP, or a good node ahead turned into a fight); `soul` is the biggest stat package in the game (+10 max HP, +1 attack, and late some gold) in exchange for the revival safety net and your win.
 
 ### 6.4 The "fine print" trick (the player's counterplay)
 
-If the player's text matches `/fine print|loophole|clause|read the contract|contract/i` **and** the chosen offer has a curse, the curse is **struck**: the deal arrives without it, with the dialogue prefixed by: *You read the fine print aloud. He winces. "...Struck. Hateful habit, reading."* Only works on offers that have a curse (`coin`, `mend`, `fineprint`); offers without one (`sharpen`, `soul`, `bleed`, `movefurniture`, `hearth`) are unaffected. It works every ask, with no limit. This is the only counterplay trick that exists in code (requirements: "every deal must have counterplay"). **(placeholder)** The real devil's slip-up behaviour is up to the Gemini prompt.
+If the player's text matches `/fine print|loophole|clause|read the contract|contract/i` **and** the chosen offer has a curse, the curse is **struck**: the deal arrives without it, with the dialogue prefixed by: *You read the fine print aloud. He sneers. "...Struck. Fine: no small print. It's all in the large print now, and the large print is worse."* Since 4 Oct the cost moves into the visible terms (pricing, 6.3): reading protects you from surprises, not from the price, so the old "read the contract, heal / luck" exploit (82.6% wins in the balance report) is gone. It works every ask, with no limit. This is the only counterplay trick that exists in code (requirements: "every deal must have counterplay"). **(placeholder)** The real devil's slip-up behaviour is up to the Gemini prompt.
 
 ### 6.4b Gibberish makes him angry
 
@@ -568,6 +571,16 @@ What each change did (same script, `simulate(500)`, seeds `sim-0 ... sim-499`):
 Starting at the shop instead of a random good node costs the bot a little; training is the big swing (+1 attack per fire compounds through every later fight and both late bosses). The map width changes mostly reshuffle which nodes the bot (which always takes exit 1, the leftmost lane) walks through, close to seed noise. The devil-anywhere rules alone are noise for this bot (it alternates accepting and refusing unsteered deals wherever it meets them). **The jump comes from the map:** two in three former deal nodes are now a village, campfire or well, and for this bot those are worth far more than an unsteered deal (the 4 Oct balance report found that skipping deal nodes already raised its win rate by 7 points). If the target for a plain player is about 50% clean wins, this round overshoots for the bot; the levers are in that report (bosses, gold, blade price). The strategy variants measured on an older `main` (refuse every deal: win 34 / lose 275 / hell 191; accept every deal: win 70 / lose 221 / hell 209) have not been re-run; on the 4 Oct build before this round the balance report measured accept-all at 32.8% wins against 33.9% for ignoring deals (more runs finish, but as hell), so "taking the stub's deals helps" no longer holds.
 
 **Gold economy pass (4 Oct, after the devil's opener and the one-choice well):** the bot was at 46.9 / 39.9 / 13.2 (win / hell / lose, `sim-0..999`) and ended runs with a median 30 unspent gold. Income cut by about 40% (kills, bosses, the devil's gold), the blade down to 12g, the act-3 boss nearly broke: now 43.8 / 39.8 / 16.4 with a median 10 left. Numbers by source and the human-like policy are in 5.3; the knobs are in `src/game/economy.ts`.
+
+**Difficulty pass (4 Oct; kbph: "the game feels way too easy to beat... devil is too nice"):** a meaner StubDevil (pricing in 6.3) plus three enemy knobs in `src/game/difficulty.ts`: act-3 regular HP base 16 → 18, act-2 boss HP 26 → 28, act-2 boss power 4 → 5. Healing, the revival and prices are unchanged. `sim-0..999`, win / hell / lose:
+
+| policy | before | after |
+| --- | --- | --- |
+| bot (`botPolicy`: alternately refuses and accepts, haggles once) | 43.8 / 39.8 / 16.4 | **23.8 / 34.0 / 42.2** |
+| human-like (5.3's buyer; hears every opener, haggles once if it looks bad, accepts when it looks good at face value) | 58.5 / 32.4 / 9.1 | **28.6 / 35.2 / 36.2** |
+| 5.3's human-like (takes gold openers without the soul) | 53.9 / 30.7 / 15.4 | 34.5 / 35.9 / 29.6 |
+
+The devil alone took the bot to 31.2 / 34.0 / 34.8 and the deal-taking human to 46.4 / 35.1 / 18.5; the enemy knobs did the rest. Median end gold is unchanged (bot 10 → 11, human 10 → 10), and `economy.test.ts` still passes as is. All of this is the dice fight: realtime fights start from the same engine HP and power (`FightRequest`), with `SCALING` in `src/fight/encounters.ts` on top, so they got harder too, by an amount not measured here.
 
 Caveats: this is one bot and one stub devil. The Gemini devil will change everything about deals. All combat and shop numbers are first guesses, and the bot's 70% training rule is a sensible default, not a tuned one.
 
