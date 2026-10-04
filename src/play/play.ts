@@ -148,7 +148,8 @@ async function fight(): Promise<void> {
   let report: unknown = null;
   try { report = await runForestFight(stage, input); } catch (err) { say([{ type: "rejected", reason: `the fight could not start (${err instanceof Error ? err.message : String(err)})` }]); }
   local = { ...local, busy: null };
-  if (session.game() !== g) return;
+  mounted?.destroy(); mounted = null; // the next render puts the backdrop back (under the map, or the revival panel)
+  if (session.game() !== g) { render(); return; }
   const r = g.fightResult(report ?? {}); // nothing reported: an unfinished fight, nothing changes
   session.emit([...pre, ...r.events]);
 }
@@ -296,7 +297,9 @@ function renderDevil(v: View, f: Flow): void {
   if (!v.offer && !busy) row.append(button("Walk away", () => patch(CLOSE_DEVIL), "quiet"));
   card.append(row);
   devil.replaceChildren(card);
-  (devil.querySelector<HTMLElement>("input:not(:disabled)") ?? devil.querySelector<HTMLElement>("button:not(:disabled)"))?.focus();
+  // Focus the wish box with a keyboard; on a touch screen that would pop the on-screen keyboard over the offer.
+  const coarse = window.matchMedia?.("(pointer: coarse)").matches === true;
+  (devil.querySelector<HTMLElement>(coarse ? "button:not(:disabled)" : "input:not(:disabled)") ?? devil.querySelector<HTMLElement>("button:not(:disabled)"))?.focus();
 }
 
 function renderEnding(f: Flow): void {

@@ -86,7 +86,7 @@ A property test plays 150 random legal runs on the real engine. At every state i
 
 Test builds expose `window.__play`: `{ session, flow(), local(), view(), map(), zone(), toast(), send(cmd) }`. `map()` is the map scene's `debug()` while it is up.
 
-The visual check (Playwright) plays seed `play-8` from the village through a fight, a campfire, a deal node and a well, at 1366×768 and 390×844, with `?god=1`.
+The visual check (Playwright) plays seed `play-8` from the village through a fight, a campfire, a deal node and a well, at 1366×768 and 390×844, with `?god=1`. A second run loses a fight on purpose: the revival, "Fight on", death, the ending card and Play again.
 
 ## Making it the main build (kbph)
 
