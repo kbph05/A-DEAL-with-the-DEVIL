@@ -15,9 +15,11 @@ import { mountHud } from "../hud/hud";
 import { hudModel } from "../hud/model";
 import { mountMap, type MapHandle } from "../mapscene";
 import { paintIcon, type IconKey } from "../mapscene/icons";
-import { effectChips, curseText, eventText, kindLookup, lastStrike, outcomeEvents, questionsText, restHint, rewriteText } from "../ui/logic";
+import { effectChips, curseText, kindLookup, lastStrike, outcomeEvents, questionsText, restHint, rewriteText } from "../ui/logic";
 import { mountScene, sceneById, type SceneHandle, type SceneZone, type WorldDebug } from "../world";
 import { shopPrompt } from "../world/shopZone";
+import { noticeOf, sceneTheme, shopIcon, type Notice, type NoticeIcon } from "./notice";
+import { paintNoticeIcon } from "./noticeIcons";
 import { CLOSE_DEVIL, LOCAL, OPEN_DEVIL, arrived, flow, setLocal, toastEvents, wantsOpener, wellChoice, wishToSend, type Flow, type Local } from "./flow";
 import wellArt from "../../assets/well.png";
 import { mountDevilArt } from "./devilArt";
@@ -52,6 +54,15 @@ function button(text: string, onClick: () => void, cls = "", sub?: string): HTML
   if (sub) b.append(h("span", "", text), h("small", "", sub)); else b.textContent = text;
   b.onclick = onClick;
   return b;
+}
+/** A notice card's icon: the map's flame (campfire), sword (fight) and devil (deal), and the coin, heart and X drawn in noticeIcons.ts. */
+function noteIcon(k: NoticeIcon): HTMLCanvasElement {
+  const c = h("canvas", "note-icon");
+  c.width = 16; c.height = 16;
+  const ctx = c.getContext("2d");
+  if (ctx) { if (k === "flame") paintIcon(ctx, "campfire"); else if (k === "sword") paintIcon(ctx, "fight"); else if (k === "devil") paintIcon(ctx, "deal"); else paintNoticeIcon(ctx, k); }
+  c.setAttribute("aria-hidden", "true");
+  return c;
 }
 function icon(k: IconKey): HTMLCanvasElement {
   const c = h("canvas");
@@ -184,15 +195,48 @@ let emitting: Command["cmd"] | null = null;
 function say(events: GameEvent[], cmd: Command["cmd"] | null = null): void {
   // Only the answer to a menu choice, or a lone rejection (toastEvents, flow.ts): no popup when a scene opens or a
   // fight ends (kbph). The devil's own words are in his overlay; HP and gold changes show on the HUD.
-  const shown = outcomeEvents(toastEvents(cmd, events));
-  const kindOf = kindLookup(session.game().view().map);
-  const text = shown.map((e) => eventText(e, kindOf)).filter(Boolean).join(" ");
-  if (!text) return;
-  toast.textContent = text;
-  toast.hidden = false;
-  clearTimeout(toastTimer);
-  toastTimer = window.setTimeout(() => { toast.hidden = true; }, Math.min(9000, 2500 + text.length * 45));
+  const n = noticeOf(outcomeEvents(toastEvents(cmd, events)), kindLookup(session.game().view().map));
+  if (n) showToast(n);
 }
+
+/** The toast: a notice card (docs/play.md, "Notices"): icon, line, coloured stat chips. One at a time; a tap dismisses it. */
+let fadeTimer = 0;
+function dropToast(): void {
+  clearTimeout(toastTimer); clearTimeout(fadeTimer);
+  toast.classList.remove("in", "out");
+  toast.hidden = true;
+}
+function showToast(n: Notice): void {
+  dropToast();
+  const body = h("div", "body");
+  body.append(h("div", "title", n.title));
+  if (n.chips.length) {
+    const row = h("div", "chip-row");
+    for (const c of n.chips) row.append(h("span", `note-chip ${c.tone}`, c.text));
+    body.append(row);
+  }
+  if (n.detail) body.append(h("div", "detail", n.detail));
+  toast.replaceChildren(noteIcon(n.icon), body);
+  toast.classList.toggle("reject", n.reject);
+  toast.hidden = false;
+  // After the render that follows this call (the map title, the shop prompt or a panel's card may have just appeared): clear them, then slide in.
+  queueMicrotask(() => {
+    if (toast.hidden) return;
+    toast.style.setProperty("--lift", "0px");
+    const r = toast.getBoundingClientRect();
+    let lift = 0;
+    for (const el of [prompt, mapTitle, panel.querySelector<HTMLElement>(".play-card"), devil.querySelector<HTMLElement>(".play-card")]) {
+      if (!el || el.closest("[hidden]")) continue;
+      const c = el.getBoundingClientRect();
+      if (c.right > r.left && c.left < r.right && c.top < r.bottom && c.bottom > r.top) lift = Math.max(lift, Math.ceil(r.bottom - c.top + 8));
+    }
+    toast.style.setProperty("--lift", `${lift}px`);
+    toast.classList.add("in");
+  });
+  const text = [n.title, n.detail, ...n.chips.map((c) => c.text)].join(" ");
+  toastTimer = window.setTimeout(() => { toast.classList.add("out"); fadeTimer = window.setTimeout(dropToast, 380); }, Math.min(9000, 2500 + text.length * 45));
+}
+toast.addEventListener("click", dropToast);
 
 /** Run one command through the session (the devil's `deal` is async), announce it, re-render. */
 async function send(c: Command): Promise<void> {
@@ -328,9 +372,12 @@ function renderPrompt(v: View, f: Flow): void {
   if (f.screen !== "village" || f.map !== "closed" || f.devil || !zone || zone.kind !== "shop") return;
   const p = shopPrompt(zone, v);
   prompt.hidden = false;
-  const buy = button(p.price !== null ? `Buy (${p.price}g)` : "Buy", () => { if (p.command) void send(p.command); });
+  const buy = button("Buy", () => { if (p.command) void send(p.command); });
+  buy.setAttribute("aria-label", p.price !== null ? `Buy ${p.title} for ${p.price} gold` : `Buy ${p.title}`);
   buy.disabled = !p.enabled;
-  prompt.append(h("b", "", p.title), buy, h("p", "", p.desc));
+  prompt.append(noteIcon(shopIcon(zone.item)), h("b", "", p.title));
+  if (p.price !== null) prompt.append(h("span", "note-chip gold", `${p.price} gold`));
+  prompt.append(buy, h("p", "", p.desc));
   if (p.reason) prompt.append(h("p", "why", p.reason));
 }
 
@@ -513,6 +560,7 @@ function render(): void {
   const v = session.game().view();
   const f = flow(v, local);
   current = f;
+  root.dataset.scene = sceneTheme(f.screen, f.map, f.devil);
   mapTitle.hidden = f.map !== "forced"; // before renderMap: the map keeps its top nodes clear of the title as well as the HUD
   renderScene(v, f);
   renderMap(v, f);
@@ -605,7 +653,7 @@ function quitRun(): void {
   devil.hidden = true; devil.classList.remove("leaving"); devil.removeAttribute("aria-hidden"); devil.inert = false;
   clearInterval(poseTimer); poseTimer = 0;
   ending.replaceChildren();
-  toast.hidden = true;
+  dropToast();
   local = { ...LOCAL };
   autoFought = null;
 }
@@ -687,7 +735,8 @@ pauseLayer.addEventListener("pointerdown", (e) => { if (e.target === pauseLayer)
 
 function renderTitle(): void {
   for (const el of [mapBtn, mapClose, mapTitle, prompt, panel, devil, ending, pauseBtn, hud.el]) el.hidden = true;
-  toast.hidden = true;
+  dropToast();
+  root.dataset.scene = "dark";
   titleLayer.hidden = false;
   if (titleLayer.childElementCount) return;
   const box = h("div", "");
@@ -735,7 +784,7 @@ if (TEST) {
     view: () => session.game().view(),
     map: () => map?.debug() ?? null,
     zone: () => zone?.id ?? null,
-    toast: () => (toast.hidden ? "" : toast.textContent),
+    toast: () => (toast.hidden || toast.classList.contains("out") ? "" : toast.textContent),
     pause: () => ps,
     /** Live positions: the village walker's feet, or the fight's player, enemies and clock. */
     probe: () => ({
