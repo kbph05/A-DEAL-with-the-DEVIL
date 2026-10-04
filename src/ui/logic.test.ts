@@ -6,7 +6,7 @@ import type { Command, GameEvent } from "../game";
 import { availableActions, blurbOf, chooseCards, fireChoice, type FireChoice, dealEnd, devilPhase, askBlockReason, haggleText, questionsText, panelKinds, shopItems, buyLabel, curseText, effectChips, eventClass, afterKinds, dagModel, exitNumber, fightLabel, lockReason, moveLock, nodeState, nodeTitle, placeWord, capitalize, eventText, kindLookup, rejectedText, rewriteText, outcomeEvents, pct, STAIRS_ID, topId } from "./logic";
 import { FULL_HEALTH, pointlessBuy } from "./shopGuard";
 import { diffDeal } from "./dealDiff";
-import { lastStrike, STRIKE_HEAD } from "./logic";
+import { lastStrike, restHint, STRIKE_HEAD } from "./logic";
 import { sanitizeDeal } from "../game/deal";
 import { MAX_ASKS, initialState } from "../game/gameState";
 import { restoreGame } from "../game/run";
@@ -568,4 +568,10 @@ test("map labels name no node id, on a real act", () => {
   const g = createGame("label-ids"), v = g.view();
   const d = dagModel(v, v.map, false, v.actions);
   for (const n of d.rows.flat()) assert.ok(!/\ba\d+n\d+\b/.test(n.label), n.label);
+});
+
+test("restHint: the HP a rest really heals (40% of max, capped at full)", () => {
+  assert.equal(restHint(10, 30), "Heal 12 HP");
+  assert.equal(restHint(30, 43), "Heal 13 HP", "only 13 missing, not 18");
+  assert.equal(restHint(43, 43), `${FULL_HEALTH}: heals nothing`);
 });

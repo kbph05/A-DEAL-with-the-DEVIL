@@ -4,7 +4,7 @@ import type { EnemyView } from "../game/events";
 import { MAX_ASKS, TRAIN_ATTACK, WARES } from "../game/gameState";
 import { STAT_RANGE } from "../game/state";
 import type { Kind } from "../map";
-import { pointlessBuy } from "./shopGuard";
+import { FULL_HEALTH, pointlessBuy } from "./shopGuard";
 
 export type Ware = keyof typeof WARES;
 export interface Actions {
@@ -480,6 +480,15 @@ export function fireChoice(log: readonly GameEvent[]): FireChoice {
     if (e.type === "started") return null;
   }
   return null;
+}
+
+/**
+ * The campfire's Rest hint, in the HP the engine's `rest` will really heal: 40% of max HP (rounded up), capped by the HP
+ * missing. "Heal 18 HP" at 30/43 healed 13, and at full health nothing.
+ */
+export function restHint(hp: number, maxHp: number): string {
+  const heal = Math.min(Math.ceil(maxHp * 0.4), Math.max(0, maxHp - hp));
+  return heal > 0 ? `Heal ${heal} HP` : `${FULL_HEALTH}: heals nothing`;
 }
 
 /**

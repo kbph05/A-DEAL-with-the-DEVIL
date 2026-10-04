@@ -12,7 +12,7 @@ import { mountHud } from "../hud/hud";
 import { hudModel } from "../hud/model";
 import { mountMap, type MapHandle } from "../mapscene";
 import { paintIcon, type IconKey } from "../mapscene/icons";
-import { effectChips, curseText, eventText, kindLookup, lastStrike, outcomeEvents, questionsText, rewriteText } from "../ui/logic";
+import { effectChips, curseText, eventText, kindLookup, lastStrike, outcomeEvents, questionsText, restHint, rewriteText } from "../ui/logic";
 import { mountScene, sceneById, type SceneHandle, type SceneZone } from "../world";
 import { shopPrompt } from "../world/shopZone";
 import { CLOSE_DEVIL, LOCAL, OPEN_DEVIL, arrived, flow, setLocal, wantsOpener, wellChoice, type Flow, type Local } from "./flow";
@@ -233,7 +233,7 @@ function renderPanel(v: View, f: Flow): void {
     title.append(icon("campfire"), "A campfire");
     card.append(title, h("p", "lead", "One choice, then the night moves on."));
     const can = (p: string) => f.prompts.includes(p as never);
-    const rest = button("Rest", () => void send({ cmd: "rest" }), "", `Heal ${Math.ceil(v.state.maxHp * 0.4)} HP`);
+    const rest = button("Rest", () => void send({ cmd: "rest" }), "", restHint(v.state.hp, v.state.maxHp));
     const train = button("Sharpen Weapon", () => void send({ cmd: "train" }), "", "+1 attack, for the rest of the run");
     const deal = button("Deal", () => patch(OPEN_DEVIL), "", "Talk to the devil by the fire");
     rest.disabled = !can("rest"); train.disabled = !can("train"); deal.disabled = !can("deal");
