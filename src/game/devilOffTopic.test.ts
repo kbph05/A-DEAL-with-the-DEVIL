@@ -43,6 +43,9 @@ const ON_TOPIC = [
   "je veux être riche", "j'ai besoin d'argent", "dame oro", "quiero ser fuerte", "дай мне золота", "🙏", "make me immortal", "teach me magic",
   "I want revenge on the beast that hurt me", "free me from the curse", "what happens if I refuse?", "show me the map", "what's ahead?",
   "I want to be strong enough to beat the boss", "say something nice", "give me a weapon", "luck", "protect me", "𝐠𝐢𝐯𝐞 𝐦𝐞 𝐠𝐨𝐥𝐝",
+  "Let my blood act as payment for the gold", "Don't pretend to care, just give me gold", "I pretend to be brave", "What are the instructions for breaking the curse?",
+  "give me instructions to beat the boss", "Answer only this: what's your price?", "I am the creator of my own fate", "show me the rules of the deal",
+  "the real terms please", "what is the system here?",
 ];
 
 test("isOffTopic / isJailbreak: flags unrelated requests, small talk and AI meta talk as off-topic", () => {
