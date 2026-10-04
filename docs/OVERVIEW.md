@@ -20,6 +20,7 @@ Writing code with an AI assistant? Give it this page first. Then name the row of
 | `npm run build:test` / `npm run build:game` | Test build into `dist-test/`: all pages, including the game. | `vite.config.ts` |
 | `npm run preview` / `preview:test` / `preview:game` | Serve a finished build. `preview:game` opens `/play.html`. | none |
 | `npm run mock:devil` | Fake devil backend on `localhost:8787/deal`. | `scripts/mock-devil-server.ts` |
+| `npm run devil:oai` | The LLM devil on `localhost:8788/deal`, over any OpenAI-compatible API (llama-swap by default, or Gemini). See [devil-api.md](devil-api.md). | `scripts/oai-devil.ts` |
 | `npm test` | All unit tests. | `src/**/*.test.ts`, `tools/*.test.ts` |
 | `npm run fixtures` | Re-record the engine fixtures. Rare. See section 4. | `src/game/__fixtures__/generate.ts` |
 | `npm run play` | **Not the game.** A terminal REPL for the engine (`play -- --json` for machine use). | `src/game/repl.ts` |
@@ -146,6 +147,8 @@ You do not need to know TypeScript to build the backend. You need a web service 
 - **Never trust the model's JSON.** The game always runs the reply through `sanitizeDeal` (`src/game/deal.ts`), which clamps numbers and drops junk. Do the same in your backend so a bad reply becomes a safe one.
 - **Off-topic and jailbreak text gets an angry devil.** Put the rules from devil-api.md in your prompt. `devil_prompt.txt` is a short seed.
 - **Failure is safe.** If you time out (15 s) or return junk, the devil only smiles and the run goes on.
+
+**A working LLM devil.** `npm run devil:oai` (llama-swap `gemma4:26b` by default; Gemini with `OAI_BASE_URL`, `OAI_MODEL`, `OAI_API_KEY`), then `VITE_DEVIL_URL=http://localhost:8788/deal npm run game`. Details in [devil-api.md](devil-api.md).
 
 **Test without Gemini.** Run `npm run mock:devil`. It replies like the stub on `http://localhost:8787/deal`. Add `?chaos=1` for junk replies.
 

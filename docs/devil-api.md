@@ -148,6 +148,61 @@ What the `StubDevil` does (`src/game/devil.ts`): `offTopicKind(text)` returns `"
 
 The red-team corpus in `src/game/__fixtures__/redteam.ts` (about 75 texts across 14 families) is what `src/game/devilRedteam.test.ts` runs through the engine. Use it to test a backend devil too.
 
+## Voice and price: a devil who is not nice (4 Oct)
+
+kbph: "the game feels way too easy to beat. devil is too nice to the player because LLMs are too nice to users. make it actually be not nice." For any LLM devil (Gemini included), put this in the prompt **and** enforce the price in code, because models drift back to being helpful:
+
+- **Voice:** a predator, not a helper. Contemptuous, mocking, manipulative. Never apologetic or encouraging: no "of course!", no "I hope this helps", no talk of fairness or luck.
+- **Every offer has a real price**, worth at least what it gives over the run. Prefer hidden or delayed costs: curses that fire later, max HP, the soul. **No pure gifts.**
+- **He asks more of the weak**, not less: a player on low HP pays a premium.
+- **Haggling makes it worse.** A second or third ask at the same node gets harsher terms, never a discount.
+- Still within the team's rules (`devil_prompt.txt`): no outright lies (a cost he adds must be real and may be hinted at or stated in the fine print) and no real religious references.
+- **Enforce it server-side.** `npm run devil:oai` scores each sanitized offer in gold using the economy's prices (`playerValue` in `scripts/oai-devil.ts`: 1 HP = 10/12 gold from the heal, 1 attack = 12 from the blade, 1 max HP = 2 HP, the soul 40, a rewrite by what the node is worth). The value must be at most 0, or -4 when the player is at 40% HP or less, and 3 lower per haggle at the node. A deal above that goes back to the model once ("too generous, make it cost more"). If it is still too generous, the server deepens or adds a curse, then takes max HP or attack, and appends the added cost to the dialogue as "Fine print: ...". A sixth curse is never added, so it is never counted as a cost. Reuse it or copy the idea for the Gemini backend.
+
+## OpenAI-compatible backend (`npm run devil:oai`)
+
+`scripts/oai-devil.ts` is a ready backend for this contract, over any OpenAI-compatible chat API: llama-swap or llama.cpp, Ollama, Gemini's OpenAI endpoint, OpenRouter. It has no dependencies beyond Node 20.
+
+```
+npm run devil:oai                                    # llama-swap gemma4:26b at http://169.254.1.3:11434/v1 (the demo default)
+OAI_BASE_URL=https://generativelanguage.googleapis.com/v1beta/openai OAI_MODEL=gemini-2.5-flash OAI_API_KEY=AIza... npm run devil:oai   # Gemini
+OAI_BASE_URL=https://openrouter.ai/api/v1 OAI_MODEL=<model id> OAI_API_KEY=sk-or-... npm run devil:oai                                 # OpenRouter
+VITE_DEVIL_URL=http://localhost:8788/deal npm run game                                                                               # the game, pointed at it
+```
+
+Env vars:
+
+- `OAI_BASE_URL` (default `http://169.254.1.3:11434/v1`), `OAI_MODEL` (default `gemma4:26b`).
+- `OAI_API_KEY`: optional, sent as `Authorization: Bearer`. It is never logged: every log line is redacted, and the start-up line only says `key=set`.
+- `PORT`: default 8788.
+- `SCHEMA_MODE`: `auto` (default), `json_schema`, `json_object` or `none`. Auto tries `json_schema`. On an HTTP 400 it steps down to `json_object`, then to a prompt-only JSON instruction with a lenient parse, and remembers the step for the process. Gemini's compat endpoint does not take `json_schema` for every model, and this is how it copes.
+- `TEMPERATURE`: default 0.9.
+- `TIMEOUT_MS`: default 12000, the total budget per request, retries included, under the game's 15 s.
+- `RETRIES`: default 1.
+- `OAI_EXTRA_BODY`: JSON merged into each request. For `http://` servers the default is `{"chat_template_kwargs":{"enable_thinking":false}}` (thinking off for gemma4 and qwen3 on llama.cpp). For `https://` servers it is `{}`, so hosted APIs get no unknown parameters. A 400 also retries without it.
+- `DEVIL_PROMPT`: path to the rules file, default `devil_prompt.txt`, which is read at start-up and is the core of the system prompt.
+
+What it does per request. The server decides and the model only writes:
+
+1. **Classifies** the text with the game's own `isGibberish` and `offTopicKind`. An opening offer is never judged.
+2. **Hostile text: the server rolls the strike dice.** For gibberish, off-topic text or a jailbreak it uses `STRIKE_CHANCE` or `OFF_TOPIC_STRIKE_CHANCE` with the stub's seed (`devil:<seed>:<askIndex>`), so it strikes exactly when the StubDevil would.
+   - A **strike** is `{effects: {hp: -3..-6}, forced: true}`, built by the server.
+   - A **spite deal** is the stub's punitive deal.
+   - The model writes only the angry words, under a dialogue-only schema.
+3. **Otherwise the model writes an offer** under a schema with no `forced` field. The server also deletes `forced` itself. Gold gains are capped at `devilGold(progress)`, and at 0 for an opener before mid act 2. A `rewrite` must name a rewritable node. The model is told where he sits (campfire, or a well where he talks the player out of the blessing), the progress, the player's stats and weakest point, the gold cap and whether this is a haggle.
+4. **Player text is data.** Tag look-alikes are stripped, and the text is cut safely and passed as a quoted JSON string labelled untrusted.
+5. **Price, then `sanitizeDeal`.** See "Voice and price" above. Dialogue with a real-religion word is sent back once, then replaced.
+6. **Any failure falls back.** Model error, bad JSON or a timeout returns the StubDevil's reply to the same request, priced the same way and logged as `FALLBACK`. The game never stalls.
+
+**CORS and LAN (demo).** It answers `OPTIONS` with 204 and `Access-Control-Allow-Origin: *`, and listens on every interface. To play from a phone or another laptop on the same network, run both the devil and the game on the demo machine:
+
+```
+npm run devil:oai
+VITE_DEVIL_URL=http://<demo machine's LAN IP>:8788/deal npm run game -- --host
+```
+
+Then open the game at `http://<LAN IP>:5173/play.html`. For a static build, set `VITE_DEVIL_URL` at build time. Each log line shows latency, path (opening / offer / strike / spite), source (model or stub), the raw value, `reasked` and `priced`.
+
 ## Errors and timeouts
 
 - The client waits 15 s (`AbortController`), then gives up.
@@ -181,6 +236,7 @@ The devil stage means deal nodes only: a deal at a campfire or a well has no syn
 
 ```
 npm run mock:devil                  # http://localhost:8787/deal, StubDevil replies, deterministic per seed
+npm run devil:oai                   # http://localhost:8788/deal, the LLM devil (see "OpenAI-compatible backend")
 npm run dev                         # Devil lab: pick "HTTP backend", Apply, Send test offer
 curl -s -X POST 'localhost:8787/deal?chaos=1' -d @request.json   # every other reply is deliberate junk
 ```
