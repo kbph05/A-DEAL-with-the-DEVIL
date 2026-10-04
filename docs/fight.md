@@ -7,7 +7,7 @@ Fights are a short realtime 2D brawl in a top-down room, not menu choices (Big C
 | `index.ts` | Public API: `runFight(parent, input, options?) → Promise<FightResult>`. |
 | `logic.ts` | Pure rules: damage, timers, the enemy state machine, geometry, input sanitising, screen layout. No Phaser. |
 | `sim.ts` | `FightSim`: the world, stepped at a fixed 60 Hz. It is pure too: the same seed and the same controls give the same fight. |
-| `FightScene.ts` | Phaser scene. It reads keyboard, mouse and touch, steps the sim, and draws everything with plain shapes (no textures). |
+| `FightScene.ts` | Phaser scene. It reads keyboard, mouse and touch, steps the sim, and draws everything: labelled black-and-white placeholder sprites for the bodies and pillars (`src/render/placeholder.ts`), plain shapes for the rest. |
 | `dev.ts` + `/fight.html` | The fight lab. |
 | `logic.test.ts` | Node tests (in `npm test`), including whole fights played by a bot. |
 
@@ -41,15 +41,15 @@ A small state machine (`nextEnemyMode` / `tickBrain` in `logic.ts`):
 - **idle:** stands at spawn until you come within range, or 1.2 s pass (0.9 s for a boss).
 - **chase:** walks at you and steers around pillars. Touching it while it walks hurts a little (contact damage).
 - **windup (the telegraph):**
-  - It stops and swells up to 1.3×, and its colour shifts toward yellow.
-  - A lane on the floor shows where it will lunge. The lane follows you for the first half of the wind-up, then locks, and the enemy starts flashing white.
+  - It stops and swells up to 1.3×. (Placeholder art is black and white, so there is no colour shift.)
+  - A lane on the floor shows where it will lunge. The lane follows you for the first half of the wind-up, then locks, and the enemy starts flashing white (the black body swaps to a white one).
   - The wind-up lasts 0.48 s for a regular enemy (shorter in later acts) and 0.6 s for a boss.
 - **lunge:** a fast charge along the locked lane. If it touches you, you take the lunge damage (once per lunge).
-- **recover:** it stands still and dark, with a little dizzy ring. This is your opening.
+- **recover:** it stands still and faint, with a little dizzy ring. This is your opening.
 - Then it goes back to **chase**. The lunge has a cooldown, so it doesn't chain lunges.
 - **Bosses:**
   - They are bigger (radius 34 vs 18) and sword hits don't push them back.
-  - They have a second pattern, the **burst**. Every 4.6 s (4.1 s in act 2, 3.6 s in act 3) a boss stops and charges a growing pink ring for 0.9 s. Then it fires a ring of bullets: 10, 14 or 18 by act. Dash through the ring or get out of its way.
+  - They have a second pattern, the **burst**. Every 4.6 s (4.1 s in act 2, 3.6 s in act 3) a boss stops and charges a growing ring for 0.9 s. Then it fires a ring of bullets: 10, 14 or 18 by act. Dash through the ring or get out of its way.
 
 **Speeds and timings by act:** an enemy's act is worked out from its power (regular power is 2 + act, boss power 3 + act). Later acts move faster, wind up quicker and recover sooner. All the numbers are in `enemyParams` and `PLAYER` in `logic.ts`. They are all **first guesses**.
 

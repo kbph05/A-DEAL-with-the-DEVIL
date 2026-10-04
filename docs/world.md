@@ -10,7 +10,7 @@ This is the first piece of the actual game scene: a character who walks around a
 | `tiled.ts` | `fromTiled(json)`: the Tiled JSON loader. `loadMapJson(json)` accepts either format. Pure. |
 | `logic.ts` | Walking speed and smoothing (`stepVelocity`), 4-way facing (`facingOf`), the screen layout (`worldLayout`). Pure. |
 | `WorldScene.ts` | The Phaser scene: tilemap layer, Arcade physics player, cameras, keyboard and touch. |
-| `textures.ts` | The placeholder art, drawn in code onto canvas textures. |
+| `textures.ts` | The placeholder art: black-and-white labelled textures, made with `src/render/placeholder.ts`. |
 | `assets.ts` | The private art hook (see "Art" below). |
 | `dev.ts` + `/world.html` | The world lab. |
 | `world.test.ts` | Node tests (part of `npm test`). |
@@ -60,22 +60,22 @@ Shared with the fight: `src/input/dir.ts` (keyboard and stick to a unit directio
 
 Tiles are 16×16 world pixels. A tile id is also its frame in the tileset image.
 
-| Id | Name | Blocks | Placeholder look |
+| Id | Name | Blocks | Placeholder (label) |
 | --- | --- | --- | --- |
-| 0 | void | yes | black (outside the map, unknown ids) |
-| 1 | floor | no | grey stone slabs |
-| 2 | grass | no | speckled green |
-| 3 | path | no | dirt |
-| 4 | wall | yes | brick |
-| 5 | water | yes | blue with ripples |
-| 6 | door | no | wooden door in a brick frame (exits: `map.doors`) |
-| 7 | tree | yes | tree on grass |
-| 8 | rock | yes | boulder on grass |
+| 0 | void | yes | black, `VD` (outside the map, unknown ids) |
+| 1 | floor | no | white, `FLR` |
+| 2 | grass | no | white, `GRS` |
+| 3 | path | no | white, `PTH` |
+| 4 | wall | yes | black, `WAL` |
+| 5 | water | yes | black, `WTR` |
+| 6 | door | no | white, `DR` (exits: `map.doors`) |
+| 7 | tree | yes | white, `TRE` |
+| 8 | rock | yes | white, `RK` |
 
 The table is `TILES` in `tiles.ts`. To add a tile:
 
 1. Append a row (the next id).
-2. Draw it in `textures.ts` (`drawTile`).
+2. Give it a 1-3 letter label in `textures.ts` (`TILE_LABELS`), and add it to `DARK_TILES` there if it should be drawn inverted (black).
 3. Add it to the private tileset, if you use one.
 
 Blocking ids go into the tilemap layer's collision automatically.
@@ -141,7 +141,7 @@ Other options:
 
 ## Art
 
-There are no image files in the repo, and nothing comes from generative models. The placeholders are drawn in code with canvas 2D: the tileset and a 16×16 hero with four facings and a two-step walk with a bob.
+There are no image files in the repo, and nothing comes from generative models. Until the team's own textures exist, every texture is a **placeholder**: black, white and grey only, with a label (kbph, 4 Oct). The tileset is one 16×16 cell per tile id (white with a black border and a 1-3 letter label, or inverted black with white text for void, walls and water). The hero is a 16×16 sheet, inverted so it stands out, labelled `P↓` `P←` `P→` `P↑`: four facings by three columns (stand, step A, step B), and the walk animation still runs through the three columns, though they look the same. All of it is made by one helper, `placeholderTexture` / `placeholderSheet` in `src/render/placeholder.ts` (canvas text; `fitLabel` picks the font size). The old pixel-art drawing code is gone.
 
 ### The private hook
 
