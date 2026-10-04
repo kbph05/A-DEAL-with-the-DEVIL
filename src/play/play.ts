@@ -187,7 +187,9 @@ function renderMap(v: View, f: Flow): void {
 
 // ---- the scene under it all --------------------------------------------------------------------------------------
 function renderScene(v: View, f: Flow): void {
-  const key = f.screen === "village" ? `village:${v.nodeId}` : f.screen === "fight" ? `fight:${v.nodeId}` : `backdrop:${v.kind}:${v.nodeId}`;
+  // The village is laid out for the screen's shape when it mounts (worldLayout), then only scaled, so it is mounted
+  // afresh when a phone turns (see the resize listener below); you start again on the village square.
+  const key = f.screen === "village" ? `village:${v.nodeId}:${shape()}` : f.screen === "fight" ? `fight:${v.nodeId}` : `backdrop:${v.kind}:${v.nodeId}`;
   if (mounted?.key === key) return;
   if (f.screen === "fight" && local.busy === "fight") return; // the fight owns the stage
   mounted?.destroy(); world = null; zone = null;
@@ -363,6 +365,11 @@ function render(): void {
     queueMicrotask(() => void fight());
   }
 }
+
+// A phone turned in the village kept a thin portrait strip in the middle of a landscape screen (or the reverse).
+function shape(): "wide" | "tall" { return innerWidth >= innerHeight ? "wide" : "tall"; }
+let lastShape = shape();
+window.addEventListener("resize", () => { if (shape() !== lastShape) { lastShape = shape(); render(); } });
 
 // ---- keys ----------------------------------------------------------------------------------------------------------
 window.addEventListener("keydown", (e) => {
