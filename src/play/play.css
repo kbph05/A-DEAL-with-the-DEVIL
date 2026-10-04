@@ -124,3 +124,10 @@ body { overflow: hidden; }
 /* The pause menu: Resume, Controls, Credits, Quit game, one per row. */
 .play-pause .row.menu { flex-direction: column; }
 .play-pause .row.menu button { flex: 0 0 auto; }
+
+/* The title screen: the devil's silhouette behind the title (kbph), with the overlay's ember rim glow. */
+.play-title { overflow: hidden; }
+.play-title > div:not(.play-title-devil) { position: relative; z-index: 1; }
+.play-title-devil { position: absolute; left: 50%; bottom: 0; transform: translateX(-50%); height: min(82vh, 640px); aspect-ratio: 1; pointer-events: none; z-index: 0;
+  filter: drop-shadow(0 0 1px rgba(255, 140, 70, .9)) drop-shadow(0 0 5px rgba(230, 70, 30, .55)) drop-shadow(0 0 22px rgba(170, 25, 10, .45)); }
+.play-title-devil img { width: 100%; height: 100%; object-fit: contain; object-position: 50% 100%; filter: brightness(0); user-select: none; -webkit-user-drag: none; }
