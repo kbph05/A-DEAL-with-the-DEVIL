@@ -5,6 +5,7 @@ import { createGame, describe } from "../game";
 import type { Command, GameEvent } from "../game";
 import { availableActions, blurbOf, chooseCards, fireChoice, type FireChoice, dealEnd, devilPhase, askBlockReason, haggleText, questionsText, panelKinds, shopItems, buyLabel, curseText, effectChips, eventClass, afterKinds, dagModel, exitNumber, fightLabel, lockReason, moveLock, nodeState, nodeTitle, outcomeEvents, pct, STAIRS_ID, topId } from "./logic";
 import { diffDeal } from "./dealDiff";
+import { lastStrike, STRIKE_HEAD } from "./logic";
 import { sanitizeDeal } from "../game/deal";
 
 test("actions follow the observation", () => {
@@ -389,4 +390,27 @@ test("planarOrder: removes avoidable crossings; every real act is planar in the 
   }
   assert.equal(planar, total, `planar ${planar}/${total}`);
   console.log(`# planar acts: ${planar}/${total}`);
+});
+
+test("devil strikes: the log shows the anger card until an offer, a decision or a move replaces it; Outcome marks it bad", () => {
+  const struck: GameEvent = { type: "devil_struck", dialogue: "Speak plainly or bleed.", effects: { hp: -4 } };
+  const offered: GameEvent = { type: "deal_offered", deal: { dialogue: "x", effects: {} } };
+  assert.equal(eventClass(struck), "ev-bad");
+  assert.equal(STRIKE_HEAD, "The devil strikes!");
+  assert.deepEqual(lastStrike([struck, { type: "moved", from: "a", to: "b", kind: "deal", act: 0 }]), { dialogue: "Speak plainly or bleed.", effects: { hp: -4 } });
+  assert.equal(lastStrike([]), null);
+  assert.equal(lastStrike([offered, struck]), null, "a newer offer replaces the card");
+  assert.ok(lastStrike([struck, offered]), "a strike newer than a standing offer shows beside it");
+  assert.ok(lastStrike([{ type: "revived", hp: 15 }, struck]), "revival does not hide it");
+  for (const e of [{ type: "deal_applied", deal: { dialogue: "x", effects: {} }, changes: {} }, { type: "deal_refused" }, { type: "moved", from: "a", to: "b", kind: "fight", act: 0 }, { type: "started", seed: "s" }] as GameEvent[])
+    assert.equal(lastStrike([e, struck]), null, e.type);
+  assert.deepEqual(effectChips(struck.type === "devil_struck" ? struck.effects : {}), [{ text: "−4 HP", tone: "bad" }]);
+});
+
+test("diffDeal explains how a forced strike was cut down", () => {
+  const raw = { dialogue: "x", forced: true, effects: { hp: -20, gold: 50 }, curse: { trigger: "on_hit", effect: { hp: -1 } } };
+  const notes = diffDeal(raw, sanitizeDeal(raw));
+  assert.ok(notes.some((c) => c.path === "effects.hp" && /at most 8/.test(c.note)));
+  assert.ok(notes.some((c) => c.path === "effects.gold") && notes.some((c) => c.path === "curse"));
+  assert.ok(!notes.some((c) => c.path === "forced"), "forced is a known field");
 });

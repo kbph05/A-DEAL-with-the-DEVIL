@@ -1,5 +1,6 @@
 /** Explains what sanitizeDeal changed in a backend reply, by comparing raw to sanitized. Pure; reuses the engine's own sanitizeEffects. */
 import type { Deal } from "../game";
+import { MAX_STRIKE_HP } from "../game/deal";
 import { sanitizeEffects } from "../game/state";
 
 export interface Change { path: string; note: string }
@@ -22,9 +23,16 @@ function diffEffects(path: string, raw: unknown, out: Change[]): void {
 export function diffDeal(raw: unknown, clean: Deal, rewritable?: Array<{ id: string }>): Change[] {
   const out: Change[] = [];
   if (!isObj(raw)) { out.push({ path: "(body)", note: "not a JSON object; replaced by the silent devil" }); return out; }
-  for (const k of Object.keys(raw)) if (!["dialogue", "effects", "curse", "rewrite"].includes(k)) out.push({ path: k, note: "unknown field, ignored" });
+  for (const k of Object.keys(raw)) if (!["dialogue", "effects", "curse", "rewrite", "forced"].includes(k)) out.push({ path: k, note: "unknown field, ignored" });
   if (typeof raw.dialogue !== "string" || !raw.dialogue.trim()) out.push({ path: "dialogue", note: "missing or empty, replaced by '...'" });
   else if (raw.dialogue.trim() !== clean.dialogue) out.push({ path: "dialogue", note: `trimmed/truncated to ${clean.dialogue.length} chars` });
+  if (raw.forced != null && typeof raw.forced !== "boolean") out.push({ path: "forced", note: "not a boolean, ignored (an ordinary offer)" });
+  if (clean.forced) { // a strike: only HP loss up to the cap survives, nothing else
+    const was = sanitizeEffects(raw.effects), kept = clean.effects.hp ?? 0;
+    for (const [k, v] of Object.entries(was)) if (k !== "hp" || v !== kept) out.push({ path: `effects.${k}`, note: k === "hp" && v < 0 ? `${v} -> ${kept} (a strike takes at most ${MAX_STRIKE_HP} HP)` : "dropped (a forced strike only takes HP)" });
+    for (const k of ["curse", "rewrite"]) if (raw[k] != null) out.push({ path: k, note: "dropped (a forced strike carries no curse or rewrite)" });
+    return out;
+  }
   diffEffects("effects", raw.effects, out);
   if (raw.curse != null) {
     if (!clean.curse) out.push({ path: "curse", note: "dropped (bad trigger or no valid effect)" });

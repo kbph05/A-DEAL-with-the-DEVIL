@@ -75,27 +75,31 @@ test("isGibberish: leaves real wishes alone", () => {
 
 const ctx: DevilContext = { seed: "g", act: 0, nodeId: "a0n1", askIndex: 1, questionsLeft: 5, curses: [], rewritable: [{ id: "a0n2", kind: "fight" }] };
 
-test("StubDevil: gibberish makes him angry and the offer punitive, with the curse always attached (fine print can't strike it)", async () => {
+test("StubDevil: gibberish makes him angry; his offers are punitive with the curse always attached (fine print can't strike it)", async () => {
   const devil = new StubDevil("g"), p = newPlayer("a0n1");
   const lines = new Set<string>();
-  for (let i = 1; i <= 60; i++) {
+  let offers = 0;
+  for (let i = 1; i <= 80; i++) {
     const c = { ...ctx, askIndex: i };
     const d = await devil.offer(p, c, "laksjdhflkajshdg9");
     assert.deepEqual(sanitizeDeal(d), d, "valid Deal");
-    assert.ok(d.curse, "a curse always comes with it");
     assert.equal(d.rewrite, undefined);
     assert.ok(!/fine print|struck/i.test(d.dialogue));
     assert.ok(!/\b(god|hell|heaven|pray|sin|bless|holy|amen|lord)\b/i.test(d.dialogue), "no religious references");
     lines.add(d.dialogue);
+    // Pure: same request, same reply.
+    assert.deepEqual(await new StubDevil("other").offer(p, c, "laksjdhflkajshdg9"), d);
+    if (d.forced) continue; // strikes are covered in devilStrike.test.ts
+    offers++;
+    assert.ok(d.curse, "a curse always comes with it");
     // Worse than usual: the price is always paid in stats the player wants.
     const costs = { ...d.effects, ...d.curse!.effect };
     assert.ok(Object.entries(costs).some(([k, v]) => k !== "gold" && v < 0), "it costs something real");
-    // Pure: same request, same reply.
-    assert.deepEqual(await new StubDevil("other").offer(p, c, "laksjdhflkajshdg9"), d);
     // Gibberish plus the fine-print words does not strike the curse.
-    assert.ok((await devil.offer(p, c, "contract asdfjkl asdfjkl asdfjkl")).curse);
+    assert.ok((await devil.offer(p, c, "contract asdfjkl asdfjkl asdfjkl")).curse || (await devil.offer(p, c, "contract asdfjkl asdfjkl asdfjkl")).forced);
   }
-  assert.ok(lines.size >= 4, "several seeded variants");
+  assert.ok(offers > 10, "he still makes offers about half the time");
+  assert.ok(lines.size >= 8, "several seeded variants");
   // The same ask with a normal wish is unchanged by all this.
   const normal = await devil.offer(p, ctx, "gold");
   assert.ok(!(await devil.offer(p, ctx, "asdfghjkl")).dialogue.includes(normal.dialogue.slice(0, 20)));
@@ -104,7 +108,10 @@ test("StubDevil: gibberish makes him angry and the offer punitive, with the curs
 test("StubDevil: hp-costing spite is not offered to the nearly dead", async () => {
   const devil = new StubDevil("g"), p = newPlayer("a0n1");
   p.hp = 5;
-  for (let i = 1; i <= 60; i++) assert.ok(((await devil.offer(p, { ...ctx, askIndex: i }, "kjhkjhkjh")).effects.hp ?? 0) >= 0);
+  for (let i = 1; i <= 60; i++) {
+    const d = await devil.offer(p, { ...ctx, askIndex: i }, "kjhkjhkjh");
+    if (!d.forced) assert.ok((d.effects.hp ?? 0) >= 0); // a strike is not an offer: it may hurt anyone
+  }
 });
 
 test("StubDevil: taunts about the question limit near the end, and only then", async () => {

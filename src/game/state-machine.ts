@@ -12,7 +12,7 @@
 import { generateAct, markVisited, nextRandom, rewriteNode } from "../map";
 import { legalActions } from "./actions";
 import { sanitizeDeal } from "./deal";
-import type { Curse } from "./devil";
+import type { Curse, Deal } from "./devil";
 import type { Deltas, GameEvent } from "./events";
 import {
   BOSSES, FOES, MAX_ASKS, MAX_CURSES, MAX_DEVIL_QUERIES, TRAIN_ATTACK, WARES, currentAct, currentNode, devilContext, enemyView, exitsOf,
@@ -98,8 +98,9 @@ export function step(state: GameState, cmd: Command): StepResult {
       break;
     case "devil_reply":
       d.pending = null;
-      d.offer = sanitizeDeal(cmd.deal);
-      ev.push({ type: "deal_offered", deal: d.offer });
+      { const deal = sanitizeDeal(cmd.deal);
+        if (deal.forced) strike(d, ev, deal); // a punishment, not an offer: applied now, node stays open
+        else { d.offer = deal; ev.push({ type: "deal_offered", deal }); } }
       break;
     case "accept": accept(d, ev); break;
     case "refuse":
@@ -231,6 +232,17 @@ function buy(d: GameState, ev: GameEvent[], name: string): void {
   else { effects = [{ max_hp: 3 }, { attack: 1 }, { hp: 8 }][roll(d, 3)]; d.resolved = true; }
   const changes: Deltas = applyEffects(d.player, effects);
   ev.push({ type: "bought", item: name, cost, changes });
+}
+
+/**
+ * A forced devil reply (already sanitized: HP loss only, capped). Applied immediately; goes through the normal death/revive
+ * check. It does not resolve the node and does not touch a standing offer (the ask was already counted by `deal`).
+ */
+function strike(d: GameState, ev: GameEvent[], deal: Deal): void {
+  const changes = applyEffects(d.player, deal.effects);
+  ev.push({ type: "devil_struck", dialogue: deal.dialogue, effects: changes });
+  note(d.player, `the devil struck: ${deal.dialogue.slice(0, 60)}`);
+  settleHp(d, ev, "the devil's wrath");
 }
 
 function accept(d: GameState, ev: GameEvent[]): void {

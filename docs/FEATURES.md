@@ -222,7 +222,8 @@ Source: `src/game/devil.ts`, `src/game/deal.ts`, `src/game/httpDevil.ts`, `docs/
 interface Devil { offer(state, context, playerText?): Promise<Deal> }
 interface Deal  { dialogue: string; effects: Record<string, number>;
                   curse?: { trigger: "on_hit"|"on_enter"|"on_fight"|"next_node"; effect: Record<string, number> };
-                  rewrite?: { nodeId: string; to: Kind } }
+                  rewrite?: { nodeId: string; to: Kind };
+                  forced?: boolean }   // true = a strike: applied at once, HP loss only (6.4c)
 ```
 
 The devil may reject, throw, or return junk: the engine validates everything (6.5). Which devil a game uses: `setDevil(devil)` installs one for all **future** games (a running game keeps the devil it was created with); `setDevil(null)` restores the stub; with nothing installed each game gets a fresh `StubDevil(seed)`.
@@ -270,17 +271,28 @@ If the player's text matches `/fine print|loophole|clause|read the contract|cont
 
 `StubDevil` calls `isGibberish(playerText)` (exported from `src/game/devil.ts`; pure, no dictionary). A text is gibberish when half or more of its words are junk, or when it is mostly symbols (5 or more non-letters, more than the letters). A Latin-letter word (accents ignored) is junk when it: is a keyboard run (`asdf`, `hjkl`, or contains `qwert`, `asdfg`, `zxcvb` or their reverses); has no vowels (`aeiouy`) at 5+ letters (unless it uses 2 or fewer distinct letters, like `hmmmm`); has six consonants in a row and under 20% vowels; has under 20% vowels at 8+ letters (`strengths` and `twelfths` excepted); is 10+ letters of 2 or fewer distinct ones; or is a 1-3 letter unit repeated 3+ times at 9+ letters. A token of 6+ characters that flips between letters and digits 3+ times (`a1b2c3d4`) is junk too. Words under 4 letters, numbers, emoji, other scripts and empty text are never junk. So `laksjdhflkajshdg9` is gibberish; `gold`, `heal me`, `make me rich` and `I read the fine print` are not.
 
-On gibberish he ignores keywords and the fine-print trick: one of 4 angry lines (seeded by seed and ask index, no religious references) and a **spite offer** that always carries a curse: `hp -8, gold +10` with `on_fight: attack -1` (only if HP > 8), `max_hp -6, gold +15` with `next_node: hp -6`, or `attack -1, gold +20` with `on_hit: hp -5`. Once the run-wide limit is nearly spent he also adds a taunt (one question left; that was your last question). The real devil is asked to do the same (docs/devil-api.md).
+On gibberish he ignores keywords and the fine-print trick and is plainly furious. A seeded roll (`STRIKE_CHANCE`, 0.5, exported) decides: he either **strikes** (6.4c: one of 6 lines such as "You dare waste my time with noise? Speak plainly or bleed.", `hp` -3 to -6, no offer) or rants with one of 6 other angry lines (seeded by seed and ask index, no religious references) and makes a **spite offer** that always carries a curse: `hp -8, gold +10` with `on_fight: attack -1` (only if HP > 8), `max_hp -6, gold +15` with `next_node: hp -6`, or `attack -1, gold +20` with `on_hit: hp -5`. Once the run-wide limit is nearly spent he also adds a taunt (one question left; that was your last question). The real devil is asked to do the same (docs/devil-api.md).
+
+### 6.4c Forced replies: the devil strikes
+
+Besides an offer, a devil (the stub, or the Gemini one) may answer with `forced: true` to punish instead of bargain: for gibberish, and for off-topic, insulting or random text that the LLM devil judges undeserving of a deal. Rules (engine, `src/game/state-machine.ts` `strike`; sanitizer, `src/game/deal.ts`):
+
+- Applied **immediately**: no offer, no accept/refuse. Event `devil_struck { dialogue, effects }` (effects = what landed).
+- **HP loss only, at most 8 per strike** (`MAX_STRIKE_HP`). Any gold, attack, max HP, soul, curse or rewrite in a forced deal is stripped. Empty effects (a pure rant) are fine.
+- Can kill, only via the normal death check: the soul revives you once (event `revived`), otherwise the run is lost, cause "the devil's wrath".
+- The ask still counts (one of the node's 3 asks, one of the run's 10 questions). The node is **not** resolved: ask again while asks and questions remain, or leave. A standing offer from an earlier haggle stays on the table.
+- UI: the Devil's table shows an anger card ("The devil strikes!", his words, a red damage chip) above the ask row, until an offer, a decision or leaving replaces it. The Outcome lists the `devil_struck` line highlighted as bad (`ev-bad`).
 
 ### 6.5 Asking, haggling, sanitizing
 
 - `deal(text?)` is **async** (the backend is a network call). In the engine it is a round trip: `step(deal)` records the request in `state.pending` and returns `awaiting`, and the devil's answer comes back as `step(devil_reply)` (see `docs/engine.md`). While waiting, `pending` is true and every command except `look` and `devil_reply` is rejected ("the devil is still speaking").
-- Sequence: reject if wrong node / already resolved / pending / enemy present / 3 asks used; otherwise ask the devil (any thrown error becomes "no reply"), sanitize, store as the current offer, emit `deal_offered`. Since nothing else can happen while the devil thinks, the reply always lands on the node it was asked at.
+- Sequence: reject if wrong node / already resolved / pending / enemy present / 3 asks used; otherwise ask the devil (any thrown error becomes "no reply"), sanitize, store as the current offer, emit `deal_offered` (a forced reply is applied at once and emits `devil_struck` instead, 6.4c). Since nothing else can happen while the devil thinks, the reply always lands on the node it was asked at.
 - **`sanitizeDeal`** (`src/game/deal.ts`) turns anything into a safe Deal. Never throws.
   - Not an object (string, null, array, number): replaced by the **silent devil**: dialogue "The devil only smiles. He has nothing to say to you today.", no effects.
   - `dialogue`: must be a non-empty string, trimmed and cut to **600 chars**, else `"..."`.
   - `effects`: allowed keys, rounding, clamps as in 3.1; other keys dropped.
   - `curse`: kept only if the trigger is one of the 4 allowed and the sanitized effect is non-empty.
+  - `forced`: kept only when exactly `true`; then the deal is cut to a strike (6.4c). Omitted otherwise, so ordinary deals are unchanged.
   - `rewrite`: kept only if `nodeId` is a string of at most 40 chars and `to` is a valid kind other than `boss`/`final`. Whether the node can actually be rewritten is checked later, at accept time (6.6).
   - All other fields ignored.
 - Haggling rule recap: 3 asks per node and 10 per run; each re-ask may include new text; the earlier offer is simply replaced. `context.askIndex` keeps counting across the whole run, so the backend can see how often you have haggled.
@@ -364,6 +376,7 @@ Source: `src/game/events.ts`. Every command returns `Result = { ok, events, stat
 | `deal_offered { deal }` | the devil's (sanitized) answer to `deal()` |
 | `deal_applied { deal, changes }` | `accept()` |
 | `deal_refused` | `refuse()` |
+| `devil_struck { dialogue, effects }` | the devil answered with a forced strike instead of an offer (6.4c); `effects` = HP lost |
 | `curse_added { curse }` | an accepted deal that carried a curse (and you hold fewer than 5) |
 | `curse_fired { trigger, effect, changes }` | a curse's trigger happening |
 | `node_rewritten { change }` | an accepted rewrite that succeeded |

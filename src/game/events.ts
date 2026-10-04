@@ -25,6 +25,8 @@ export type GameEvent =
   | { type: "deal_offered"; deal: Deal }
   | { type: "deal_applied"; deal: Deal; changes: Deltas }
   | { type: "deal_refused" }
+  /** The devil answered with a punishment instead of an offer: `effects` is what actually landed (HP loss only). The node stays open. */
+  | { type: "devil_struck"; dialogue: string; effects: Deltas }
   | { type: "curse_added"; curse: Curse }
   | { type: "curse_fired"; trigger: Curse["trigger"]; effect: Curse["effect"]; changes: Deltas }
   | { type: "node_rewritten"; change: RewriteChange }
@@ -86,6 +88,7 @@ export function describe(e: GameEvent): string {
         ...(d.curse ? [`  curse: ${d.curse.trigger} -> ${fmtDeltas(d.curse.effect)}`] : []),
         ...(d.rewrite ? [`  rewrites: ${d.rewrite.nodeId} -> ${d.rewrite.to}`] : []), "  accept() or refuse()"].join("\n");
     }
+    case "devil_struck": return [`DEVIL STRIKES: "${e.dialogue}"`, `  you take: ${fmtDeltas(e.effects)}`].join("\n");
     case "deal_applied": return `Deal struck: ${fmtDeltas(e.changes)}.`;
     case "deal_refused": return "You refuse. The devil shrugs, a little too gracefully.";
     case "curse_added": return `A curse settles on you: ${e.curse.trigger} -> ${fmtDeltas(e.curse.effect)}.`;

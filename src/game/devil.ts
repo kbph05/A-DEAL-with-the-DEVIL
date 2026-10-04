@@ -10,6 +10,11 @@ export interface Deal {
   effects: Record<string, number>;
   curse?: { trigger: "on_hit" | "on_enter" | "on_fight" | "next_node"; effect: Record<string, number> };
   rewrite?: { nodeId: string; to: Kind };
+  /**
+   * The devil lashes out instead of offering: the engine applies `effects` at once (no accept/refuse), as a `devil_struck`
+   * event. Sanitized to HP loss only (max MAX_STRIKE_HP); curse and rewrite are dropped. See docs/devil-api.md.
+   */
+  forced?: boolean;
 }
 
 /** Everything the devil may look at besides the player. Plain JSON, so it can go to a backend as-is. */
@@ -172,13 +177,28 @@ export function isGibberish(text: string | null | undefined): boolean {
   return words > 0 && junk * 2 >= words;
 }
 
-/** What he says to nonsense. No two alike; none of it kind. */
+/** What he says to nonsense when he still bothers to make an offer. Angry, unmistakable; none of it kind. */
 const ANGRY: readonly string[] = [
   "Did a cat walk across your keyboard, or is that your considered position? I have sat at this table a very long time. I do not enjoy being mocked, and I keep accounts.",
-  "That was not a request. That was noise. You woke me for NOISE? Fine. Since you won't speak plainly, I'll choose the terms.",
+  "That was not a request. That was NOISE. You woke me for NOISE? Fine. Since you won't speak plainly, I'll choose the terms.",
   "Gibberish. To me. You spit nonsense across my table and expect courtesy back? Take what I give you and be grateful it's anything.",
   "Do not waste my patience on scribble. I am old, and I am very, very angry. Here: a bargain that matches your effort.",
+  "What is THAT supposed to be? Words? I have heard the dying scream with more dignity. Speak plainly or take the leftovers.",
+  "I am furious. You sit across from me, with your whole short life on the table, and you drool on my keys? Take this and be quiet.",
 ];
+/** What he says when he skips the offer and lashes out. Same temper, sharper edge. */
+const STRIKE_LINES: readonly string[] = [
+  "You dare waste my time with noise? Speak plainly or bleed.",
+  "ENOUGH. I did not crawl up here to read your scribbles. Learn some manners.",
+  "Noise! Mud in my ears! I will teach you what silence costs.",
+  "Say something real or say nothing. Gibberish earns you a lesson, mortal.",
+  "You mock me with nonsense? Then feel something real for a change.",
+  "I am not a toy and this is not a game of mashed keys. Hold still.",
+];
+/** Chance that gibberish earns a forced strike (the devil lashes out) instead of a spite offer. */
+export const STRIKE_CHANCE = 0.5;
+/** HP a stub strike takes: STRIKE_MIN..STRIKE_MAX inclusive, seeded. (The engine caps any strike at MAX_STRIKE_HP.) */
+export const STRIKE_MIN = 3, STRIKE_MAX = 6;
 /** Spite offers: strictly worse than the usual stock, and the curse is never optional. `hurts` ones need HP to spare. */
 const SPITE: Array<{ hurts: boolean; make: () => Pick<Deal, "effects" | "curse"> }> = [
   { hurts: true, make: () => ({ effects: { hp: -8, gold: 10 }, curse: { trigger: "on_fight", effect: { attack: -1 } } }) },
@@ -217,8 +237,15 @@ export class StubDevil implements Devil {
     return { ...deal, dialogue: deal.dialogue + taunt(context) };
   }
 
-  /** Angry reply to gibberish: in-character rant and a punitive offer. The fine-print trick does not work on it. */
+  /**
+   * Angry reply to gibberish. With chance STRIKE_CHANCE he lashes out (a forced strike: HP loss, no offer); otherwise an
+   * in-character rant and a punitive offer. The fine-print trick does not work on either. Pure in (rng, state, context).
+   */
   private angry(state: Readonly<PlayerState>, rng: Rng, context: DevilContext): Deal {
+    if (rng() < STRIKE_CHANCE) {
+      const line = pick(rng, STRIKE_LINES), hp = -(STRIKE_MIN + Math.floor(rng() * (STRIKE_MAX - STRIKE_MIN + 1)));
+      return { dialogue: line + taunt(context), effects: { hp }, forced: true };
+    }
     const line = pick(rng, ANGRY);
     const spite = pick(rng, SPITE.filter((o) => !o.hurts || state.hp > 8));
     return { dialogue: line + taunt(context), ...spite.make() };

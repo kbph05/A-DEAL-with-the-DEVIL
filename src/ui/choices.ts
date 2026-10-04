@@ -8,11 +8,11 @@ import { fmtDeltas } from "../game/events";
 import { chip, h } from "./dom";
 import { mountDag } from "./dag";
 import {
-  chooseCards, curseText, dagModel, DEVIL_END_TEXT, devilPhase, effectChips, fightLabel, askBlockReason, haggleText, lockReason, questionsText, PANEL_TITLE, panelKinds, shopItems,
-  type Actions, type ChooseCard, type DealEnd, type FireChoice, type PanelKind, type ShopItem,
+  chooseCards, curseText, dagModel, DEVIL_END_TEXT, devilPhase, effectChips, fightLabel, askBlockReason, haggleText, lockReason, STRIKE_HEAD, questionsText, PANEL_TITLE, panelKinds, shopItems,
+  type Actions, type ChooseCard, type DealEnd, type DevilStrike, type FireChoice, type PanelKind, type ShopItem,
 } from "./logic";
 
-export interface Choices { render(v: View, A: Actions, busy: boolean, end: DealEnd, fire?: FireChoice): void }
+export interface Choices { render(v: View, A: Actions, busy: boolean, end: DealEnd, fire?: FireChoice, strike?: DevilStrike | null): void }
 
 /** `send` runs a command; the wish input is read at click time, so it stays current. */
 export function mountChoices(el: HTMLElement, send: (c: Command) => void): Choices {
@@ -37,13 +37,18 @@ export function mountChoices(el: HTMLElement, send: (c: Command) => void): Choic
       h("h3", { id, class: "panel-h" }, h("span", { class: "panel-ico", text: icon, aria: { hidden: "true" } }), title), ...kids);
   };
 
-  function devilPanel(o: View, A: Actions, end: DealEnd): HTMLElement {
+  function devilPanel(o: View, A: Actions, end: DealEnd, strike: DevilStrike | null): HTMLElement {
     const phase = devilPhase(o, end), kids: Node[] = [];
     if (phase === "struck" || phase === "walked" || phase === "settled") {
       const t = DEVIL_END_TEXT[phase];
       kids.push(h("div", { class: `deal-end ${phase}`, aria: { live: "polite" } },
         h("b", { text: `${phase === "struck" ? "🤝" : phase === "walked" ? "🚶" : "🕯️"} ${t.head}` }), h("p", { text: t.body })));
       return panel("devil", ...kids);
+    }
+    if (strike) {
+      const hit = effectChips(strike.effects), dmg = h("div", { class: "chips" });
+      for (const c of hit) dmg.append(chip(c.text, c.tone)); if (!hit.length) dmg.append(chip("No damage, this time", "none"));
+      kids.push(h("div", { class: "strike-card", aria: { live: "assertive" } }, h("h4", { text: `💢 ${STRIKE_HEAD}` }), h("blockquote", { text: `“${strike.dialogue}”` }), dmg));
     }
     if (A.offer) {
       const d = A.offer;
@@ -111,9 +116,9 @@ export function mountChoices(el: HTMLElement, send: (c: Command) => void): Choic
   const dag = mountDag(send);
 
   return {
-    render(o, A, busy, end, fire = null) {
+    render(o, A, busy, end, fire = null, strike = null) {
       const why = lockReason(o, busy);
-      const panels = panelKinds(o).map((k) => k === "devil" ? devilPanel(o, A, end) : k === "shop" ? shopPanel(o, A) : k === "choose" ? choosePanel(o, A, fire) : fightPanel(o, A));
+      const panels = panelKinds(o).map((k) => k === "devil" ? devilPanel(o, A, end, strike) : k === "shop" ? shopPanel(o, A) : k === "choose" ? choosePanel(o, A, fire) : fightPanel(o, A));
       if (!panels.length) panels.push(h("p", { class: "muted", text: o.ending ? "Nothing more to do." : "Nothing to do here. Pick where to go next." }));
       const kids: Node[] = [];
       if (why) kids.push(h("p", { class: o.ending ? "muted" : "wait", text: why }));

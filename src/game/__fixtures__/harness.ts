@@ -146,6 +146,17 @@ export async function contractShapes(opts: { includeNew?: boolean } = {}): Promi
     const look = () => { const l = json(g.look()); results.push(l); for (const e of l.events) push(events, e.type, e); };
     await g.deal(); look(); g.accept(); look();
   }
+  { // Anchor: a forced strike (the devil lashes out instead of offering), so GameEvent:devil_struck and Deal.forced are sampled.
+    const s = initialState("contract-strike");
+    s.acts[0].nodes[0].kind = "deal";
+    const g = restoreGame(s, wire({ offer: async () => ({ dialogue: "Speak plainly or bleed.", effects: { hp: -4 }, forced: true }) }));
+    for (const c of [{ cmd: "deal", text: "asdfghjkl" }, { cmd: "look" }] as Command[]) {
+      obs.push(json(g.observe())); ctxs.push(json(g.context()));
+      push(cmds, c.cmd, json(c));
+      const r = json(await execute(g, c)); results.push(r); states.push(r.state);
+      for (const e of r.events) push(events, e.type, e);
+    }
+  }
   const ap = json(await autoplay("contract-ap", botPolicy, 1000, new StubDevil("contract-ap")));
   for (const e of ap.events) push(events, e.type, e);
   const out: Record<string, string[]> = {};

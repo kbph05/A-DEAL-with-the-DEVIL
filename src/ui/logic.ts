@@ -50,7 +50,7 @@ export function eventClass(e: GameEvent): string {
     case "node_rewritten": case "rewrite_failed": return "ev-rewrite";
     case "curse_added": case "curse_fired": return "ev-curse";
     case "deal_offered": case "deal_applied": case "deal_refused": return "ev-devil";
-    case "damaged": case "lost": case "hell": return "ev-bad";
+    case "damaged": case "lost": case "hell": case "devil_struck": return "ev-bad";
     case "healed": case "trained": case "enemy_slain": case "won": case "revived": return "ev-good";
     case "rejected": return "ev-reject";
     case "started": case "act_advanced": return "ev-head";
@@ -302,6 +302,22 @@ export function dealEnd(log: readonly GameEvent[]): DealEnd {
     if (e.type === "deal_applied") return "struck";
     if (e.type === "deal_refused") return "walked";
     if (e.type === "moved" || e.type === "started") return null; // earlier than this node
+  }
+  return null;
+}
+
+/** Heading of the anger card. */
+export const STRIKE_HEAD = "The devil strikes!";
+/** The devil's latest outburst at this table: shown as the anger card above the ask row. */
+export interface DevilStrike { dialogue: string; effects: Record<string, number | undefined> }
+/**
+ * Read from the log (newest first): the strike the devil last made at this node, or null. A later offer replaces it, and so
+ * does leaving the node, a decided deal or a new run. (A strike newer than a standing offer is shown beside it.)
+ */
+export function lastStrike(log: readonly GameEvent[]): DevilStrike | null {
+  for (const e of log) {
+    if (e.type === "devil_struck") return { dialogue: e.dialogue, effects: e.effects };
+    if (e.type === "deal_offered" || e.type === "deal_applied" || e.type === "deal_refused" || e.type === "moved" || e.type === "started") return null;
   }
   return null;
 }
