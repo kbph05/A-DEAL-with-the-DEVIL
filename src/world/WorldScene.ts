@@ -331,6 +331,8 @@ export class WorldScene extends Phaser.Scene {
       g.lineStyle(1, colour, inside ? 1 : 0.6).strokeRect(z.x + 0.5, z.y + 0.5, z.w - 1, z.h - 1);
       if (inside) g.fillStyle(colour, 0.2).fillRect(z.x, z.y, z.w, z.h);
     }
+    // Enemy spawn points of a fight scene (the forest path), as small pink rings.
+    for (const sp of this.def.spawns ?? []) g.lineStyle(1, 0xff7ad9, 0.9).strokeCircle(sp.x, sp.y, 4);
     const body = this.player.body;
     g.lineStyle(1, 0xffffff, 1).strokeRect(body.x, body.y, body.width, body.height);
   }

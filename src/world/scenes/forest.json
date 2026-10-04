@@ -1,0 +1,19 @@
+{
+  "id": "forest",
+  "size": { "w": 1280, "h": 560 },
+  "background": "scene-forest-bg",
+  "overlay": "scene-forest-overlay",
+  "bounds": { "x": 32, "y": 224, "w": 1216, "h": 112 },
+  "spawn": { "x": 64, "y": 280 },
+  "zones": [
+    { "id": "path-end", "x": 1216, "y": 240, "w": 32, "h": 80, "kind": "exit", "label": "The path goes on" }
+  ],
+  "spawns": [
+    { "x": 300, "y": 266 },
+    { "x": 450, "y": 302 },
+    { "x": 600, "y": 256 },
+    { "x": 750, "y": 310 },
+    { "x": 900, "y": 272 },
+    { "x": 1050, "y": 296 }
+  ]
+}

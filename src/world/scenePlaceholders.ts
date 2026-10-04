@@ -25,8 +25,11 @@ export function sceneTiles(def: SceneDef): { width: number; height: number; tile
   const height = Math.ceil(def.size.h / S);
   const base = generateWorld(def.id, { width, height });
   const tiles: number[] = [];
-  // A scene with shops gets dirt paths: from the spawn along its row, then up or down to each shop and exit.
-  const shops = (def.zones ?? []).some((z) => z.kind === "shop");
+  // A scene with shops, or a fight scene (enemy spawns: the forest path), gets dirt paths: from the spawn along its
+  // row, then up or down to each shop and exit. A fight scene is all forest outside bounds and grass inside (no
+  // stone floors or walls from the generator).
+  const fight = (def.spawns?.length ?? 0) > 0;
+  const shops = (def.zones ?? []).some((z) => z.kind === "shop") || fight;
   const legs: Array<{ x: number; y: number; w: number; h: number }> = [];
   if (shops) {
     for (const z of def.zones ?? []) {
@@ -48,8 +51,8 @@ export function sceneTiles(def: SceneDef): { width: number; height: number; tile
     for (let x = 0; x < width; x++) {
       const c = { x: x * S + S / 2, y: y * S + S / 2 };
       let id = tileAt(base, x, y);
-      if (pointIn(c, def.bounds)) id = isBlockingId(id) || id === T.DOOR ? T.GRASS : id;
-      else id = id === T.WALL || id === T.WATER ? id : T.TREE;
+      if (pointIn(c, def.bounds)) id = isBlockingId(id) || id === T.DOOR || (fight && id === T.FLOOR) ? T.GRASS : id;
+      else id = id === T.WATER || (id === T.WALL && !fight) ? id : T.TREE;
       if (onPath(c)) id = T.PATH;
       // A building outside the playable rect (a shopfront on the edge) stands in a small clearing, not in the forest.
       if (clearings.some((r) => pointIn(c, r))) id = T.GRASS;
@@ -66,7 +69,7 @@ export interface Canopy { x: number; y: number; r: number; trunk: boolean }
 /**
  * Tree canopies for the overlay: a row along the bottom edge of the playable rect (overlapping it, so walking down
  * goes under the leaves; gaps over exit zones), and one big tree inside the rect at about 3/4 of its width (its trunk is on the
- * background). Pure.
+ * background). A fight scene (one with `spawns`) gets a second row along the top edge instead of the big tree. Pure.
  */
 export function overlayCanopies(def: SceneDef): Canopy[] {
   const b = def.bounds;
@@ -77,6 +80,13 @@ export function overlayCanopies(def: SceneDef): Canopy[] {
   const exits = (def.zones ?? []).filter((z) => z.kind === "exit");
   const overExit = (x: number) => exits.some((z) => x + r > z.x && x - r < z.x + z.w && rowY - r < z.y + z.h && rowY + r > z.y);
   for (let x = r / 2; x < def.size.w + r; x += 2 * r - 6) if (!overExit(x)) out.push({ x, y: rowY, r, trunk: false });
+  if ((def.spawns?.length ?? 0) > 0) {
+    // A fight scene (the forest path): a second row along the top edge instead of the big tree, so the path runs
+    // under the trees and nothing stands in the way of the fight.
+    const topY = b.y - r + 18;
+    for (let x = r; x < def.size.w + r; x += 2 * r - 6) out.push({ x, y: topY, r, trunk: false });
+    return out;
+  }
   out.push({ x: Math.round(b.x + b.w * 0.78), y: Math.round(b.y + b.h * 0.3), r: 40, trunk: true });
   return out;
 }

@@ -43,6 +43,11 @@ export interface SceneDef {
   spawn: Vec;
   zones?: SceneZone[];
   actors?: SceneActor[];
+  /**
+   * Fight scenes (the forest path): where enemies may stand, as feet positions inside `bounds`. The fight places
+   * its encounter on these, nearest the spawn first (docs/fight.md, "Forest mode"). Other scenes ignore them.
+   */
+  spawns?: Vec[];
 }
 
 // ---------------------------------------------------------------------------------------------------------------
@@ -69,7 +74,7 @@ function rectErrors(v: unknown, what: string): string[] {
 /**
  * Everything wrong with a scene definition, as readable messages (empty: it's valid). Checks: finite numbers,
  * a positive size, bounds inside the size, spawn inside the bounds, zones and actors well-formed with unique ids,
- * zones touching the bounds (else unreachable), actors inside the size.
+ * zones touching the bounds (else unreachable), actors inside the size, enemy spawns inside the bounds.
  */
 export function sceneErrors(raw: unknown): string[] {
   if (!isObj(raw)) return ["the scene is not an object"];
@@ -114,6 +119,13 @@ export function sceneErrors(raw: unknown): string[] {
     if (z.kind === "shop" && !str(z.item)) e.push(`${at} is a shop, so it needs an item (an engine item id)`);
     for (const k of ["label", "node", "item"]) if (z[k] !== undefined && typeof z[k] !== "string") e.push(`${at}.${k} must be a string`);
   });
+  if (raw.spawns !== undefined) {
+    if (!Array.isArray(raw.spawns)) e.push("spawns must be an array");
+    else raw.spawns.forEach((sp: unknown, i: number) => {
+      if (!isObj(sp) || !fin(sp.x) || !fin(sp.y)) e.push(`spawns[${i}] must be { x, y } with finite numbers`);
+      else if (be.length === 0 && !pointIn(sp as unknown as Vec, bounds)) e.push(`spawns[${i}] (${sp.x}, ${sp.y}) must lie inside bounds`);
+    });
+  }
   ids(raw.actors, "actors", (a, at) => {
     if (!fin(a.x) || !fin(a.y)) e.push(`${at} needs finite x and y`);
     else if (sizeOk && !pointIn(a as unknown as Vec, sizeRect)) e.push(`${at} stands outside size`);

@@ -149,3 +149,30 @@ test("placeholder art: actors named stall-… and house-… get a stall and a co
   const village = sceneById("village")!;
   assert.equal(village.actors!.filter((a) => actorShape(a.id) === "stall").length, 3);
 });
+
+test("SceneDef: enemy spawns (fight scenes) are optional points inside bounds", () => {
+  const has = (raw: unknown, re: RegExp) => assert.ok(sceneErrors(raw).some((e) => re.test(e)), `${JSON.stringify(sceneErrors(raw))} ~ ${re}`);
+  assert.deepEqual(sceneErrors(scene({ spawns: [{ x: 100, y: 150 }, { x: 300, y: 240 }] })), []);
+  has(scene({ spawns: {} }), /spawns must be an array/);
+  has(scene({ spawns: [{ x: 100 }] }), /spawns\[0\] must be/);
+  has(scene({ spawns: [{ x: 100, y: 150 }, { x: 10, y: 10 }] }), /spawns\[1\] .* inside bounds/);
+  const forest = sceneById("forest")!;
+  assert.ok(forest.spawns!.length > 0, "the forest path is a sample scene, in the world lab's picker too");
+});
+
+test("placeholder art: a fight scene is a dirt path through grass, forest all round, canopies on both edges", () => {
+  const forest = sceneById("forest")!;
+  const g = sceneTiles(forest);
+  const at = (px: number, py: number) => g.tiles[Math.floor(py / 16) * g.width + Math.floor(px / 16)];
+  assert.equal(at(600, forest.spawn.y), T.PATH, "a path from the spawn to the exit");
+  const b = forest.bounds;
+  const walk: number[] = [T.GRASS, T.PATH];
+  for (let x = 8; x < forest.size.w; x += 16) for (let y = 8; y < forest.size.h; y += 16) {
+    if (pointIn({ x, y }, b) && !forest.zones!.some((z) => pointIn({ x, y }, z))) assert.ok(walk.includes(at(x, y)), `grass or path at ${x},${y}`);
+  }
+  for (let x = 8; x < forest.size.w; x += 16) { assert.equal(at(x, 8), T.TREE); assert.equal(at(x, forest.size.h - 8), T.TREE); }
+  const c = overlayCanopies(forest);
+  assert.ok(c.some((k) => k.y + k.r > b.y && k.y < b.y), "a canopy row over the top edge");
+  assert.ok(c.some((k) => k.y - k.r < b.y + b.h && k.y > b.y + b.h), "and over the bottom edge");
+  assert.ok(c.every((k) => !k.trunk), "no big tree in the way of the fight");
+});
