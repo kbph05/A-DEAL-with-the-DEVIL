@@ -112,7 +112,7 @@ export function mountHud(parent: HTMLElement, options: HudOptions = {}): HudHand
   }
 
   function update(m: HudModel): void {
-    where.textContent = [`Act ${m.act}`, m.layer !== null ? `Layer ${m.layer}/${m.layers ?? "?"}` : m.kind === "final" ? "Final door" : "", m.kind && m.kind !== "final" ? m.kind : ""]
+    where.textContent = [`Act ${m.act}`, m.layer !== null ? (options.variant === "play" ? "" : `Layer ${m.layer}/${m.layers ?? "?"}`) : m.kind === "final" ? "Final door" : "", m.kind && m.kind !== "final" ? m.kind : ""]
       .filter(Boolean).join(" · ");
     const pct = Math.round((m.hp / m.maxHp) * 100);
     fill.style.width = `${pct}%`;
