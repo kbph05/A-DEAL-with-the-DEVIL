@@ -24,6 +24,7 @@ import {
   devilPresent, enemyView, exitsOf, isOpener, ONE_CHOICE, oneChoice,
   type Command, type Enemy, type GameState, type StepResult,
 } from "./gameState";
+import { BOSS_GOLD, KILL_GOLD } from "./economy";
 import { STAT_RANGE, addGold, applyEffects, heal, hurt, note, settle, snapshot, spend } from "./state";
 
 const clone = <T>(x: T): T => structuredClone(x);
@@ -156,6 +157,12 @@ function roll(d: GameState, n: number): number {
   return Math.floor(v * n);
 }
 
+/** Gold for a kill (KILL_GOLD / BOSS_GOLD in economy.ts): one die, as before, so the dice stream is unchanged. */
+function bounty(d: GameState, e: Enemy): number {
+  const g = e.boss ? BOSS_GOLD : KILL_GOLD, act = Math.min(d.player.act, g.base.length - 1);
+  return g.base[act] + roll(d, g.spread);
+}
+
 /** HP <= 0 loses unless the soul can pay once. */
 function settleHp(d: GameState, ev: GameEvent[], cause: string): void {
   if (d.ending) return;
@@ -246,7 +253,7 @@ function fight(d: GameState, ev: GameEvent[]): void {
   const dealt = d.player.attack + roll(d, 3);
   e.hp = Math.max(0, e.hp - dealt);
   if (e.hp === 0) {
-    const gold = e.boss ? 12 + roll(d, 6) : 4 + roll(d, 5) + d.player.act;
+    const gold = bounty(d, e);
     addGold(d.player, gold);
     d.enemy = null; d.resolved = true;
     ev.push({ type: "fought", dealt, enemyHp: 0, taken: 0 }, { type: "enemy_slain", name: e.name, gold, boss: e.boss });
@@ -280,7 +287,7 @@ function fightResult(d: GameState, ev: GameEvent[], report: unknown): void {
   if (r.hitsTaken > 0) fire(d, ev, "on_hit");
   settleHp(d, ev, e.name);
   if (d.ending || r.outcome !== "won") return;
-  const gold = e.boss ? 12 + roll(d, 6) : 4 + roll(d, 5) + d.player.act;
+  const gold = bounty(d, e);
   addGold(d.player, gold);
   d.enemy = null; d.resolved = true;
   ev.push({ type: "enemy_slain", name: e.name, gold, boss: e.boss });

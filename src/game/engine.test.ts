@@ -11,6 +11,7 @@ import { createSession, type SyncKind } from "./session";
 import { snapshot } from "./state";
 import { step } from "./state-machine";
 import { view } from "./view";
+import { MAX_DEAL_GOLD } from "./economy";
 
 const deepFreeze = <T>(x: T): T => {
   if (typeof x === "object" && x !== null && !Object.isFrozen(x)) { Object.freeze(x); for (const v of Object.values(x)) deepFreeze(v); }
@@ -144,7 +145,7 @@ test("deal awaits the devil with the HttpDevil request shape; only devil_reply (
   assert.ok(step(s, { cmd: "look" }).ok, "look still works while the devil thinks");
   const replied = step(s, { cmd: "devil_reply", deal: { dialogue: "x", effects: { gold: 1e9 }, junk: 1 } });
   assert.ok(replied.ok && !replied.awaiting && replied.state.pending === null);
-  assert.deepEqual(replied.events, [{ type: "deal_offered", deal: { dialogue: "x", effects: { gold: 100 } } }]);
+  assert.deepEqual(replied.events, [{ type: "deal_offered", deal: { dialogue: "x", effects: { gold: MAX_DEAL_GOLD } } }]);
   assert.equal(step(replied.state, { cmd: "devil_reply", deal: {} }).ok, false, "no second reply");
 });
 

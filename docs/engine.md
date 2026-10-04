@@ -95,6 +95,8 @@ The devil is outside the engine; it may be a network call.
 
 **Run-wide query cap.** Every `deal` that reaches the devil (first asks and haggles, at any node) counts toward `MAX_DEVIL_QUERIES` (10), tracked by the existing `state.totalAsks` (no new state field). When it is spent, `deal` drops out of `actions` and is rejected with "The devil has heard enough from you this run."; an offer already on the table can still be accepted or refused. The separate per-node limit (`MAX_ASKS = 3`) still applies. The devil is told in `context.questionsLeft` (questions left after this one).
 
+**Progress.** `devilContext` also sends `context.progress` (4 Oct, additive; `progressOf` in `gameState.ts`): 0 at the start of act 1 to 1 at the act-3 boss, `(act + layer / boss layer) / 3`, two decimals. The StubDevil scales its gold by it; the gold knobs live in `src/game/economy.ts` (docs/FEATURES.md 5.3).
+
 `Game.deal(text)` does all three steps, catching devil errors exactly as before. In the REPL, `--manual-devil` stops after step 1 so you can type the reply yourself.
 
 ## The realtime fight round trip

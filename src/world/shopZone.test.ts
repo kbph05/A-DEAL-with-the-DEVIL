@@ -60,7 +60,7 @@ test("shopPrompt: disabled with a reason (gold, wrong node, spent well, not a sh
   const s = initialState("shop-test");
   const poor = shopPrompt(zone("blade"), view(withGold(s, 3)));
   assert.equal(poor.enabled, false);
-  assert.equal(poor.reason, "Not enough gold: need 15g, you have 3g");
+  assert.equal(poor.reason, "Not enough gold: need 12g, you have 3g");
   assert.equal(poor.command, undefined);
   const rich = shopPrompt(zone("blade"), view(withGold(s, 99)));
   assert.equal(rich.enabled, true);

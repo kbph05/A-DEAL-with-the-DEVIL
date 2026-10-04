@@ -15,7 +15,7 @@ test("hudModel: a new run (village, 10g) shows stats and the shop; heal usable, 
   assert.equal(m.speed, null);
   assert.equal(m.soul, "kept"); assert.equal(m.revive, "available");
   assert.equal(m.kind, "village"); assert.equal(m.act, 1); assert.equal(m.layer, 1); assert.ok(m.layers! >= 6);
-  assert.deepEqual(m.items.map((i) => [i.id, i.usable, i.reason, i.cost, i.count]), [["heal", true, null, 10, null], ["blade", false, "need 5g more", 15, null]]);
+  assert.deepEqual(m.items.map((i) => [i.id, i.usable, i.reason, i.cost, i.count]), [["heal", true, null, 10, null], ["blade", false, "need 2g more", 12, null]]);
   assert.deepEqual(m.items[0].command, { cmd: "buy", item: "heal" });
   assert.deepEqual(m.devil, { questionsLeft: MAX_DEVIL_QUERIES, max: MAX_DEVIL_QUERIES, asksLeft: null });
   assert.deepEqual(m.curses, []); assert.equal(m.ending, null); assert.equal(m.busy, null);

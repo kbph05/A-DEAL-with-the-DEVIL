@@ -66,7 +66,8 @@ export const isOpener = (s: GameState, text: unknown): boolean =>
 export const openerDue = (s: GameState): boolean => devilPresent(s) && !devilDone(s) && !s.ending && !s.enemy && !s.pending && isOpener(s, undefined);
 /** Attack gained by training at a campfire (the alternative to resting there). */
 export const TRAIN_ATTACK = 1;
-export const WARES = { heal: { cost: 10 }, blade: { cost: 15 }, blessing: { cost: 8 } } as const;
+/** Prices live with the rest of the gold knobs in economy.ts. */
+export { WARES } from "./economy";
 export const FOES = [["cave rat", "drowned monk", "ash hound"], ["bone mason", "glass wolf", "hollow knight"], ["choir of moths", "gilded wretch", "the unlit"]];
 export const BOSSES = ["the Gatekeeper", "the Cartographer of Ruin", "the Devil's Left Hand"];
 
@@ -181,7 +182,16 @@ export function devilContext(s: GameState): DevilContext {
     stack.push(...(a.nodes.find((n) => n.id === id)?.next ?? []));
   }
   const rewritable = a.nodes.filter((n) => seen.has(n.id) && n.id !== a.exit && !a.visited.includes(n.id)).map((n) => ({ id: n.id, kind: n.kind }));
-  return { seed: s.seed, act: a.index, nodeId: s.player.nodeId, kind: currentNode(s).kind, askIndex: s.totalAsks, questionsLeft: questionsLeft(s), rewritable, curses: s.curses.map((c) => ({ ...c })) };
+  return { seed: s.seed, act: a.index, nodeId: s.player.nodeId, kind: currentNode(s).kind, askIndex: s.totalAsks, questionsLeft: questionsLeft(s), rewritable, curses: s.curses.map((c) => ({ ...c })), progress: progressOf(s) };
+}
+
+/**
+ * How far through the run the player is: 0 at the start of act 1, 1 at the act-3 boss ((act + layer / boss layer) / 3,
+ * two decimals). Sent to the devil as `context.progress`.
+ */
+export function progressOf(s: GameState): number {
+  const a = currentAct(s), last = a.nodes.find((n) => n.id === a.exit)?.layer || 1;
+  return Math.round(100 * Math.min(1, (a.index + currentNode(s).layer / last) / 3)) / 100;
 }
 
 /** Is `state` a valid-looking GameState? (Shallow check for restoring saved runs.) */

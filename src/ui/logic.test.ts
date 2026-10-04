@@ -308,9 +308,9 @@ test("askBlockReason: the run-wide limit outranks the per-node haggle limit; nul
 
 test("shop lists price tags at the village only; the well's blessing is a single-use choice", () => {
   const g = createGame("ui-1"), o = g.observe();
-  const village = { ...o, kind: "village" as const, state: { ...o.state, gold: 12 } };
+  const village = { ...o, kind: "village" as const, state: { ...o.state, gold: 10 } };
   const items = shopItems(village, availableActions(village));
-  assert.deepEqual(items.map((i) => [i.item, i.cost, i.affordable, i.reason]), [["heal", 10, true, null], ["blade", 15, false, "need 3 more gold"]]);
+  assert.deepEqual(items.map((i) => [i.item, i.cost, i.affordable, i.reason]), [["heal", 10, true, null], ["blade", 12, false, "need 2 more gold"]]);
   const well = { ...o, kind: "well" as const, resolved: false, state: { ...o.state, gold: 12 } };
   assert.deepEqual(shopItems(well, availableActions(well)), []);
   assert.deepEqual(chooseCards(well, availableActions(well)).map((c) => [c.key, c.state]), [["blessing", "available"]]);

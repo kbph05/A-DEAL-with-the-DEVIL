@@ -1,4 +1,5 @@
 import { hashSeed, mulberry32, type Kind, type Rng } from "../map";
+import { DEVIL_GOLD_FROM, devilGold, devilGoldLead } from "./economy";
 import type { PlayerState } from "./state";
 
 export type CurseTrigger = "on_hit" | "on_enter" | "on_fight" | "next_node";
@@ -40,6 +41,12 @@ export interface DevilContext {
    * null). Pitch something tailored to the state. Free: it uses no question (`askIndex`, `questionsLeft` don't move).
    */
   opening?: boolean;
+  /**
+   * How far through the run the player is (additive, 4 Oct): 0 at the start of act 1, 1 at the act-3 boss, two decimals.
+   * The engine always sends it; older callers may omit it (the stub then reads `(act + 0.5) / 3`). Be stingy with gold
+   * early (docs/devil-api.md, "Gold").
+   */
+  progress?: number;
 }
 
 export interface Devil {
@@ -63,20 +70,25 @@ interface Offer {
   id: string;
   /** Words from the player that make the devil lean this way. */
   hint?: RegExp;
+  /** Gold is what it leads with: rare early, and the devil may steer a wish for gold elsewhere (DEVIL_GOLD_LEAD). */
+  gold?: boolean;
   /** 0 = not on the table right now. */
   eligible(s: Readonly<PlayerState>, ctx: DevilContext): boolean;
   make(s: Readonly<PlayerState>, ctx: DevilContext, rng: Rng): Deal;
 }
 
 const pick = <T>(rng: Rng, xs: readonly T[]): T => xs[Math.floor(rng() * xs.length)];
+/** How far through the run (DevilContext.progress; for older callers without it, the middle of the act). */
+export const progressOf = (ctx: Pick<DevilContext, "act" | "progress">): number =>
+  typeof ctx.progress === "number" && Number.isFinite(ctx.progress) ? Math.min(1, Math.max(0, ctx.progress)) : Math.min(1, (ctx.act + 0.5) / 3);
 const GOOD: Kind[] = ["campfire", "village", "well", "deal"];
 
 const OFFERS: Offer[] = [
   {
-    id: "coin", hint: /gold|coin|rich|money/i, eligible: () => true,
-    make: () => ({
+    id: "coin", hint: /gold|coin|rich|money/i, gold: true, eligible: () => true,
+    make: (_s, ctx) => ({
       dialogue: "A coin for your trouble. It's warm. It remembers where it was minted, and it will want to go home through your ribs.",
-      effects: { gold: 25 }, curse: { trigger: "on_hit", effect: { hp: -4 } },
+      effects: { gold: devilGold(progressOf(ctx)), max_hp: -3 }, curse: { trigger: "on_hit", effect: { hp: -5 } },
     }),
   },
   {
@@ -95,14 +107,14 @@ const OFFERS: Offer[] = [
   },
   {
     id: "soul", hint: /soul|forever|eternal/i, eligible: (s) => s.soul === 1,
-    make: () => ({
+    make: (_s, ctx) => ({
       dialogue: "A formality. Sign here and the road gets easy. Think of me as insurance. You'll never need the claim.",
-      effects: { soul: -1, gold: 60, max_hp: 10, attack: 1 },
+      effects: soulPrice(progressOf(ctx)),
     }),
   },
   {
-    id: "bleed", hint: /blood|bleed|pain/i, eligible: (s) => s.hp > 8,
-    make: () => ({ dialogue: "Gold is only blood that has been polite. Pay in the original currency.", effects: { hp: -5, gold: 40 } }),
+    id: "bleed", hint: /blood|bleed|pain/i, gold: true, eligible: (s) => s.hp > 10,
+    make: (_s, ctx) => ({ dialogue: "Gold is only blood that has been polite. Pay in the original currency.", effects: { hp: -8, gold: devilGold(progressOf(ctx)) } }),
   },
   {
     id: "fineprint", hint: /luck|safe|fortune|protect/i, eligible: () => true,
@@ -112,13 +124,13 @@ const OFFERS: Offer[] = [
     }),
   },
   {
-    id: "movefurniture", hint: /road|map|path|ahead|future/i,
+    id: "movefurniture", hint: /road|map|path|ahead|future/i, gold: true,
     eligible: (_s, ctx) => ctx.rewritable.some((n) => GOOD.includes(n.kind)),
     make: (_s, ctx, rng) => {
       const target = pick(rng, ctx.rewritable.filter((n) => GOOD.includes(n.kind)));
       return {
         dialogue: "I've seen the road ahead, and frankly it was too comfortable. Let me move some furniture. You'll thank me. Eventually.",
-        effects: { gold: 30, attack: 1 }, rewrite: { nodeId: target.id, to: "fight" },
+        effects: { gold: Math.round(devilGold(progressOf(ctx)) / 2), attack: 1 }, rewrite: { nodeId: target.id, to: "fight" },
       };
     },
   },
@@ -209,11 +221,14 @@ const STRIKE_LINES: readonly string[] = [
 export const STRIKE_CHANCE = 0.5;
 /** HP a stub strike takes: STRIKE_MIN..STRIKE_MAX inclusive, seeded. (The engine caps any strike at MAX_STRIKE_HP.) */
 export const STRIKE_MIN = 3, STRIKE_MAX = 6;
-/** Spite offers: strictly worse than the usual stock, and the curse is never optional. `hurts` ones need HP to spare. */
-const SPITE: Array<{ hurts: boolean; make: () => Pick<Deal, "effects" | "curse"> }> = [
-  { hurts: true, make: () => ({ effects: { hp: -8, gold: 10 }, curse: { trigger: "on_fight", effect: { attack: -1 } } }) },
-  { hurts: false, make: () => ({ effects: { max_hp: -6, gold: 15 }, curse: { trigger: "next_node", effect: { hp: -6 } } }) },
-  { hurts: false, make: () => ({ effects: { attack: -1, gold: 20 }, curse: { trigger: "on_hit", effect: { hp: -5 } } }) },
+/**
+ * Spite offers: strictly worse than the usual stock, and the curse is never optional. `hurts` ones need HP to spare. Their
+ * gold never beats what a polite wish would get at this point of the run (`g` = devilGold(progress)): rudeness never pays.
+ */
+const SPITE: Array<{ hurts: boolean; make: (g: number) => Pick<Deal, "effects" | "curse"> }> = [
+  { hurts: true, make: (g) => ({ effects: { hp: -8, gold: Math.min(10, g) }, curse: { trigger: "on_fight", effect: { attack: -1 } } }) },
+  { hurts: false, make: (g) => ({ effects: { max_hp: -6, gold: Math.min(15, g) }, curse: { trigger: "next_node", effect: { hp: -6 } } }) },
+  { hurts: false, make: (g) => ({ effects: { attack: -1, gold: Math.min(20, g) }, curse: { trigger: "on_hit", effect: { hp: -5 } } }) },
 ];
 
 // ---- off-topic and jailbreak text: the devil does not take requests outside the bargain -------------------------------
@@ -380,14 +395,19 @@ const wellEntice = (c: DevilContext): string => pick(mulberry32(hashSeed(`well-e
 
 /** Is the player at or below this share of max HP? Then the opener heals. */
 export const OPENER_LOW_HP = 0.4;
-/** Below this much gold the opener pays (a blessing costs 8, the cheapest village ware 10). */
+/** Below this much gold the player is broke (a blessing costs 8, the cheapest village ware 10): from DEVIL_GOLD_FROM on, the opener pays. */
 export const OPENER_POOR = 10;
+
+/** The soul's price: the biggest stat package, and gold only from DEVIL_GOLD_FROM (mid act 2) on. */
+const soulPrice = (p: number): Record<string, number> => ({ soul: -1, ...(p >= DEVIL_GOLD_FROM ? { gold: devilGold(p) } : {}), max_hp: 10, attack: 1 });
 
 /**
  * The opening pitch (no text from the player, kbph 4 Oct: "the devil should be making an initial offer based on the
  * current game state"): aimed at the player's weakest point, and never free. In order: low HP (heal or more max HP), low
  * attack with the boss near (attack), an active curse (he pays its toll in advance: the engine cannot tear up a curse,
- * so this is the nearest thing to lifting it), low gold (gold), otherwise the soul (or a coin once it is gone). Pure in
+ * so this is the nearest thing to lifting it), low gold (gold from DEVIL_GOLD_FROM, mid act 2, on; before that attack or
+ * max HP instead: kbph, 4 Oct, "less friendly with gold offers especially right at the beginning"), otherwise the soul
+ * (or, once it is gone, a purse late or an edge early). Gold amounts scale with progress (devilGold). Pure in
  * (state, context, rng).
  */
 export function openingOffer(s: Readonly<PlayerState>, ctx: DevilContext, rng: Rng): Deal {
@@ -407,15 +427,21 @@ export function openingOffer(s: Readonly<PlayerState>, ctx: DevilContext, rng: R
       effects: { ...toll, max_hp: -4 },
     };
   }
-  if (s.gold < OPENER_POOR) return pick<Deal>(rng, [
-    { dialogue: "Empty pockets at a well-stocked road. Tragic. Take this purse; it bites the hand that's hit.", effects: { gold: 30 }, curse: { trigger: "on_hit", effect: { hp: -4 } } },
-    { dialogue: "Coin for flesh, the oldest trade there is. A little less of you, a lot more gold.", effects: { gold: 25, max_hp: -4 } },
+  const p = progressOf(ctx), gold = devilGold(p), late = p >= DEVIL_GOLD_FROM;
+  if (s.gold < OPENER_POOR) return pick<Deal>(rng, late ? [
+    { dialogue: "Empty pockets at a well-stocked road. Tragic. Take this purse; it bites the hand that's hit.", effects: { gold, max_hp: -3 }, curse: { trigger: "on_hit", effect: { hp: -4 } } },
+    { dialogue: "Coin for flesh, the oldest trade there is. A little less of you, a little more gold.", effects: { gold, max_hp: -5 } },
+  ] : [ // early on he won't fill a purse: he tempts with strength and life instead
+    { dialogue: "Empty pockets? Coin is for later. Here's something better than coin: a keener edge. It costs a little of you.", effects: { attack: 1, max_hp: -4 } },
+    { dialogue: "No coin for the healer? Then let me be your healer. A bigger, fuller you; every blow you take, I take a sip.", effects: { max_hp: 6, hp: 6 }, curse: { trigger: "on_hit", effect: { hp: -5 } } },
   ]);
   if (s.soul === 1) return {
     dialogue: "You look well. Rich, even. So let's talk about the one thing you haven't spent. Sign, and the road gets easy.",
-    effects: { soul: -1, gold: 60, max_hp: 10, attack: 1 },
+    effects: soulPrice(p),
   };
-  return { dialogue: "Nothing left to sell me but your luck. I'll take it. Gold now, pain later.", effects: { gold: 25 }, curse: { trigger: "on_hit", effect: { hp: -4 } } };
+  return late
+    ? { dialogue: "Nothing left to sell me but your luck. I'll take it. Gold now, pain later.", effects: { gold, max_hp: -3 }, curse: { trigger: "on_hit", effect: { hp: -4 } } }
+    : { dialogue: "Nothing left to sell me but your luck. I'll take it, and sharpen your blade for it. Pain later.", effects: { attack: 1 }, curse: { trigger: "on_hit", effect: { hp: -5 } } };
 }
 
 /** Canned bad-faith offers, deterministic in (seed, ask sequence). Stands in until the Gemini devil is plugged in. */
@@ -441,7 +467,12 @@ export class StubDevil implements Devil {
     const eligible = OFFERS.filter((o) => o.eligible(state, context));
     // He listens: if the wish names a theme (gold, strength, healing, the road...), he only offers deals on it.
     const heard = eligible.filter((o) => o.hint?.test(text));
-    const pool = heard.length ? heard : eligible;
+    // He is stingy with gold, early above all (DEVIL_GOLD_LEAD): he leads with gold only on a seeded roll, more often when
+    // the wish asked for it and later in the run; otherwise he steers the wish to something that isn't gold.
+    const base = heard.length ? heard : eligible;
+    const lead = rng() < devilGoldLead(progressOf(context), heard.some((o) => o.gold));
+    const plain = base.filter((o) => !o.gold), golden = base.filter((o) => o.gold);
+    const pool = lead && golden.length ? golden : plain.length ? plain : eligible.filter((o) => !o.gold).length ? eligible.filter((o) => !o.gold) : base;
     const weights = pool.map(() => 1);
     let r = rng() * weights.reduce((a, b) => a + b, 0);
     let chosen = pool[pool.length - 1];
@@ -467,7 +498,7 @@ export class StubDevil implements Devil {
     }
     const line = pick(rng, rants);
     const spite = pick(rng, SPITE.filter((o) => !o.hurts || state.hp > 8));
-    return { dialogue: line + taunt(context), ...spite.make() };
+    return { dialogue: line + taunt(context), ...spite.make(devilGold(progressOf(context))) };
   }
 }
 

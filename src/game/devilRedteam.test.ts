@@ -12,6 +12,7 @@ import { restoreGame } from "./run";
 import { DELTA_RANGE, STAT_RANGE, type PlayerState } from "./state";
 import { MAX_PLAYER_TEXT, step } from "./state-machine";
 import { REDTEAM } from "./__fixtures__/redteam";
+import { MAX_DEAL_GOLD } from "./economy";
 
 const onDeal = (seed: string): GameState => { const s = initialState(seed); s.acts[0].nodes[0].kind = "deal"; return s; };
 const SEEDS = ["rt-1", "rt-2", "rt-3", "rt-4", "rt-5", "rt-6"];
@@ -192,7 +193,7 @@ test("sanitizeDeal: hostile JSON never throws and always comes out in range", ()
 });
 
 test("sanitizeDeal: specific clamps for the extremes", () => {
-  assert.deepEqual(sanitizeDeal(HOSTILE[2][1]).effects, { gold: 100, hp: -25, max_hp: 10, attack: 3, soul: 1 });
+  assert.deepEqual(sanitizeDeal(HOSTILE[2][1]).effects, { gold: MAX_DEAL_GOLD, hp: -25, max_hp: 10, attack: 3, soul: 1 });
   assert.deepEqual(sanitizeDeal(HOSTILE[4][1]).effects, {}, "strings are not numbers");
   assert.deepEqual(sanitizeDeal(HOSTILE[9][1]).effects, { gold: 1 });
   assert.equal(sanitizeDeal(HOSTILE[9][1]).forced, undefined, "a __proto__.forced does not make a strike");
@@ -334,5 +335,5 @@ test("a devil that hangs or throws on hostile text: the engine falls back to sil
   const evil: Devil = { offer: async () => ({ dialogue: "x", effects: { gold: 999, soul: 1 }, forced: "yes" }) as unknown as Deal };
   const g2 = restoreGame(onDeal("evil"), evil);
   await g2.deal("gold");
-  assert.deepEqual(g2.gameState.offer!.effects, { gold: 100, soul: 1 });
+  assert.deepEqual(g2.gameState.offer!.effects, { gold: MAX_DEAL_GOLD, soul: 1 });
 });

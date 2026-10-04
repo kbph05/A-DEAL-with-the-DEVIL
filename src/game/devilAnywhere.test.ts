@@ -6,6 +6,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { sanitizeDeal } from "./deal";
+import { DEVIL_GOLD_FROM, devilGold } from "./economy";
 import { StubDevil, WELL_ENTICE, type Deal, type Devil } from "./devil";
 import {
   MAX_ASKS, MAX_DEVIL_QUERIES, ONE_CHOICE, WELL_DEVIL_CHANCE, devilAtWell, initialState, type Command, type GameState, type StepResult,
@@ -252,13 +253,16 @@ test("opening offer: free (no ask, no question), once per node; at a well it doe
   assert.equal(observation(atWell(false)).opening, false);
 });
 
-test("StubDevil opener: tailored to the state (low HP heals, weak before the boss sharpens, a curse's toll, poor gets gold), always at a price", async () => {
+test("StubDevil opener: tailored to the state (low HP heals, weak before the boss sharpens, a curse's toll, poor gets strength early and gold late), always at a price", async () => {
   const req = (tweak: (s: GameState) => void, seed = "op") => {
     const s = moveTo(initialState(seed), "a0n0", "deal");
     tweak(s);
     return step(s, { cmd: "deal" }).state.pending!;
   };
-  const offer = async (tweak: (s: GameState) => void) => { const r = req(tweak); return new StubDevil().offer(r.state, r.context, r.playerText ?? undefined); };
+  const offer = async (tweak: (s: GameState) => void, progress?: number) => {
+    const r = req(tweak);
+    return new StubDevil().offer(r.state, progress === undefined ? r.context : { ...r.context, progress }, r.playerText ?? undefined);
+  };
   const priced = (d: Deal) => d.curse !== undefined || Object.values(d.effects).some((v) => v < 0);
   const low = await offer((s) => { s.player.hp = 5; });
   assert.ok((low.effects.hp ?? 0) > 0 || (low.effects.max_hp ?? 0) > 0, JSON.stringify(low));
@@ -267,9 +271,14 @@ test("StubDevil opener: tailored to the state (low HP heals, weak before the bos
   const cursed = await offer((s) => { s.player.gold = 50; s.curses = [{ trigger: "on_hit", effect: { hp: -4 } }]; });
   assert.equal(cursed.effects.hp, 4, JSON.stringify(cursed));
   const poor = await offer((s) => { s.player.gold = 2; });
-  assert.ok((poor.effects.gold ?? 0) > 0, JSON.stringify(poor));
+  assert.equal(poor.effects.gold, undefined, `broke early: no purse yet (kbph, 4 Oct): ${JSON.stringify(poor)}`);
+  assert.ok((poor.effects.attack ?? 0) > 0 || (poor.effects.max_hp ?? 0) > 0, JSON.stringify(poor));
+  const poorLate = await offer((s) => { s.player.gold = 2; }, DEVIL_GOLD_FROM);
+  assert.equal(poorLate.effects.gold, devilGold(DEVIL_GOLD_FROM), `broke from mid act 2: gold, ${JSON.stringify(poorLate)}`);
+  assert.ok((poorLate.effects.max_hp ?? 0) < 0, "gold costs a real stat, not only a curse the fine print could strike");
   const rich = await offer((s) => { s.player.gold = 50; });
   assert.equal(rich.effects.soul, -1, "flush and healthy: he wants the soul");
-  for (const d of [low, weak, cursed, poor, rich]) { assert.ok(priced(d), `never free: ${JSON.stringify(d)}`); assert.deepEqual(sanitizeDeal(d), d); }
+  assert.equal(rich.effects.gold, undefined, "early, the soul buys stats, not gold");
+  for (const d of [low, weak, cursed, poor, poorLate, rich]) { assert.ok(priced(d), `never free: ${JSON.stringify(d)}`); assert.deepEqual(sanitizeDeal(d), d); }
   assert.deepEqual(await offer((s) => { s.player.hp = 5; }), low, "pure");
 });
