@@ -7,6 +7,7 @@
  */
 import Phaser from "phaser";
 import forest from "../../assets/forest.png";
+import { applyGamma } from "../fight/gamma";
 import { bandLayout, type SceneDef } from "./scene";
 
 export const BUNDLED_BACKGROUNDS: Readonly<Record<string, string>> = { forest };
@@ -19,26 +20,50 @@ export function preloadBand(scene: Phaser.Scene, def: SceneDef): void {
   if (url) scene.load.image(bundledKey(def.id), url);
 }
 
+const laidKey = (def: SceneDef, gamma: number): string => `${bundledKey(def.id)}:laid${gamma === 1 ? "" : `:g${gamma}`}`;
+
 /**
  * Lay the loaded band along the scene (`bandLayout`): one canvas texture holding the copies, the odd ones mirrored,
- * drawn as a single image scaled to the scene height, nearest-neighbour. One image, so no hairline seams at the joins.
+ * nearest-neighbour. One image, so no hairline seams at the joins. A `gamma` other than 1 is baked into the pixels
+ * once, here (a fight's forest background, src/fight/art.ts); the texture is cached per gamma, so there is no
+ * per-frame cost. Returns the texture key.
  */
-export function addBand(scene: Phaser.Scene, def: SceneDef, depth: number): Phaser.GameObjects.Image {
+function bandTexture(scene: Phaser.Scene, def: SceneDef, gamma: number): string {
+  const key = laidKey(def, gamma);
+  if (scene.textures.exists(key)) return key;
   const src = scene.textures.get(bundledKey(def.id)).getSourceImage() as HTMLImageElement;
   const L = bandLayout({ w: src.width, h: src.height }, def.size);
-  const key = `${bundledKey(def.id)}:laid`;
-  if (!scene.textures.exists(key)) {
-    const tex = scene.textures.createCanvas(key, L.width, src.height)!;
-    const ctx = tex.getContext();
-    ctx.imageSmoothingEnabled = false;
-    for (let i = 0; i < L.copies; i++) {
-      ctx.save();
-      if (i % 2 === 1) { ctx.translate((i + 1) * src.width, 0); ctx.scale(-1, 1); } else ctx.translate(i * src.width, 0);
-      ctx.drawImage(src, 0, 0);
-      ctx.restore();
-    }
-    tex.refresh();
-    tex.setFilter(Phaser.Textures.FilterMode.NEAREST);
+  const tex = scene.textures.createCanvas(key, L.width, src.height)!;
+  const ctx = tex.getContext();
+  ctx.imageSmoothingEnabled = false;
+  for (let i = 0; i < L.copies; i++) {
+    ctx.save();
+    if (i % 2 === 1) { ctx.translate((i + 1) * src.width, 0); ctx.scale(-1, 1); } else ctx.translate(i * src.width, 0);
+    ctx.drawImage(src, 0, 0);
+    ctx.restore();
   }
-  return scene.add.image(0, 0, key).setOrigin(0, 0).setScale(L.scale).setDepth(depth);
+  if (gamma !== 1) {
+    const px = ctx.getImageData(0, 0, L.width, src.height);
+    applyGamma(px.data, gamma);
+    ctx.putImageData(px, 0, 0);
+  }
+  tex.refresh();
+  tex.setFilter(Phaser.Textures.FilterMode.NEAREST);
+  return key;
+}
+
+/** The loaded band laid along the scene as one image scaled to the scene height; `gamma` as in `bandTexture`. */
+export function addBand(scene: Phaser.Scene, def: SceneDef, depth: number, gamma = 1): Phaser.GameObjects.Image {
+  const src = scene.textures.get(bundledKey(def.id)).getSourceImage() as HTMLImageElement;
+  const L = bandLayout({ w: src.width, h: src.height }, def.size);
+  return scene.add.image(0, 0, bandTexture(scene, def, gamma)).setOrigin(0, 0).setScale(L.scale).setDepth(depth);
+}
+
+/** Re-process a laid band at a new gamma (the fight lab's slider): swap its texture, dropping the old one. */
+export function setBandGamma(scene: Phaser.Scene, def: SceneDef, image: Phaser.GameObjects.Image, gamma: number): void {
+  const old = image.texture.key;
+  const key = bandTexture(scene, def, gamma);
+  if (key === old) return;
+  image.setTexture(key);
+  if (old.startsWith(`${bundledKey(def.id)}:laid`)) scene.textures.remove(old);
 }

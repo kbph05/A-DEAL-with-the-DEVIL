@@ -7,6 +7,7 @@ import {
   ENEMIES, ENEMY_IDS, encounterFor, runFight, runForestFight,
   type Encounter, type EnemyId, type FightInput, type FightResult, type FightSim, type ForestRequest, type ForestView,
 } from "./index";
+import { BG_GAMMA_MAX, BG_GAMMA_MIN, BG_GAMMA_STEP, FOREST_BG_GAMMA } from "./art";
 
 declare global {
   interface Window {
@@ -31,6 +32,8 @@ const foe = $<HTMLSpanElement>("foe");
 const mode = $<HTMLSelectElement>("mode");
 const layer = $<HTMLInputElement>("layer");
 const layerv = $<HTMLSpanElement>("layerv");
+const gamma = $<HTMLInputElement>("gamma");
+const gammav = $<HTMLSpanElement>("gammav");
 const force = $<HTMLSelectElement>("force");
 const enc = $<HTMLDivElement>("enc");
 const go = $<HTMLButtonElement>("go");
@@ -43,6 +46,14 @@ window.__fight = state;
 /** The lab's act map: 7 layers per act (the generator makes 6 to 8), 3 acts. */
 const LAYERS = 7;
 const ACTS = 3;
+
+// Background gamma (forest mode): starts at the production constant; moving the slider re-processes the texture live.
+Object.assign(gamma, { min: String(BG_GAMMA_MIN), max: String(BG_GAMMA_MAX), step: String(BG_GAMMA_STEP) });
+const qGamma = Number(new URLSearchParams(location.search).get("gamma"));
+gamma.value = String(qGamma >= BG_GAMMA_MIN && qGamma <= BG_GAMMA_MAX ? qGamma : FOREST_BG_GAMMA);
+const showGamma = (): void => { gammav.textContent = Number(gamma.value).toFixed(1); };
+showGamma();
+gamma.addEventListener("input", () => { showGamma(); state.view?.setGamma(Number(gamma.value)); });
 
 for (const id of ENEMY_IDS) force.add(new Option(ENEMIES[id].label, id));
 
@@ -123,7 +134,7 @@ async function start(): Promise<void> {
   document.body.classList.add("fighting");
   const result = forest
     ? await runForestFight(stage, inp, {
-      touch, force: forced(),
+      touch, force: forced(), gamma: Number(gamma.value),
       onEncounter: (e) => { state.encounter = e; enc.innerHTML = describeEncounter(e); },
       onDebug: (sim, view) => { state.sim = sim; state.view = view; },
     })
