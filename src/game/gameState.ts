@@ -63,7 +63,7 @@ export const devilDone = (s: GameState): boolean => (currentNode(s).kind === "we
 export const isOpener = (s: GameState, text: unknown): boolean =>
   (typeof text !== "string" || text.trim() === "") && s.asks === 0 && !s.opened && !s.offer;
 /** The opening offer is still to come here: the devil sits at this node, will deal, and has not pitched yet. */
-export const openerDue = (s: GameState): boolean => devilPresent(s) && !devilDone(s) && !s.ending && !s.enemy && !s.pending && isOpener(s, undefined);
+export const openerDue = (s: GameState): boolean => devilPresent(s) && !devilDone(s) && !s.ending && !s.enemy && !s.pending && !s.dying && isOpener(s, undefined);
 /** Attack gained by training at a campfire (the alternative to resting there). */
 export const TRAIN_ATTACK = 1;
 /** Prices live with the rest of the gold knobs in economy.ts. */
@@ -130,7 +130,20 @@ export interface GameState {
   pending: DevilRequest | null;
   /** Set while a realtime fight is being played: the next command must be `fight_result`. Absent (or null) otherwise. */
   pendingFight?: FightRequest | null;
+  /**
+   * At death's door (additive, 4 Oct; Big Chungus: "when you die with your soul, the devil should come up and offer for
+   * you to continue by forfeiting your soul"): HP hit 0 while the soul was still yours. The devil's offer for the soul is
+   * pending or on the table (`offer`); only `deal` (haggling, MAX_ASKS times, each a question), `accept`, `refuse` and
+   * `look` are legal. `cause` is what killed you, `haggles` the asks made here, `standing` the node's own offer that the
+   * death interrupted (back on the table after a revival). Absent (or null) otherwise.
+   */
+  dying?: Dying | null;
 }
+
+/** See GameState.dying. */
+export interface Dying { cause: string; haggles: number; standing?: Deal }
+/** Why a command is refused at death's door. */
+export const DYING = "you are dying: the devil wants an answer (accept, refuse, or haggle)";
 
 /** What `step` returns. `ok: false` carries exactly one `rejected` event and the input state unchanged. */
 export interface StepResult {
@@ -163,7 +176,7 @@ export function currentNode(s: GameState): MapNode {
 }
 
 export function exitsOf(s: GameState): Exit[] {
-  if (s.enemy || s.ending) return [];
+  if (s.enemy || s.ending || s.dying) return [];
   const a = currentAct(s), n = currentNode(s);
   if (n.kind === "final") return [];
   if (n.id === a.exit) return [{ n: 1, kind: a.index < ACTS - 1 ? "stairs" : "gate" }];
@@ -182,7 +195,7 @@ export function devilContext(s: GameState): DevilContext {
     stack.push(...(a.nodes.find((n) => n.id === id)?.next ?? []));
   }
   const rewritable = a.nodes.filter((n) => seen.has(n.id) && n.id !== a.exit && !a.visited.includes(n.id)).map((n) => ({ id: n.id, kind: n.kind }));
-  return { seed: s.seed, act: a.index, nodeId: s.player.nodeId, kind: currentNode(s).kind, askIndex: s.totalAsks, questionsLeft: questionsLeft(s), rewritable, curses: s.curses.map((c) => ({ ...c })), progress: progressOf(s), haggle: Math.max(0, (s.opened ? 1 : 0) + s.asks - 1) };
+  return { seed: s.seed, act: a.index, nodeId: s.player.nodeId, kind: s.dying ? "death" : currentNode(s).kind, askIndex: s.totalAsks, questionsLeft: questionsLeft(s), rewritable, curses: s.curses.map((c) => ({ ...c })), progress: progressOf(s), haggle: s.dying ? s.dying.haggles : Math.max(0, (s.opened ? 1 : 0) + s.asks - 1) };
 }
 
 /**

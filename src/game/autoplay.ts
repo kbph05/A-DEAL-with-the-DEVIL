@@ -12,7 +12,18 @@ export type Outcome = Ending | "timeout";
 export interface AutoplayResult { seed: string; outcome: Outcome; steps: number; events: GameEvent[] }
 export type Tally = Record<Outcome, number> & { total: number };
 
+/**
+ * Run one command on `g`. When it leaves the devil's request pending (a death with the soul: his offer at death's door),
+ * the request is answered here too (Game.answerDevil), so callers see the offer; a hand-sent `devil_reply` is left alone.
+ */
 export async function execute(g: Game, c: Command): Promise<Result> {
+  const r = await command(g, c);
+  if (c.cmd === "devil_reply" || !g.gameState.pending) return r;
+  const a = await g.answerDevil();
+  return a?.ok ? { ...a, events: [...r.events, ...a.events] } : r;
+}
+
+async function command(g: Game, c: Command): Promise<Result> {
   switch (c.cmd) {
     case "look": return g.look();
     case "go": return g.go(c.n);
@@ -33,9 +44,22 @@ export async function execute(g: Game, c: Command): Promise<Result> {
  * the devil's deal instead when neither would do anything (attack at its cap and HP at least 90%); spends gold on healing
  * (when hurt) or blades, at a well hears out the devil if he is sitting there and will listen, else drinks the blessing (one or the other); takes his free opening offer wherever he sits and haggles once past it (questions allowing); alternates refusing and
  * accepting deals (refuse first) wherever they are; and otherwise takes the first exit. It never sends text, so the
- * StubDevil stays deterministic, and it only asks while the engine would listen (`asksLeft`, `questionsLeft`).
+ * StubDevil stays deterministic, and it only asks while the engine would listen (`asksLeft`, `questionsLeft`). At death's
+ * door (HP 0 with the soul) it accepts the devil's opener: the soul for another life (see `botPolicyAtDeath`).
  */
-export const botPolicy: Policy = (o) => {
+export const botPolicy: Policy = (o) => botWith(o, "accept");
+
+/** What the bot does at death's door: take the devil's opener, haggle once first, or refuse and die. */
+export type DeathPolicy = "accept" | "haggle" | "refuse";
+/** The default bot with another choice at death's door (`botPolicy` accepts his opener at once). */
+export const botPolicyAtDeath = (atDeath: DeathPolicy): Policy => (o) => botWith(o, atDeath);
+
+function botWith(o: Observation, atDeath: DeathPolicy): Command | null {
+  if (o.dying) { // death's door: decide on his offer (it is always on the table here; the pending request is answered by execute)
+    if (!o.offer) return null;
+    if (atDeath === "haggle" && o.asksLeft === MAX_ASKS && o.questionsLeft > 0) return { cmd: "deal", text: "more" };
+    return { cmd: atDeath === "refuse" ? "refuse" : "accept" };
+  }
   if (o.enemy) return { cmd: "fight" };
   const { hp, maxHp, gold } = o.state;
   const canAsk = o.opening || (o.asksLeft > 0 && o.questionsLeft > 0);
@@ -64,7 +88,7 @@ export const botPolicy: Policy = (o) => {
       break;
   }
   return o.exits.length ? { cmd: "go", n: 1 } : null;
-};
+}
 
 /** Play one seeded run to its end (or `maxSteps` commands). Each command is one step. */
 export async function autoplay(seed?: string | number, policy: Policy = botPolicy, maxSteps = 1000, devil?: Devil): Promise<AutoplayResult> {

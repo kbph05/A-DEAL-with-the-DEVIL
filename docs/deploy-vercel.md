@@ -36,7 +36,7 @@ Set these in the Vercel project, for the Production environment (and Preview, if
 
 ## Before deploying: the real game at `/`
 
-On `main`, `index.html` is still the old test UI. The play flow (`play.html`) becomes `index.html` on the **`prod-play`** branch. Merge `prod-play` into the branch you deploy (and merge this `vercel` branch into `main`) so that the Vercel site shows the real game at `/`. `vercel.json` needs no change for that, because the build stays a single `index.html`.
+The `deploy` branch (main + `vercel` + `prod-play`) already serves the play flow as `index.html`, so the Vercel site shows the real game at `/`. Deploy that branch. `vercel.json` needs no change, because the production build stays a single `index.html`; the old DOM UI (`classic.html`) and the labs are test builds only.
 
 ## Option A: the CLI, from any machine with the repo
 

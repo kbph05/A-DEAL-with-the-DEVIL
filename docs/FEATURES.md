@@ -8,7 +8,7 @@ Contents: 1 Overview, 2 Run structure and map, 3 Player, 4 Nodes, 5 Combat, 6 Th
 
 ## 1. Overview
 
-A run is a walk through **3 acts**, each a small branching map ending in a boss, followed by one last "final" door. You start with 30 HP, 10 gold, attack 3 and your soul. At each node you do what the node allows: fight, rest, train or deal with the devil at a campfire, shop, drink from a well (where the devil sometimes waits too), or sit down at the devil's table and haggle over a deal. The devil's deals are bad-faith: they pay now and cost later (curses), and can **rewrite nodes ahead of you on the map**. You **lose** if HP hits 0 (unless your soul pays for one revival), and at the final door you **win** if you still own your soul, or go to **hell** if you sold or spent it.
+A run is a walk through **3 acts**, each a small branching map ending in a boss, followed by one last "final" door. You start with 30 HP, 10 gold, attack 3 and your soul. At each node you do what the node allows: fight, rest, train or deal with the devil at a campfire, shop, drink from a well (where the devil sometimes waits too), or sit down at the devil's table and haggle over a deal. The devil's deals are bad-faith: they pay now and cost later (curses), and can **rewrite nodes ahead of you on the map**. You **lose** if HP hits 0 (unless you sell your soul to the devil at death's door for one more life), and at the final door you **win** if you still own your soul, or go to **hell** if you sold or spent it.
 
 Everything is a headless, stateless engine: one JSON `GameState` and a pure `step(state, command)` reducer (`src/game/state-machine.ts`, wrapped as the `Game` class in `src/game/run.ts`; see `docs/engine.md`) that returns plain event data. There is no canvas or art yet. Today you can play it four ways: in a terminal (`npm run play`, text or `--json`), in a plain-DOM test page (`npm run dev`), from the browser console (F12, test builds), or let a bot play (`autoplay`, `simulate`). The devil is a canned `StubDevil` by default, or an HTTP backend (the Gemini proxy) behind the same interface.
 
@@ -81,7 +81,7 @@ Source: `src/game/state.ts`. The only place stat ranges live.
 
 | Stat | Start | Legal range | Notes |
 | --- | --- | --- | --- |
-| HP (`hp`) | 30 | 0 to `maxHp` | 0 or below triggers death or revival (see 8). |
+| HP (`hp`) | 30 | 0 to `maxHp` | 0 or below: death's door with the soul, else death (see 8). |
 | Max HP (`maxHp`) | 30 | 1 to 60 | Lowering it also clamps current HP down. Raising it does **not** heal. |
 | Gold (`gold`) | 10 (`START_GOLD`) | 0 to 999 | Spent at village and well, earned from kills and deals. Every gold knob lives in `src/game/economy.ts` (5.3). |
 | Attack (`attack`) | 3 | 1 to 12 | Base damage per fight round. "damage" in deal JSON means attack. |
@@ -97,7 +97,7 @@ What changes each stat:
 | Max HP | well blessing (+3, one of three), deals | deals/curses (`sharpen`: -6) |
 | Gold | enemy kills, deals | village/well purchases, deals/curses |
 | Attack | village `blade` (+1, repeatable), campfire `train` (+1, instead of resting), well blessing (+1, one of three), deals | curses (`fineprint` curse: -1) |
-| Soul | a deal with `soul: +1` (buy back; the StubDevil never offers it) | a deal with `soul: -1`, or a fatal blow (revival) |
+| Soul | a deal with `soul: +1` (buy back; the StubDevil never offers it) | a deal with `soul: -1`, or selling it at death's door |
 
 ### 3.1 How deltas are applied (also how deals and curses work)
 
@@ -312,7 +312,7 @@ Besides an offer, a devil (the stub, or the Gemini one) may answer with `forced:
 
 - Applied **immediately**: no offer, no accept/refuse. Event `devil_struck { dialogue, effects }` (effects = what landed).
 - **HP loss only, at most 8 per strike** (`MAX_STRIKE_HP`). Any gold, attack, max HP, soul, curse or rewrite in a forced deal is stripped. Empty effects (a pure rant) are fine.
-- Can kill, only via the normal death check: the soul revives you once (event `revived`), otherwise the run is lost, cause "the devil's wrath".
+- Can kill, only via the normal death check: with the soul, death's door (8), otherwise the run is lost, cause "the devil's wrath". A strike **at** death's door takes the soul for 1 HP (8).
 - The ask still counts (one of the node's 3 asks, one of the run's 10 questions). The node is **not** resolved: ask again while asks and questions remain, or leave. A standing offer from an earlier haggle stays on the table.
 - UI: the Devil's table shows an anger card ("The devil strikes!", his words, a red damage chip) above the ask row, until an offer, a decision or leaving replaces it. The Outcome lists the `devil_struck` line highlighted as bad (`ev-bad`).
 
@@ -376,10 +376,10 @@ Rules:
 
 Source: `src/game/state.ts` (`settle`), `src/game/state-machine.ts` (`settleHp`, `enter`).
 
-- **Death rule** (`settle`, called after anything that lowers HP): if HP is 0 or below and **soul = 1**, the soul is spent: **soul becomes 0 and HP becomes `max(1, ceil(maxHp / 2))`** (revived event). It works **once**, since soul is then 0. If HP is 0 or below with soul 0, you lose (`lost`, with a cause such as the enemy's name, "a curse" or "the devil's bargain").
+- **Death rule: death's door** (4 Oct; Big Chungus: "when you die with your soul, the devil should come up and offer for you to continue by forfeiting your soul. you may haggle with the devil for more stuff when you come back too"). If HP is 0 or below and **soul = 1**, there is no automatic revival: the run pauses (`GameState.dying`, `devil_at_death { cause, nodeId }`) and the devil is asked with `context.kind: "death"`. His free opener: **your soul for another life** (`soul -1`, `hp` = half max HP). **Accept**: the soul goes and you wake with at least `max(1, ceil(maxHp / 2))` HP, whatever the offer said (`deal_applied`, then `revived`). **Haggle** (a counted question, at most 3 per death): he adds gold, attack or max HP and prices each extra on top with `priceDeal` (a curse, max HP), so the extras are never good for you (`dealValue` <= 0). **Refuse**: the death stands, `lost`, ending `lose`. **A strike** there (gibberish, off-topic, jailbreak): he takes the soul for 1 HP, no extras. It works **once**, since soul is then 0. If HP is 0 or below with soul 0, you lose (`lost`, with a cause such as the enemy's name, "a curse" or "the devil's bargain"). Details: docs/engine.md, "Death's door".
 - **Selling the soul**: a deal with `soul: -1` sets soul to 0 immediately (that is the `soul` StubDevil offer). The same revival can no longer be used afterward.
 - **Edge case, tested**: a deal that both sells the soul **and** drops HP to 0 or below in the same acceptance kills you: soul is already 0 when the death check runs, so no revival.
-- **Edge case**: a deal whose effects drop you to 0 HP while soul is still 1 revives you (soul spent) and the deal's curse and rewrite still happen. A `soul: +1` effect buys the soul back (no offer in the stub does this).
+- **Edge case**: a deal whose effects drop you to 0 HP while soul is still 1 takes you to death's door (the deal's curse and rewrite still happen); the node's deal stays decided. A `soul: +1` effect buys the soul back (no offer in the stub does this).
 - **Endings** (`Ending` = `win | lose | hell`):
   - `lose`: death with no soul to pay (anywhere in the run).
   - `win`: reach the `final` node with soul = 1.
@@ -414,7 +414,8 @@ Source: `src/game/events.ts`. Every command returns `Result = { ok, events, stat
 | `curse_fired { trigger, effect, changes }` | a curse's trigger happening |
 | `node_rewritten { change }` | an accepted rewrite that succeeded |
 | `rewrite_failed { nodeId, reason }` | an accepted rewrite that was rejected (visited, exit, unknown node, no-op...) |
-| `revived { hp }` | HP hit 0 with soul 1 |
+| `devil_at_death { cause, nodeId }` | HP hit 0 with soul 1: death's door (additive, 4 Oct) |
+| `revived { hp }` | the soul sold at death's door (accepted, or taken by a strike) |
 | `won` | reached `final` with soul 1 |
 | `hell` | reached `final` with soul 0 |
 | `lost { cause }` | HP hit 0 with no soul |
@@ -602,6 +603,7 @@ Gaps against `requirements.md` (and the team's intent):
 
 Known issues and design flags:
 
+- **Death's door, balance** (4 Oct, bot on seeds `bal-0..499`, win / lose / hell): 118 / 228 / 154 with the old automatic revival; 118 / 228 / 154 when the bot accepts the devil's opener (the same HP as the old revival, so the same runs); 118 / 281 / 101 when it haggles once first (the extras' price kills more runs); 118 / 364 / 18 when it refuses.
 - **Revival makes hell the normal ending.** The revive spends the soul, so almost every run that survives a boss encounter via revival ends in hell. 83% of bot runs revive. If the intended fantasy is "hell is the price of selling your soul", this is probably too common.
 - **No legal-actions list.** `observe()` tells you exits and basic flags, but not which commands are valid. The UI re-derives it (`availableActions`). A policy or LLM driver has to guess, and gets a `rejected` reason on mistakes.
 - **Hidden state in `observe()`:** curses, remaining haggle asks, and `rewritable` are not in the observation (curses are in `look()` events, `context()` has `curses` and `rewritable`).

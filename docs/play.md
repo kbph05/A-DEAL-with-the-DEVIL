@@ -29,7 +29,8 @@ Each node kind has a screen:
 | Node | Screen | The map |
 | --- | --- | --- |
 | Village | The village scene (walk, shop at the stalls). | A **Map** button (top right, or the M key) opens it. Walking into the "Leave the village" exit opens it too. Here it can be closed again (Close map, Escape, M) to keep shopping. Picking a pulsing node goes there. |
-| Fight, boss | The forest path, with the realtime fight (`runForestFight`) started on arrival. | **Forced** after a won fight. A revival shows "Fight on" (same enemy, the HP it was left on). A death goes to the ending card. |
+| Fight, boss | The forest path, with the realtime fight (`runForestFight`) started on arrival. | **Forced** after a won fight. A death with the soul brings the devil (Death's door, below); after selling it, "Fight on" (same enemy, the HP it was left on). A death without it goes to the ending card. |
+| Death's door (any node) | The devil's overlay over the dimmed scene, titled **Death's door**: his offer (your soul for another life), the haggle box, **Accept: sell your soul, live** and **Refuse: die**. No Walk away; Escape opens the pause menu and never dismisses it. He leans in (`lean_in`) until it is settled and laughs on Accept. | None until it is settled (docs/engine.md, "Death's door"). |
 | Campfire | A panel over a dim backdrop: **Rest** (heal 40% of max HP), **Sharpen Weapon** (+1 attack) or **Deal**. One of three: the engine locks the others once you pick. | **Forced** once the choice is resolved: rested, trained, or the deal accepted, refused or ended. Ended means the asks ran out with no offer standing, or you walked away after asking. Walking away before asking just returns to the three choices. |
 | Well | The designer's `assets/well.png` as the full-bleed backdrop (cover, nearest-neighbour, a slight dark vignette), with a panel low on the screen: **Pay for a blessing (8g)** (once per well), **Hear the devil out** (opens the devil's overlay) and **Move on**. "Hear the devil out" is always shown: when the engine says no one is there (`devilPresent` false) it is disabled with "No one is at the well" (a rule decision on whether he is always there is pending; engine unchanged). One choice per well: once the blessing is bought, the devil button is disabled with its reason, and once the devil is asked, the blessing is (docs/engine.md). | **Forced** after Move on. |
 | Deal | The devil's full-screen overlay. | **Forced** once the deal is accepted, refused or ended, or you walk away. |
@@ -67,9 +68,17 @@ Each node kind has a screen:
 
 **Ask** runs the engine's devil round trip through `Game.deal(text)`: ask, await the devil, `devil_reply`. Nothing else can be pressed while he considers.
 
-**Credits.** The title screen (next to **New game**) and the ending card (next to **Play again**) each have a **Credits** button. The screen always shows the scene-art line ("Devil, forest, well and village art by Armand (Big Chungus)") and `assets/attribution.txt` (plaintext, bundled into the build, `src/render/credits.ts`); when the build has the art (`ASSET_KEY`) it adds each sprite pack's own encrypted `attribution.txt`, read at runtime. Escape or **Close** closes it. Escape always closes the topmost layer first: the credits, then an open map, then the pause menu; otherwise it pauses (`pauseKey` in `pause.ts`, one ordered check). The written copy is docs/CREDITS.md.
+**Credits.** The title screen (next to **New game**) and the ending card (next to **Play again**) each have a **Credits** button. The screen always shows the scene-art line ("Devil, forest, well and village art by Armand Baril (Big Chungus)") and `assets/attribution.txt` (plaintext, bundled into the build, `src/render/credits.ts`); when the build has the art (`ASSET_KEY`) it adds each sprite pack's own encrypted `attribution.txt`, read at runtime. Escape or **Close** closes it. Escape always closes the topmost layer first: the credits, then an open map, then the pause menu; otherwise it pauses (`pauseKey` in `pause.ts`, one ordered check). The written copy is docs/CREDITS.md.
 
-**Results** of a menu choice (a buy, a rest, a sharpened weapon, a deal accepted or refused) and a lone engine rejection show for a few seconds as a toast near the top, in the engine's own words (`describe`); see `toastEvents` in flow.ts. Arrivals and fight results never toast (kbph): the scene and the HUD show them. The devil's offers and strikes show in his overlay.
+**Notices** (kbph, 4 Oct: "make the popups look nicer and more user friendly rather like test popups"). The results of a menu choice (a buy, a rest, a sharpened weapon, a deal accepted or refused) and a lone engine rejection show as a notice card, bottom centre above the touch controls (`toastEvents` in flow.ts says which events; `noticeOf` in `notice.ts`, pure and tested, turns them into the card):
+
+- a small pixel icon on the left: a coin (gold), heart (HP), sword (attack), flame (a rest at the campfire), the devil (a deal) or a red X (an engine rejection). The flame, sword and devil are the map's icons; the coin, heart and X are drawn in `noticeIcons.ts` in the same style;
+- the line, in the engine's own words (a rejection keeps its reason), and a row of chips for the stat changes: +gold in gold, −gold (a purchase's price) in dim red, +HP green, −HP red, +ATK silver;
+- it slides up and fades in over 180 ms, stays for the old timing (2.5 s plus 45 ms a character, at most 9 s), then fades out. A tap or click dismisses it at once. With `prefers-reduced-motion` it only fades. One at a time: a new notice replaces the old. `role=status`, `aria-live=polite`. Over the shop prompt or the map's title it lifts itself clear (`--lift`).
+
+The shop prompt is the same card: icon, item name, a gold price chip, the Buy button and the item's text; the reason Buy is off is in dim text. The Buy button's label is now plain "Buy" (its accessible name has the item and price).
+
+**Scene palettes** (kbph: "devil prompts stay dark, but the rest of the popups should match the scene around it better"). The toast, the shop prompt and the campfire, well and fight panels wear the palette of the scene they sit in, from CSS custom properties (`--pc-*` for the card, `--ch-*` for the chips) that play.css sets per `data-scene` on the play root (`sceneTheme` in notice.ts): village = warm parchment with dark brown text; forest (a fight) = moss green and bark brown; well = stone grey and green; campfire = ember orange on dark wood; map (open or forced) = parchment. The devil's overlay, the pause menu, the title and the ending stay dark. Every text and chip colour is WCAG AA (4.5:1) on its card; `notice.test.ts` reads the palettes out of play.css and checks it, so a new palette has to pass too.
 
 **Layers**, bottom to top:
 
@@ -115,6 +124,7 @@ kbph asked for it (4 Oct): "make a pause menu with what controls are used, and t
 - the map forced after a campfire choice (each way it resolves), after Move on at a well, after a won fight, and after a deal node is accepted, refused, ended or walked away from;
 - opening and closing the devil's overlay at a campfire and a well;
 - no map while the devil is speaking, an offer stands or a fight is pending;
+- death's door: the overlay over a forest fight, with no map, prompts or Walk away, then "Fight on" after Accept, the ending after Refuse;
 - the endings.
 
 A property test plays 150 random legal runs on the real engine. At every state it checks that an open or forced map always has a legal `go`, that the map is never open while something blocks the way, and that every prompt is legal.
@@ -129,7 +139,8 @@ A property test plays 150 random legal runs on the real engine. At every state i
 | `devilArt.ts` | The devil's portrait: the seven PNGs, stacked and cross-faded. |
 | `pause.ts`, `pause.test.ts` | The pause menu and title screen state, the key rules and the controls list. Pure, and its tests. |
 | `play.ts` | The page: mounts the layers, runs commands through the session, renders from `flow`. |
-| `play.css` | The page's styles. Portrait screens keep the prompt clear of the HUD's item column and put the map title and toast under the stats. Short landscape screens (a turned phone) put the map title under the stats on the left, off your node. |
+| `notice.ts`, `noticeIcons.ts` | The notice card as data (icon, line, delta chips), the shop prompt's icon, and the scene palette name. Pure; `notice.test.ts`. |
+| `play.css` | The page's styles. Portrait screens keep the prompt clear of the HUD's item column and put the map title under the stats and the toast above the touch controls. The scene palettes and the notice card live here. Short landscape screens (a turned phone) put the map title under the stats on the left, off your node. |
 | `/index.html` | The entry, in production and test builds alike (it loads `play.ts`). The old `play.html` is gone; the old DOM UI is `classic.html`. |
 
 Test builds expose `window.__play`: `{ session, flow(), local(), view(), map(), zone(), toast(), send(cmd), pause(), probe() }`. `map()` is the map scene's `debug()` while it is up. `pause()` is the pause state; `probe()` gives live positions (the village walker's feet, or the fight's player, enemies and clock), for checking that a paused game stands still.

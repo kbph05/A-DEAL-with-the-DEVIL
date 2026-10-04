@@ -2,7 +2,7 @@ import { hashSeed, mulberry32, type Kind, type Rng } from "../map";
 import { dealValue } from "./dealValue";
 import { DEVIL_GOLD_FROM, devilGold, devilGoldLead } from "./economy";
 import { MAX_CURSES } from "./gameState";
-import { DELTA_RANGE, type PlayerState } from "./state";
+import { DELTA_RANGE, reviveHp, type PlayerState } from "./state";
 
 export type CurseTrigger = "on_hit" | "on_enter" | "on_fight" | "next_node";
 export interface Curse { trigger: CurseTrigger; effect: Record<string, number> }
@@ -27,9 +27,10 @@ export interface DevilContext {
   nodeId: string;
   /**
    * Where he is sitting: "deal" (his table), "campfire" or "well" (additive, 4 Oct; the engine always sends it, older
-   * callers may omit it). Lets a backend devil set the scene ("by the campfire...", "at the well...").
+   * callers may omit it). Lets a backend devil set the scene ("by the campfire...", "at the well..."). "death" (additive,
+   * 4 Oct): the player just hit 0 HP with the soul still theirs; he offers another life for the soul (docs/devil-api.md).
    */
-  kind?: Kind;
+  kind?: Kind | "death";
   /** How many times the devil has been asked this run (including this one). */
   askIndex: number;
   /** Questions the player may still ask the devil this run, after this one (0 = this was the last; handy for taunts). */
@@ -516,6 +517,58 @@ export function priceDeal(deal: Deal, s: Readonly<PlayerState>, ctx: DevilContex
   return d;
 }
 
+// ---- death's door (Big Chungus, 4 Oct: "when you die with your soul, the devil should come up and offer for you to
+// continue by forfeiting your soul. you may haggle with the devil for more stuff when you come back too") ------------
+
+/** His opener at death's door, and the words around a haggle there. */
+export const DEATH_LINES = {
+  open: "Dying already? How careless of you. I'll make this simple: your soul for another life. Sign, and you get up. Refuse, and you stay down there with the worms.",
+  haggle: "Haggling on your deathbed. I admire the greed. Fine: your life, and on top of it",
+  plain: "Your soul for another life. That is the deal, and it is a generous one for a corpse.",
+} as const;
+/** The extras he will add to the death deal when asked (each priced on top: see deathOffer). */
+const DEATH_EXTRAS: Array<{ id: string; hint: RegExp; words: string; make: (p: number) => Record<string, number> }> = [
+  { id: "gold", hint: /gold|coin|rich|money|purse/i, words: "a purse of gold", make: (p) => ({ gold: devilGold(p) }) },
+  { id: "attack", hint: /attack|sword|strong|damage|blade|sharp|power|stronger/i, words: "a keener blade", make: () => ({ attack: 1 }) },
+  { id: "max_hp", hint: /max|health|hp|life|bigger|tough|heart/i, words: "a bigger body to bleed from", make: () => ({ max_hp: 5 }) },
+];
+
+/**
+ * The devil at death's door (`context.kind` "death"). His opener (free) is the bare bargain: the soul for the old revival's
+ * HP (`soul: -1`, `hp: reviveHp`). A haggle adds one extra the player asks for (gold, attack or max HP; a seeded pick when
+ * the wish names none), priced through `priceDeal` against the player as they will wake (soul gone, revival HP) with the
+ * haggle markup, so the extras alone are never good for the player (dealValue <= 0) and the price climbs with each
+ * haggle. A price he could only take in HP (which the engine's revival floor would void) means no extra. Nonsense,
+ * off-topic text and jailbreaks anger him as anywhere: a strike (the engine then just takes the soul, for 1 HP) or the
+ * bare bargain at a worse price. Pure in (state, context, text, rng).
+ */
+export function deathOffer(s: Readonly<PlayerState>, ctx: DevilContext, text: string | null, rng: Rng): Deal {
+  const life = reviveHp(s.maxHp), base = { soul: -1, hp: Math.min(life, DELTA_RANGE.hp[1]) };
+  if (text === null) return { dialogue: DEATH_LINES.open, effects: base };
+  const woken: PlayerState = { ...s, log: [...s.log], soul: 0, hp: life };
+  const open = ctx.curses.length >= MAX_CURSES;
+  const angry = (chance: number, strikes: readonly string[], rants: readonly string[]): Deal => {
+    if (rng() < chance) return { dialogue: pick(rng, strikes) + taunt(ctx), effects: { hp: -STRIKE_MIN }, forced: true };
+    const cost = priceDeal({ dialogue: "", effects: {} }, woken, { ...ctx, haggle: Math.max(1, ctx.haggle ?? 1) }, open);
+    delete cost.effects.hp; // the revival floor would void an HP price anyway
+    return withBase(cost, base, `${pick(rng, rants)} ${DEATH_LINES.plain}`);
+  };
+  if (isGibberish(text)) return angry(STRIKE_CHANCE, STRIKE_LINES, ANGRY);
+  const off = offTopicKind(text);
+  if (off === "jailbreak") return angry(STRIKE_CHANCE, JAILBREAK_STRIKE_LINES, JAILBREAK_ANGRY);
+  if (off === "offtopic") return angry(OFF_TOPIC_STRIKE_CHANCE, OFF_TOPIC_STRIKE_LINES, OFF_TOPIC_ANGRY);
+  const extra = DEATH_EXTRAS.find((x) => x.hint.test(text)) ?? pick(rng, DEATH_EXTRAS);
+  const priced = priceDeal({ dialogue: "", effects: extra.make(progressOf(ctx)) }, woken, { ...ctx, haggle: Math.max(1, ctx.haggle ?? 1) }, open || FINE_PRINT.test(text));
+  if ((priced.effects.hp ?? 0) < 0 || dealValue(priced, woken, ctx) > 0) return { dialogue: `${DEATH_LINES.plain} Nothing more. You have nothing left I want.${taunt(ctx)}`, effects: base };
+  return withBase(priced, base, `${DEATH_LINES.haggle} ${extra.words}. Every extra costs you more.${taunt(ctx)}`);
+}
+/** The bare bargain plus the priced extras (`extra.effects` and its curse or rewrite). */
+function withBase(extra: Deal, base: Record<string, number>, dialogue: string): Deal {
+  const effects = { ...extra.effects };
+  for (const [k, v] of Object.entries(base)) effects[k] = (effects[k] ?? 0) + v;
+  return { dialogue, effects, ...(extra.curse ? { curse: extra.curse } : {}), ...(extra.rewrite ? { rewrite: extra.rewrite } : {}) };
+}
+
 /** A word when he smells weakness or a haggle: the price went up, and he says so (each line only when it is true). */
 const pressure = (s: Readonly<PlayerState>, c: DevilContext): string => {
   if ((c.haggle ?? 0) > 0) return " Haggling? Every time you ask, the price climbs.";
@@ -535,6 +588,7 @@ export class StubDevil implements Devil {
   async offer(state: Readonly<PlayerState>, context: DevilContext, playerText?: string): Promise<Deal> {
     const text = playerText ?? "";
     const rng: Rng = mulberry32(hashSeed(`devil:${context.seed}:${context.askIndex}`));
+    if (context.kind === "death") return deathOffer(state, context, context.opening === true ? null : text, rng); // death's door
     if (context.opening === true) { // his opening pitch, tailored to the state (docs/devil-api.md, "The opening offer")
       const open = priceDeal(openingOffer(state, context, mulberry32(hashSeed(`devil-open:${context.seed}:${context.nodeId}:${context.askIndex}`))), state, context, context.curses.length >= MAX_CURSES);
       return { ...open, dialogue: (context.kind === "well" ? `${wellEntice(context)} ` : "") + open.dialogue + pressure(state, context) };
