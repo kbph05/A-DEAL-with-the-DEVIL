@@ -618,7 +618,7 @@ function renderPause(): void {
   const controls = button("Controls", () => doPause("controls"), "quiet");
   const quit = button("Quit game", () => doPause("quit"), "quiet");
   row.classList.add("menu");
-  row.append(resume, controls, creditsButton(), quit);
+  row.append(resume, controls, quit);
   card.append(row);
   pauseLayer.replaceChildren(card);
   // Back from the sub-menu: focus returns to its button; else to Resume.
