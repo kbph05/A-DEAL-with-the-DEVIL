@@ -9,6 +9,11 @@ git pull                 # get the latest
 npm install              # install dependencies (first time, or after package.json changes)
 ```
 
+The build needs the dev dependencies, including **`@types/node`** (`vite.config.ts` and the tests import `node:` modules).
+`npm install` brings them in, since they are listed in `package.json`. If a build fails with `Cannot find type definition file for 'node'` or `Cannot find module 'node:fs'`:
+- your `node_modules` predates that entry: run `npm install` again;
+- or dev dependencies were skipped (`NODE_ENV=production`, `--omit=dev`): run `npm install -D @types/node`.
+
 | Command | What it is for |
 | --- | --- |
 | `npm run dev` | Dev server in **test mode** (`vite --mode test`): game UI plus the test tools (Devil lab with stub/HTTP toggle, autoplay button, F12 console commands). Add `?seed=abc` for a fixed map. |
