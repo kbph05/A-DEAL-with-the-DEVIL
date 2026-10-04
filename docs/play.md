@@ -129,7 +129,7 @@ A property test plays 150 random legal runs on the real engine. At every state i
 | `devilArt.ts` | The devil's portrait: the seven PNGs, stacked and cross-faded. |
 | `pause.ts`, `pause.test.ts` | The pause menu and title screen state, the key rules and the controls list. Pure, and its tests. |
 | `play.ts` | The page: mounts the layers, runs commands through the session, renders from `flow`. |
-| `play.css` | The page's styles. Portrait screens put the map title and toast under the stats. Short landscape screens (a turned phone) put the map title under the stats on the left, off your node. |
+| `play.css` | The page's styles. Portrait screens keep the prompt clear of the HUD's item column and put the map title and toast under the stats. Short landscape screens (a turned phone) put the map title under the stats on the left, off your node. |
 | `/index.html` | The entry, in production and test builds alike (it loads `play.ts`). The old `play.html` is gone; the old DOM UI is `classic.html`. |
 
 Test builds expose `window.__play`: `{ session, flow(), local(), view(), map(), zone(), toast(), send(cmd), pause(), probe() }`. `map()` is the map scene's `debug()` while it is up. `pause()` is the pause state; `probe()` gives live positions (the village walker's feet, or the fight's player, enemies and clock), for checking that a paused game stands still.

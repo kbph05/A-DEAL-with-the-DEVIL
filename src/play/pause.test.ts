@@ -7,7 +7,8 @@ const PAUSED: PauseState = { screen: "run", paused: true, confirmQuit: false };
 const ASKING: PauseState = { screen: "run", paused: true, confirmQuit: true };
 
 test("pause: first load goes straight into the run unless ?title=1", () => {
-  assert.deepEqual(startState(""), RUNNING);
+  assert.deepEqual(startState(""), TITLE, "the game opens on the title screen");
+  assert.deepEqual(startState("?seed=abc"), RUNNING, "dev links with a seed start the run");
   assert.deepEqual(startState("?seed=abc&god=1"), RUNNING);
   assert.deepEqual(startState("?title=1"), TITLE);
   assert.deepEqual(startState("?title=0"), RUNNING);

@@ -22,6 +22,7 @@ import { CLOSE_DEVIL, LOCAL, OPEN_DEVIL, arrived, flow, setLocal, toastEvents, w
 import wellArt from "../../assets/well.png";
 import { mountDevilArt } from "./devilArt";
 import { POSE_MS, devilPose } from "./devilPose";
+import titleDevil from "../../assets/devil_normal.png";
 import { CONTROLS, pauseKey, pauseStep, startState, type PauseAction, type PauseState } from "./pause";
 import { creditsBody, loadCredits } from "../render/credits";
 
@@ -685,7 +686,12 @@ function renderTitle(): void {
   const row = h("div", "play-title-row");
   row.append(start, creditsButton());
   box.append(head, row);
-  titleLayer.append(box);
+  const fig = h("div", "play-title-devil");
+  fig.setAttribute("aria-hidden", "true");
+  const img = document.createElement("img");
+  img.src = titleDevil; img.alt = ""; img.draggable = false;
+  fig.append(img);
+  titleLayer.append(fig, box);
   start.focus();
 }
 
