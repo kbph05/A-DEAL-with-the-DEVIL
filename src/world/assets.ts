@@ -51,5 +51,5 @@ export const PRIVATE_PLAYER: PlayerSheetSpec = {
   scale: 1,
 };
 
-/** Optional tileset image: 16×16 tiles in tile-id order (tiles.ts `T`: void, floor, grass, path, wall, water, door, tree, rock), any number of columns. */
-export const PRIVATE_TILESET = { file: "tiles.png", tileSize: 16 };
+// Scene art (background, overlay, actors) needs no spec: it is found by path, scenes/<scene id>/background.png and
+// so on (scene.ts `artSource`, docs/world.md).

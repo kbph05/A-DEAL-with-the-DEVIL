@@ -42,7 +42,7 @@ export interface Canopy { x: number; y: number; r: number; trunk: boolean }
 
 /**
  * Tree canopies for the overlay: a row along the bottom edge of the playable rect (overlapping it, so walking down
- * goes under the leaves), and one big tree inside the rect at about 3/4 of its width (its trunk is on the
+ * goes under the leaves; gaps over exit zones), and one big tree inside the rect at about 3/4 of its width (its trunk is on the
  * background). Pure.
  */
 export function overlayCanopies(def: SceneDef): Canopy[] {
@@ -50,7 +50,10 @@ export function overlayCanopies(def: SceneDef): Canopy[] {
   const out: Canopy[] = [];
   const r = 26;
   const rowY = b.y + b.h + r - 18;
-  for (let x = r / 2; x < def.size.w + r; x += 2 * r - 6) out.push({ x, y: rowY, r, trunk: false });
+  // Leave gaps over exits, so the way out stays visible.
+  const exits = (def.zones ?? []).filter((z) => z.kind === "exit");
+  const overExit = (x: number) => exits.some((z) => x + r > z.x && x - r < z.x + z.w && rowY - r < z.y + z.h && rowY + r > z.y);
+  for (let x = r / 2; x < def.size.w + r; x += 2 * r - 6) if (!overExit(x)) out.push({ x, y: rowY, r, trunk: false });
   out.push({ x: Math.round(b.x + b.w * 0.78), y: Math.round(b.y + b.h * 0.3), r: 40, trunk: true });
   return out;
 }

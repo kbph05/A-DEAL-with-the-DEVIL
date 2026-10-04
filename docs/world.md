@@ -1,21 +1,116 @@
 # The world scene
 
-This is the first piece of the actual game scene: a character who walks around a tile map. It lives in `src/world/` and runs on its own on the world lab page (`/world.html`, test builds only). It is not wired into the game yet: `src/main.ts` doesn't import it, so the final build (`npm run build`) doesn't contain it.
+This is the game scene: a character who walks around a **scene**. It lives in `src/world/` and runs on its own on the world lab page (`/world.html`, test builds only). It is not wired into the game yet: `src/main.ts` doesn't import it, so the final build (`npm run build`) doesn't contain it.
+
+## The scene model
+
+This is the designer's model (Big Chungus, asked for by kbph, 4 Oct):
+
+- **A scene is one large texture,** not a tile map.
+- **The playable region is a rectangle** (`bounds`). The player's feet can't leave it. It is not the texture size: the texture can show sky, walls or forest around it.
+- **A foreground overlay texture** (optional) is drawn over everything that walks, for tree canopies, roof edges, arches and so on.
+- **Draw order:**
+  1. the scene texture (depth 0);
+  2. the actors and the player, sorted by foot height every frame (the lower the feet, the further in front);
+  3. the overlay;
+  4. the lab's debug outlines.
+- **Zones** are rectangles that report when the player's feet enter and leave them. They replace door tiles: an `"exit"` zone is the hook for leading to a node of the act map later; a `"trigger"` is anything else.
+
+## SceneDef
+
+A scene is plain JSON data (`SceneDef` in `src/world/scene.ts`). Coordinates are world pixels: (0, 0) is the background's top-left, and an actor's `x, y` is its feet.
+
+```json
+{
+  "id": "crossroads",
+  "size": { "w": 960, "h": 540 },
+  "background": "scene-crossroads-bg",
+  "overlay": "scene-crossroads-overlay",
+  "bounds": { "x": 64, "y": 200, "w": 832, "h": 300 },
+  "spawn": { "x": 480, "y": 440 },
+  "zones": [
+    { "id": "road-north", "x": 432, "y": 200, "w": 96, "h": 28, "kind": "exit", "label": "Road north" },
+    { "id": "shrine", "x": 96, "y": 220, "w": 120, "h": 70, "kind": "trigger", "label": "Shrine" }
+  ],
+  "actors": [
+    { "id": "devil", "x": 480, "y": 330, "label": "DEVIL" },
+    { "id": "signpost", "x": 300, "y": 380, "texture": "/art/signpost.png" }
+  ]
+}
+```
+
+| Field | Meaning |
+| --- | --- |
+| `id` | Unique name. It also names the private art folder, `scenes/<id>/`. |
+| `size` | The texture's size in world pixels. The background and overlay are stretched to it. The camera stays inside it. |
+| `background`, `overlay` | A Phaser texture key or an image URL (anything with a `/` or an image extension). `overlay` is optional. |
+| `bounds` | The playable rectangle. It must lie inside `size`. |
+| `spawn` | Where the feet start. It must lie inside `bounds`. |
+| `zones` | Optional. `id`, a rectangle, `kind` (`"exit"` or `"trigger"`, default trigger), an optional `label`, and `node`, a free-form link to an act-map node for later. |
+| `actors` | Optional. `id`, the feet position, an optional `texture` (key or URL) and `label`. |
+
+**Validation.** `sceneErrors(raw)` returns every problem as a readable message. `parseSceneDef(raw)` returns the scene or throws one `Error` listing them all. It checks:
+
+- all numbers are finite, and `size`, `bounds` and the zones have an area;
+- `bounds` lies inside `size`, and `spawn` lies inside `bounds`;
+- zone and actor ids are unique;
+- a zone touches `bounds` (otherwise it can never be entered);
+- actors stand inside `size`.
+
+**The samples** are in `src/world/scenes/`: `crossroads.json` (960×540: the devil, a signpost, two exits and a shrine) and `chapel.json` (1600×900, bigger than the view, so the camera scrolls and clamps). To add one, drop a JSON file there and list it in `scenes/index.ts`. The lab can also load any SceneDef JSON by URL (see below).
+
+## Files
 
 | File | What it is |
 | --- | --- |
-| `index.ts` | Public API: `mountWorld(parent, options) → { map, destroy() }`. |
-| `tiles.ts` | Tile ids, the `WorldMap` shape, tile lookups (`tileAt`, `isBlocked`, `toTile`, `reachable`) and `parseWorldMap` for our JSON format. Pure. |
-| `gen.ts` | `generateWorld(seed, { width, height })`: the seeded field generator. Pure and deterministic. |
-| `tiled.ts` | `fromTiled(json)`: the Tiled JSON loader. `loadMapJson(json)` accepts either format. Pure. |
+| `index.ts` | Public API: `mountScene(parent, options)`, and `mountWorld`, its old name. |
+| `scene.ts` | `SceneDef`, validation, the y-sort depth (`footY`, `actorDepth`, `overlayDepth`), `clampToBounds`, zones (`zonesAt`, `zoneChanges`, `ZoneTracker`) and art precedence (`artSource`). Pure. |
+| `scenes/` | The sample scenes (JSON) and `SCENES` / `sceneById`. |
+| `WorldScene.ts` | The Phaser scene: background, y-sorted actors and player, overlay, Arcade physics, cameras, keyboard and touch. |
+| `scenePlaceholders.ts` | Placeholder background, overlay and actor art, in the generated pixel-art style. The tile grid and canopy layout are pure. |
 | `logic.ts` | Walking speed and smoothing (`stepVelocity`), 4-way facing (`facingOf`), the screen layout (`worldLayout`). Pure. |
-| `WorldScene.ts` | The Phaser scene: tilemap layer, Arcade physics player, cameras, keyboard and touch. |
-| `textures.ts` | The placeholder art, drawn in code onto canvas textures. |
-| `assets.ts` | The private art hook (see "Art" below). |
+| `textures.ts` | The generated pixel art: the 16×16 tileset and the hero sheet. |
+| `assets.ts` | The private art hook for the player sheet (see "Art" below). |
+| `tiles.ts`, `gen.ts`, `tiled.ts` | The old tile model, kept as pure, tested code (see "The tile code" below). |
 | `dev.ts` + `/world.html` | The world lab. |
-| `world.test.ts` | Node tests (part of `npm test`). |
+| `scene.test.ts`, `world.test.ts` | Node tests (part of `npm test`). |
 
-Shared with the fight: `src/input/dir.ts` (keyboard and stick to a unit direction) and `src/input/stick.ts` (`FloatingStick`, the hand-written touch joystick). The fight's behaviour is unchanged; `src/fight/logic.ts` re-exports the moved helpers.
+Shared with the fight: `src/input/dir.ts` (keyboard and stick to a unit direction) and `src/input/stick.ts` (`FloatingStick`, the hand-written touch joystick).
+
+## Public API
+
+```ts
+import { mountScene, sceneById } from "./world";
+const view = mountScene(el, {
+  scene: sceneById("crossroads"),               // any SceneDef; checked with parseSceneDef
+  onEnterZone(zone, scene) { /* zone.kind === "exit" → later: go to zone.node */ },
+  onLeaveZone(zone, scene) { },
+  speed: 80,                                     // optional, px/s
+});
+view.scene;            // the SceneDef in use
+view.setOutlines(true) // dev: draw the bounds, zones and feet box
+view.destroy();        // removes the game and its canvas
+```
+
+Other options:
+
+- `zoom`: integer camera zoom, default 2;
+- `touch`: force the stick on or off;
+- `outlines`: start with the outlines on;
+- `onDebug(debug)`: the live, read-only state (`pos`, `footY`, `zones`, `depth`, `art`, `bounds`, `facing`, `frames`, ...).
+
+**Zones.** They are tested against the centre of the player's feet box. `onEnterZone` fires once per entry and `onLeaveZone` once per exit. Overlapping zones each fire. Spawning inside a zone fires nothing, so arriving through an exit doesn't bounce you straight back. This is the hook for linking scenes to act-map nodes later; it is not wired into the engine yet.
+
+`mountWorld(parent, options)` still works: it is the same function. The tile-map options (`seed`, `map`, `size`, `onEnterTile`, `showTile`) are gone, because nothing outside the lab used them.
+
+## How it works
+
+- **Depth.** Every frame, each actor gets depth `10 + footY`, where `footY = y + displayHeight × (1 − originY)`. Actors have origin (0.5, 1), so `y` is the feet.
+  - The player's depth key is the bottom of its feet box. With the placeholder hero that is the sprite's bottom. The private sheet's feet sit higher in its frame, so its origin is set to the feet.
+  - The overlay is at `10 + 2 × size.h + 1`, above any actor.
+- **Bounds.** The Arcade world bounds are `scene.bounds`, and the player has `setCollideWorldBounds(true)`. The body is the small feet box, so the feet stop at the rectangle's edge while the head can overlap what is above it. `clampToBounds` puts a spawn that is too close to an edge back inside.
+- **Actors** don't collide (yet): you can walk behind and in front of them, and through them.
+- **Camera.** It follows the player and is clamped to the texture size. A scene smaller than the view is centred.
 
 ## Running it
 
@@ -25,19 +120,22 @@ Shared with the fight: `src/input/dir.ts` (keyboard and stick to a unit directio
 | `npm run build:game` | Static build of the test pages into `dist-test/`. It is the same as `npm run build:test`, because the world lab is a test-build page. |
 | `npm run preview:game` | Serves `dist-test/` and opens `/world.html`. |
 
-**Query string:**
-
-- `?seed=abc` fixes the map.
-- `&touch=1` / `&touch=0` forces the touch stick on or off.
-- `&map=/maps/x.json` loads a map file (our format or a Tiled export, for example from `public/maps/`) instead of generating one.
-
 **The lab page:**
 
-- The bar has a **Seed** box, with **Regenerate** (or press Enter in the box) and **New seed**.
-- Regenerating destroys the game and mounts a new one, so it also exercises `destroy()`.
-- The bar shows the tile under the player's feet, for example `tile (34, 27) path · facing down`. A yellow outline marks the same tile on the map.
-- Entering a door prints `Entered a door at (x, y)`.
-- `window.__world` exposes `{ seed, map, debug, entered, mounts }` for the console and smoke tests. `debug` is live: `pos`, `vel`, `tile`, `facing`, `input`, `art`, `frames`.
+- **Scene** picks a sample scene. Switching destroys the game and mounts a new one, so it also exercises `destroy()`.
+- **Bounds and zones** draws the debug outlines:
+  - the playable rectangle in yellow;
+  - exits in red and triggers in blue, filled while you stand in them;
+  - the feet box in white.
+- The bar shows the feet, the foot y and the current zone, for example `feet (480, 443) · foot y 443 · zone none · facing down`. It also shows the last zone event, for example `Entered exit "Road north"`.
+- `window.__world` exposes `{ scene, debug, events, mounts }` for the console and smoke tests. `debug` is live. `events` lists `{ type: "enter" | "leave", zone, kind, frame }`.
+
+**Query string:**
+
+- `?scene=chapel` picks a sample scene. `?scene=/scenes/mine.json` loads a SceneDef JSON from a URL instead, for example a file you put in `public/`.
+- `&outlines=1` starts with the outlines on.
+- `&touch=1` / `&touch=0` forces the touch stick on or off.
+- `&speed=160` changes the walking speed; `&zoom=3` the zoom.
 
 ## Controls
 
@@ -45,139 +143,65 @@ Shared with the fight: `src/input/dir.ts` (keyboard and stick to a unit directio
 | --- | --- | --- |
 | Walk (8 directions) | WASD or arrow keys | A floating stick. It re-centres where your thumb lands, anywhere on the canvas, and springs back on release. It snaps to 8 directions and has a dead zone. |
 
-- Movement eases in and out. Top speed is 5 tiles a second (80 px/s). It takes about 0.1 s to reach full speed and about 0.07 s to stop (`WALK` in `logic.ts`). Diagonals are not faster.
-- The player faces one of 4 ways (down, left, right, up). On an exact diagonal it keeps its current facing, so the sprite doesn't flicker. The walk animation runs while moving. Walking into a wall walks on the spot.
-- Collision uses a 10×6 px box at the feet, so the player fits through one-tile gaps and their head can overlap the tile above.
-- The keyboard is ignored while a text box has focus. The arrow keys are captured so they don't scroll the page; WASD are not, so typing still works.
-
-**Screen.**
-
-- The logical size follows the container's shape: 540 px on the short side, up to 1280 on the long side. Phaser `Scale.FIT` then scales the canvas to the container.
-- The world camera has an integer zoom of 3 and `pixelArt: true`, so the pixels stay crisp. About 11 tiles fit across the short side.
-- The camera follows the player and stays inside the map; a map smaller than the view is centred. A second, unzoomed camera draws the stick and the help line.
-
-## Tiles
-
-Tiles are 16×16 world pixels. A tile id is also its frame in the tileset image.
-
-| Id | Name | Blocks | Placeholder look |
-| --- | --- | --- | --- |
-| 0 | void | yes | black (outside the map, unknown ids) |
-| 1 | floor | no | grey stone slabs |
-| 2 | grass | no | speckled green |
-| 3 | path | no | dirt |
-| 4 | wall | yes | brick |
-| 5 | water | yes | blue with ripples |
-| 6 | door | no | wooden door in a brick frame (exits: `map.doors`) |
-| 7 | tree | yes | tree on grass |
-| 8 | rock | yes | boulder on grass |
-
-The table is `TILES` in `tiles.ts`. To add a tile:
-
-1. Append a row (the next id).
-2. Draw it in `textures.ts` (`drawTile`).
-3. Add it to the private tileset, if you use one.
-
-Blocking ids go into the tilemap layer's collision automatically.
-
-## Map format
-
-Our own JSON format (`parseWorldMap`):
-
-```json
-{
-  "width": 40,
-  "height": 30,
-  "tiles": [4, 4, 4, "... width * height ids, row-major: tile (x, y) is tiles[y * width + x]"],
-  "spawn": { "x": 12, "y": 27 },
-  "seed": "optional"
-}
-```
-
-- Unknown ids become void.
-- A missing or blocked `spawn` falls back to the first walkable tile.
-- `doors` is worked out from the door tiles.
-- A malformed map throws an `Error` with a readable message, for example a `tiles` array of the wrong length.
-
-**Tiled** (`fromTiled`; `loadMapJson` detects it by its `layers`):
-
-- **Map settings.** The map must be orthogonal and finite (untick "Infinite"). Save it as JSON (`.tmj`/`.json`). The tile layer format must be CSV or uncompressed Base64. Compressed layers and infinite maps are refused with a message saying what to change.
-- **Layers.** All visible tile layers are merged. In each cell the topmost non-empty tile wins. Group layers are walked.
-- **Which tile is which:**
-  - By default, the tile's index in its tileset is our id. Draw on a tileset image in id order: the placeholder sheet, or the private `tiles.png`.
-  - Otherwise, give a tile a custom property `kind` (string: `"wall"`, `"water"`, ...), or set its class to the name.
-  - Several tilesets work (the one with the largest `firstgid` ≤ gid owns a tile). Flip bits are ignored.
-- **Spawn.** Use an object named, typed or classed `spawn` in any object layer (a point or a rectangle; tile objects work too).
-
-**The generator** (`gen.ts`, default 40×30 tiles):
-
-- A wall border, grass inside, and the spawn near the bottom.
-- A door in the top wall, and in 3 of 4 maps a second door in a side wall.
-- Winding dirt paths from the spawn to every door.
-- 2 or 3 ponds, a ruined stone room (floor inside, crumbled gaps, a doorway), and scattered trees and rocks.
-- Paths and the spawn are never covered. The tests check, over 300 seeds and two sizes, that every door is reachable from the spawn and that the border is closed.
-- It uses the same seed hashing and mulberry32 as the act map and the fight.
-
-## Public API
-
-```ts
-import { mountWorld } from "./world";
-const world = mountWorld(el, {
-  seed: "abc",                           // or map: loadMapJson(json)
-  onEnterTile(tileId, x, y) { /* e.g. tileId === T.DOOR → enter a node */ },
-});
-world.map;       // the WorldMap in use
-world.destroy(); // removes the game and its canvas
-```
-
-Other options:
-
-- `size: { width, height }` for the generator.
-- `touch` to force the stick on or off.
-- `showTile` for the outline.
-- `onDebug(debug)` for the live read-only state.
-
-`onEnterTile` fires whenever the feet move onto a different tile, not for the spawn tile.
+- Movement eases in and out, as before: top speed 80 px/s, about 0.1 s to reach full speed and about 0.07 s to stop (`WALK` in `logic.ts`). Diagonals are not faster.
+- The player faces one of 4 ways. On an exact diagonal it keeps its current facing, so the sprite doesn't flicker. The walk animation runs while moving. Walking into the edge of the playable rectangle walks on the spot.
+- The keyboard is ignored while a text box or select has focus. The arrow keys are captured so they don't scroll the page; WASD are not, so typing still works.
+- **Screen.** The logical size follows the container's shape: 540 px on the short side, up to 1280 on the long side. Phaser `Scale.FIT` then scales the canvas to the container. The camera has an integer zoom (2 by default) and `pixelArt: true`, so pixels stay crisp. A second, unzoomed camera draws the stick and the help line.
 
 ## Art
 
-There are no image files in the repo, and nothing comes from generative models. The placeholders are drawn in code with canvas 2D: the tileset and a 16×16 hero with four facings and a two-step walk with a bob.
+There are no image files in the repo, and nothing comes from generative models. Until real art exists, the placeholders are generated pixel art, drawn in code (`scenePlaceholders.ts`):
 
-### The private hook
+- **Background.** The seeded tile generator (`gen.ts`, seeded by the scene id) is rendered with the placeholder tileset (`textures.ts`) into one texture of the scene's size.
+  - Inside `bounds` it is ground: grass, dirt paths and stone floor.
+  - Outside it is forest, walls and water.
+  - Exit zones are dirt; triggers are stone floor.
+- **Overlay.** It is transparent except for tree canopies: a row along the bottom edge of the playable rectangle, with gaps over exits, and one big tree inside it whose trunk is on the background. Walk under them and the player is hidden.
+- **Actors.** A 16×24 robed pixel figure, coloured by actor id.
+- **Player.** The 16×16 hero sheet from `textures.ts`.
 
-This is for licensed art that can't be redistributed (the team is considering **zerie's Tiny RPG Character Asset Pack**: 100×100 frames, no redistribution, so it must never be committed to this public repo).
+### Dropping in real art
 
-1. Put the PNGs in `public/assets/private/`. It is in `.gitignore`. Check with `git status`: it must not list them.
-2. Restart the dev server, or rebuild. `vite.config.ts` lists that folder when it starts and bakes the names in as `__PRIVATE_ASSETS__`. That way only files that exist are requested, and a clean checkout logs no 404s.
-3. Edit the specs in `src/world/assets.ts` to match the art. Each file is optional and falls back to the placeholder on its own, including when it fails to load. The lab's `__world.debug.art` says which art is in use.
+Real art replaces the placeholders automatically, with no code change. Put the files in the gitignored `public/assets/private/`:
 
-| File | Spec (`assets.ts`) |
+| File | Replaces |
 | --- | --- |
-| `player-idle.png`, `player-walk.png` | `PRIVATE_PLAYER`: frame size (default 100×100), frames and fps per animation, and `layout`. Both files are needed. |
-| `tiles.png` | `PRIVATE_TILESET`: 16×16 tiles in id order (the table above), any number of columns. |
+| `scenes/<scene id>/background.png` | The scene texture. Draw it at `size`; it is stretched to `size` if not. |
+| `scenes/<scene id>/overlay.png` | The overlay. Use the same size as the background, transparent wherever nothing should cover the actors. |
+| `scenes/<scene id>/actors/<actor id>.png` | One actor. Its feet are the bottom centre of the image. |
+| `player-idle.png`, `player-walk.png` | The player sheet (`PRIVATE_PLAYER` in `assets.ts`, below). |
 
-More about `PRIVATE_PLAYER`:
+- `.webp` and `.jpg` work too.
+- **Precedence** (`artSource`): a private file comes first, then the URL or texture key in the SceneDef, then the placeholder. A file that fails to load also falls back to the placeholder. `__world.debug.art` says which art is in use for each part.
+- **Steps:**
+  1. Add the files.
+  2. Check `git status`: it must not list them.
+  3. Restart the dev server, or rebuild. `vite.config.ts` lists that folder (and its subfolders) when it starts and bakes the paths in as `__PRIVATE_ASSETS__`. That way only files that exist are requested, and a clean checkout logs no 404s.
+- **Never commit real art.** Art the team owns and wants in the repo can go anywhere under `public/` and be referenced by URL in the SceneDef (`"background": "/scenes/crossroads.png"`).
 
+**The player sheet** (this is for licensed art that can't be redistributed; the team is considering **zerie's Tiny RPG Character Asset Pack**: 100×100 frames, no redistribution, so it must never be committed to this public repo):
+
+- **`PRIVATE_PLAYER`** sets the frame size (default 100×100), the frames and fps per animation, and `layout`. Both files are needed.
 - **`layout`:**
   - `"side"` is one row facing right, as in the Tiny RPG pack. Left mirrors it; up and down reuse it.
   - `"four"` is rows in the order down, left, right, up.
-- **`feet`** is the collision box inside a frame, in sheet pixels. Keep it centred left to right, because of the mirroring.
-- **`scale`** is world pixels per sheet pixel. The Tiny RPG figures are small inside their 100×100 frames, so 1 is about right next to 16 px tiles.
+- **`feet`** is the collision box inside a frame, in sheet pixels. Keep it centred left to right, because of the mirroring. Its bottom is the player's foot y for the y-sort.
+- **`scale`** is world pixels per sheet pixel.
 
 **Unverified.** The frame counts (idle 6, walk 8) and the feet box (10×6 at 45,54) are guesses from the pack's description. Nobody has checked them against the actual files yet. Rename the pack's files (for example `Soldier-Idle.png` → `player-idle.png`) or change the `file` names in the spec.
 
-The hook was tested with throwaway PNGs, which were deleted afterwards. The scene picked them up, mirrored the side sheet for walking left, and kept the feet on the right tile.
+**Shipping.** Vite copies everything in `public/` into the build. A build made on a machine that has the private files therefore contains the raw images. Itch.io or GitHub Pages would then host them as loose files. Check the license before deploying such a build. For a public deploy, build on a clean checkout, without the private folder.
 
-**Shipping.** Vite copies everything in `public/` into the build. A build made on a machine that has the private files therefore contains the raw PNGs. Itch.io or GitHub Pages would then host them as loose files. Check the license before deploying such a build. For a public deploy, build on a clean checkout, without the private folder.
+## The tile code
+
+The tile model is no longer the art model. The tilemap layer, tile collision, `onEnterTile` and the lab's seed box and `?map=` are gone from the runtime and the lab. The pure tile code stays, because other code and tests depend on it:
+
+- `tiles.ts` (tile ids and lookups) and `gen.ts` (the seeded generator) draw the placeholder backgrounds, and `textures.ts` draws the tileset from `tiles.ts`;
+- `tiled.ts` (the Tiled loader) is unused at runtime; it is kept with its tests in `world.test.ts` in case the designers want to paint backgrounds or zones in Tiled later.
 
 ## Next steps (not done yet)
 
-1. **Hook it into the run.** Link the nodes of the act DAG to doors and areas:
-   - Each map node becomes an area, generated from `seed:act:node`.
-   - Its doors lead to the node's successors; `onEnterTile` with `T.DOOR` calls the engine's `go`.
-   - Fight and boss nodes start `runFight` when you meet the enemy.
-2. **Enemies** that walk the same tilemap: reuse the fight's brain (`tickBrain`) with tile collision.
-3. **Interactables:** campfire, well, village stall, the devil's table. Use a tile or an object layer with an "interact" button: Space on desktop, a touch button.
-4. **Real art:** wire the actual Tiny RPG sheets (verify the spec), and pick a CC0 tileset (OpenGameArt) with a credits list.
-5. **Tiled workflow:** a `public/maps/` folder of hand-made areas, a Tiled tileset (`.tsj`) of the placeholder sheet with `kind` properties, and per-area spawn and door objects.
-6. **Depth sorting:** tall tiles (trees, wall tops) drawn over the player when they stand behind them. This needs a second tile layer above the player.
+1. **Hook it into the run.** Each act-map node gets a scene. An exit zone's `node` (or its order) picks the successor, and `onEnterZone` with `kind: "exit"` calls the engine's `go`. Fight and boss nodes start `runFight` when you meet the enemy.
+2. **Solid actors and obstacles:** feet boxes for actors, and extra blocking rectangles inside `bounds` (a fountain, a table), if the designer wants them.
+3. **Interactables:** trigger zones plus an "interact" button (Space on desktop, a touch button) for the campfire, well, village stall and the devil's table.
+4. **Real art:** the designer's scene textures and overlays in `scenes/<id>/`, and the actual Tiny RPG sheets (verify the spec).

@@ -120,6 +120,9 @@ test("placeholder art: playable rect looks walkable, the rest blocked, exits are
   const bottom = def.bounds.y + def.bounds.h;
   assert.ok(c.some((k) => !k.trunk && k.y - k.r < bottom && k.y > bottom - k.r), "a canopy row hangs over the bottom edge");
   assert.ok(c.some((k) => k.trunk && pointIn(k, def.bounds)), "a big tree inside the playable rect");
+  const chapel = sceneById("chapel")!;
+  const door = chapel.zones!.find((z) => z.id === "door-south")!;
+  assert.ok(overlayCanopies(chapel).every((k) => k.trunk || k.x + k.r <= door.x || k.x - k.r >= door.x + door.w), "no canopy over an exit");
 });
 
 test("worldLayout: zoom is an integer >= 1, default 2", () => {
