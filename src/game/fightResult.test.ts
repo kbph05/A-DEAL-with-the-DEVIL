@@ -7,6 +7,7 @@ import { sanitizeFightResult, type FightRequest } from "./fightResult";
 import { initialState, type Command, type Enemy, type GameState } from "./gameState";
 import { step } from "./state-machine";
 import { view } from "./view";
+import { describe, type GameEvent } from "./events";
 
 const RAT: Enemy = { name: "cave rat", hp: 10, maxHp: 10, power: 2, boss: false };
 const BOSS: Enemy = { name: "the Gatekeeper", hp: 18, maxHp: 18, power: 3, boss: true };
@@ -79,7 +80,7 @@ test("realtime fight won (a real FightSim bot fight): the same events as a round
   assert.ok(r.ok);
   const taken = 30 - fr.hpLeft;
   assert.deepEqual(types(r.events), taken ? ["fought", "damaged", "enemy_slain"] : ["fought", "enemy_slain"]);
-  assert.deepEqual(r.events[0], { type: "fought", dealt: 10, enemyHp: 0, taken });
+  assert.deepEqual(r.events[0], { type: "fought", dealt: 10, enemyHp: 0, taken, bout: { timeMs: fr.timeMs, hits: fr.hitsTaken, enemy: "cave rat", outcome: "won" } });
   assert.equal(r.state.player.hp, fr.hpLeft);
   assert.equal(r.state.enemy, null);
   assert.ok(r.state.resolved && r.state.pendingFight === null && !r.awaiting);
@@ -140,13 +141,13 @@ test("fight_result is clamped, never trusted: impossible claims are cut down to 
   // and through step: a forged win against a standing enemy hurts it but does not clear the way
   const { s } = start(facing());
   const forged = step(s, result({ won: true, hpLeft: 999, enemyHpLeft: 3, damageDealt: 999 }));
-  assert.deepEqual(forged.events, [{ type: "fought", dealt: 7, enemyHp: 3, taken: 0 }]);
+  assert.deepEqual(forged.events, [{ type: "fought", dealt: 7, enemyHp: 3, taken: 0, bout: { timeMs: 0, hits: 0, enemy: "cave rat", outcome: "unfinished" } }]);
   assert.equal(forged.state.player.hp, 30);
   assert.equal(forged.state.enemy?.hp, 3);
   assert.ok(!forged.actions.some((c) => c.cmd === "go"));
   // the listed placeholder is a no-op that ends the bout
   const noop = step(s, legalActions(s)[0]);
-  assert.deepEqual(noop.events, [{ type: "fought", dealt: 0, enemyHp: 10, taken: 0 }]);
+  assert.deepEqual(noop.events, [{ type: "fought", dealt: 0, enemyHp: 10, taken: 0, bout: { timeMs: 0, hits: 0, enemy: "cave rat", outcome: "unfinished" } }]);
   assert.deepEqual(noop.state.player, s.player);
 });
 
@@ -191,4 +192,16 @@ test("a real map fight: walk to the first fight node and finish it in realtime",
     return;
   }
   assert.fail("no fight node reached");
+});
+
+test("describe(fought): realtime bouts read as a whole fight; the turn-based wording is unchanged", () => {
+  const f = (e: Partial<Extract<GameEvent, { type: "fought" }>>): GameEvent => ({ type: "fought", dealt: 0, enemyHp: 0, taken: 0, ...e });
+  const bout = (o: "won" | "lost" | "unfinished", timeMs: number, hits: number) => ({ timeMs, hits, enemy: "cave rat", outcome: o });
+  assert.equal(describe(f({ dealt: 10, taken: 5, bout: bout("won", 12400, 2) })), "After 12.4 s of fighting you dealt 10 and took 5 (2 hits).");
+  assert.equal(describe(f({ dealt: 10, taken: 2, bout: bout("won", 3000, 1) })), "After 3.0 s of fighting you dealt 10 and took 2 (1 hit).");
+  assert.equal(describe(f({ dealt: 10, bout: bout("won", 2500, 0) })), "After 2.5 s of fighting you dealt 10 and took no damage.");
+  assert.equal(describe(f({ dealt: 6, enemyHp: 4, taken: 30, bout: bout("lost", 8100, 4) })), "You fall after 8.1 s, the cave rat still standing at 4 HP.");
+  assert.match(describe(f({ dealt: 2, enemyHp: 8, bout: bout("unfinished", 0, 0) })), /unfinished after 0\.0 s.*cave rat has 8 HP left/);
+  assert.equal(describe(f({ dealt: 0, enemyHp: 4, taken: 30 })), "You hit for 0; it has 4 HP left, and strikes back for 30.");
+  assert.equal(describe(f({ dealt: 5, enemyHp: 5 })), "You hit for 5; it has 5 HP left.");
 });

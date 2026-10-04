@@ -89,7 +89,7 @@ Details, the sanitizing rules and the UI flow are in docs/fight.md ("Engine hook
 1. `step(s, {"cmd":"fight","realtime":true})` returns `awaiting: { fight: request }` and records the request in `state.pendingFight`. It emits no events and rolls no dice. The request is `{ player: {hp, maxHp, attack}, enemy: {name, hp, maxHp, power, boss}, seed }`, where `seed` is `` `${seed}:${nodeId}:${bout}` ``.
 2. Play the fight (`runFight` in src/fight) and wait.
 3. `step(s, {"cmd":"fight_result","won","hpLeft","timeMs","hitsTaken","damageDealt","enemyHpLeft"})` runs `sanitizeFightResult` against the request and applies the result through the round's events:
-   - `fought`
+   - `fought` (with the optional `bout: { timeMs, hits, enemy, outcome }`, present only for realtime fights; `describe` then reads "After 12.4 s of fighting you dealt 10 and took 5 (2 hits).")
    - `damaged`
    - the `on_hit` curses, once, if a hit landed
    - `revived` or `lost`

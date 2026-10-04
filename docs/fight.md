@@ -126,7 +126,7 @@ interface FightResult {
      - **Unfinished** means both are still standing (an abort, a crash, later maybe a flee). It is accepted: partial damage sticks and the enemy stays.
    - `hitsTaken` is clamped to `[1 if any HP was lost else 0, HP lost]`, because every hit does at least 1. `timeMs` is clamped to 0..1 h; it is for information only.
 6. **Applying** goes through the round's own events, in this order:
-   1. `fought { dealt, enemyHp, taken }`
+   1. `fought { dealt, enemyHp, taken, bout }`, where `bout` is `{ timeMs, hits, enemy, outcome: "won" | "lost" | "unfinished" }` (additive; the one-round fight never sets it, and `describe` words a bout as a whole fight)
    2. `damaged` (if HP was lost)
    3. the `on_hit` curses, if `hitsTaken > 0`. They fire once: a curse is spent when it fires, so "once per hit" would come to the same thing.
    4. the death check: `revived` or `lost`

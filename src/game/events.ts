@@ -7,6 +7,8 @@ export interface Exit { n: number; kind: ExitKind }
 export interface EnemyView { name: string; hp: number; maxHp: number; boss: boolean }
 export type Stats = Pick<PlayerState, "hp" | "maxHp" | "gold" | "attack" | "soul">;
 export type Deltas = Partial<Record<StatKey, number>>;
+/** What a realtime fight adds to `fought`: how long it lasted, how many hits you took, who it was against and how it ended. */
+export interface FoughtBout { timeMs: number; hits: number; enemy: string; outcome: "won" | "lost" | "unfinished" }
 export type Ending = "win" | "lose" | "hell";
 
 export type GameEvent =
@@ -15,7 +17,8 @@ export type GameEvent =
   | { type: "moved"; from: string; to: string; kind: Kind; act: number }
   | { type: "act_advanced"; act: number }
   | { type: "enemy_appeared"; enemy: EnemyView }
-  | { type: "fought"; dealt: number; enemyHp: number; taken: number }
+  /** One combat round, or (with `bout`) a whole realtime fight: `bout` is only present for realtime fights (docs/fight.md). */
+  | { type: "fought"; dealt: number; enemyHp: number; taken: number; bout?: FoughtBout }
   | { type: "enemy_slain"; name: string; gold: number; boss: boolean }
   | { type: "damaged"; amount: number; source: string; hp: number }
   | { type: "healed"; amount: number; source: string; hp: number }
@@ -76,7 +79,9 @@ export function describe(e: GameEvent): string {
     case "moved": return `You go to ${e.to} (${e.kind}).`;
     case "act_advanced": return `You descend to act ${e.act + 1}.`;
     case "enemy_appeared": return `${e.enemy.boss ? "Boss" : "Enemy"}: ${e.enemy.name} (${e.enemy.hp} HP).`;
-    case "fought": return `You hit for ${e.dealt}; it has ${e.enemyHp} HP left${e.taken ? `, and strikes back for ${e.taken}` : ""}.`;
+    case "fought":
+      if (e.bout) return describeBout(e, e.bout);
+      return `You hit for ${e.dealt}; it has ${e.enemyHp} HP left${e.taken ? `, and strikes back for ${e.taken}` : ""}.`;
     case "enemy_slain": return `${e.name} falls. +${e.gold} gold.`;
     case "damaged": return `You take ${e.amount} damage from ${e.source}. HP ${e.hp}.`;
     case "healed": return `You heal ${e.amount} (${e.source}). HP ${e.hp}.`;
@@ -103,4 +108,14 @@ export function describe(e: GameEvent): string {
     case "devil_stage_entered": return "You sit down at the devil's table.";
     case "devil_stage_left": return "You leave the devil's table.";
   }
+}
+
+/** `fought` for a realtime fight: a whole bout rather than one exchange. */
+function describeBout(e: Extract<GameEvent, { type: "fought" }>, b: FoughtBout): string {
+  const secs = `${(b.timeMs / 1000).toFixed(1)} s`;
+  const hits = `${b.hits} ${b.hits === 1 ? "hit" : "hits"}`;
+  if (b.outcome === "lost") return `You fall after ${secs}, the ${b.enemy} still standing at ${e.enemyHp} HP.`;
+  const took = e.taken ? `took ${e.taken} (${hits})` : "took no damage";
+  if (b.outcome === "won") return `After ${secs} of fighting you dealt ${e.dealt} and ${took}.`;
+  return `The fight ends unfinished after ${secs}: you dealt ${e.dealt} and ${took}; the ${b.enemy} has ${e.enemyHp} HP left.`;
 }

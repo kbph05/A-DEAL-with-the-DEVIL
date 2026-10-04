@@ -250,7 +250,7 @@ function fightResult(d: GameState, ev: GameEvent[], report: unknown): void {
   const r = sanitizeFightResult(report, req);
   const taken = req.player.hp - r.hpLeft;
   e.hp = r.enemyHpLeft;
-  ev.push({ type: "fought", dealt: r.damageDealt, enemyHp: e.hp, taken });
+  ev.push({ type: "fought", dealt: r.damageDealt, enemyHp: e.hp, taken, bout: { timeMs: r.timeMs, hits: r.hitsTaken, enemy: e.name, outcome: r.outcome } });
   if (taken > 0) {
     hurt(d.player, taken);
     ev.push({ type: "damaged", amount: taken, source: e.name, hp: d.player.hp });

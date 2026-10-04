@@ -157,6 +157,28 @@ export async function contractShapes(opts: { includeNew?: boolean } = {}): Promi
       for (const e of r.events) push(events, e.type, e);
     }
   }
+  { // Anchor: realtime fights (docs/fight.md): `fight` with `realtime`, then `fight_result`, so Command:fight.realtime,
+    // Command:fight_result and the `fought.bout` event are sampled. A win, an unfinished fight, and a loss (soul spent
+    // for a revival, then none left: `lost`) cover every bout outcome. Hand-written results: the engine sanitizes them anyway.
+    const rat = { name: "cave rat", hp: 10, maxHp: 10, power: 2, boss: false };
+    const results_: Array<Record<string, unknown>> = [
+      { won: true, hpLeft: 25, timeMs: 4200, hitsTaken: 2, damageDealt: 10, enemyHpLeft: 0 },
+      { won: false, hpLeft: 30, timeMs: 0, hitsTaken: 0, damageDealt: 0, enemyHpLeft: 10 },
+      { won: false, hpLeft: 0, timeMs: 8100, hitsTaken: 4, damageDealt: 6, enemyHpLeft: 4 },
+    ];
+    for (const [i, report] of results_.entries()) {
+      const st = initialState(`contract-realtime-${i}`);
+      st.enemy = { ...rat };
+      if (i === 2) st.player.soul = 0;
+      const g = restoreGame(st, new StubDevil(`contract-realtime-${i}`));
+      for (const c of [{ cmd: "fight", realtime: true }, { cmd: "look" }, { cmd: "fight_result", ...report }] as Command[]) {
+        obs.push(json(g.observe())); ctxs.push(json(g.context()));
+        push(cmds, c.cmd, json(c));
+        const r = json(await execute(g, c)); results.push(r); states.push(r.state);
+        for (const e of r.events) push(events, e.type, e);
+      }
+    }
+  }
   const ap = json(await autoplay("contract-ap", botPolicy, 1000, new StubDevil("contract-ap")));
   for (const e of ap.events) push(events, e.type, e);
   const out: Record<string, string[]> = {};
@@ -173,6 +195,12 @@ export async function contractShapes(opts: { includeNew?: boolean } = {}): Promi
   if (opts.includeNew) { // the devil driven by hand: awaiting, devil_reply
     const reply = '{"cmd":"devil_reply","deal":{"dialogue":"Sign.","effects":{"gold":5},"curse":{"trigger":"on_hit","effect":{"hp":-1}}}}';
     Object.assign(out, replShapes(["--state", "--manual-devil"], "repl-manual", ['{"cmd":"deal","text":"gold"}', '{"cmd":"go","n":1}', reply, '{"cmd":"deal"}', reply, '{"cmd":"accept"}']));
+  }
+  if (opts.includeNew) { // a realtime fight driven by hand: `awaiting.fight` on the pending lines, then the result
+    // keep only what the plain runs cannot show (the lines are otherwise the same as "repl:")
+    const only = (k: string) => /\.(awaiting|pendingFight|actions\[\])/.test(k);
+    Object.assign(out, Object.fromEntries(Object.entries(replShapes(["--state"], "repl-realtime", ['{"cmd":"go","n":1}', '{"cmd":"fight","realtime":true}', '{"cmd":"look"}',
+      '{"cmd":"fight","realtime":true}', '{"cmd":"fight_result","won":true,"hpLeft":20,"timeMs":4000,"hitsTaken":2,"damageDealt":10,"enemyHpLeft":0}'])).filter(([k]) => only(k))));
   }
   const keep = ([k]: [string, unknown]) => opts.includeNew || ![...NEW_EVENT_TYPES].some((t) => k.startsWith(`GameEvent:${t}`));
   return Object.fromEntries(Object.entries(out).filter(keep).sort(([a], [b]) => (a < b ? -1 : 1)));
