@@ -7,7 +7,7 @@ import { backgroundPlaceholder, overlayPlaceholder } from "../world/scenePlaceho
 import { HERO_COLS, HERO_ROWS, PLACEHOLDER_HERO, ensurePlaceholderTextures } from "../world/textures";
 import { COL, bar, button, inCircle, lerpColor } from "./draw";
 import { ENEMY_ART_SIZE, enemyTextureKey, ensureEnemyTextures } from "./enemyArt";
-import type { Encounter } from "./encounters";
+import { encounterSummary, type Encounter } from "./encounters";
 import { UNITS_PER_PX, footPx, forestLayout, toPx, type ForestLayout } from "./forest";
 import { PLAYER, STEP_MS, aimAtPointer, moveDir, swingArc, type FightInput, type FightResult, type Vec } from "./logic";
 import { FightSim, type EnemyBody, type FightControls, type SimWorld } from "./sim";
@@ -38,7 +38,7 @@ export interface ForestSceneConfig {
 }
 
 type KeyName = "W" | "A" | "S" | "D" | "UP" | "DOWN" | "LEFT" | "RIGHT" | "SPACE" | "SHIFT";
-type Texts = Record<"hp" | "foes" | "clock" | "help" | "banner" | "attack" | "dash", Phaser.GameObjects.Text>;
+type Texts = Record<"hp" | "title" | "foes" | "clock" | "help" | "banner" | "summary" | "attack" | "dash", Phaser.GameObjects.Text>;
 
 const K = UNITS_PER_PX;
 
@@ -160,10 +160,13 @@ export class ForestScene extends Phaser.Scene {
     this.ui = this.add.graphics().setDepth(10);
     this.texts = {
       hp: this.add.text(0, 0, "", font(18)).setDepth(11),
-      foes: this.add.text(0, 0, "", font(18)).setOrigin(1, 0).setDepth(11),
+      // The engine's enemy is the encounter: its name heads the fight ("Cave rat and its pack"), as the toasts say it.
+      title: this.add.text(0, 0, this.cfg.encounter.title, font(18)).setOrigin(1, 0).setDepth(11),
+      foes: this.add.text(0, 0, "", font(16)).setOrigin(1, 0).setDepth(11),
       clock: this.add.text(0, 0, "", font(16, COL.dim)).setOrigin(1, 0).setDepth(11),
       help: this.add.text(0, 0, "Move: WASD / arrows   Attack: Space / click   Dash: Shift", font(15, COL.dim)).setOrigin(0.5, 1).setDepth(11),
       banner: this.add.text(0, 0, "", { ...font(56), fontStyle: "bold", strokeThickness: 8 }).setOrigin(0.5).setDepth(12).setVisible(false),
+      summary: this.add.text(0, 0, "", font(24)).setOrigin(0.5, 0).setDepth(12).setVisible(false),
       attack: this.add.text(0, 0, "Attack", font(22)).setOrigin(0.5).setDepth(11),
       dash: this.add.text(0, 0, "Dash", font(18)).setOrigin(0.5).setDepth(11),
     };
@@ -215,10 +218,12 @@ export class ForestScene extends Phaser.Scene {
     if (!this.stick.active) this.stick.base = { x: L.stick.x, y: L.stick.y };
     const s = L.ui, t = this.texts, pad = 14 * s;
     t.hp.setPosition(pad, pad * 0.6).setFontSize(Math.round(18 * s));
-    t.foes.setPosition(L.width - pad, pad * 0.6).setFontSize(Math.round(18 * s));
-    t.clock.setPosition(L.width - pad, pad * 0.6 + 24 * s).setFontSize(Math.round(15 * s));
+    t.title.setPosition(L.width - pad, pad * 0.6).setFontSize(Math.round(18 * s));
+    t.foes.setPosition(L.width - pad, pad * 0.6 + 24 * s).setFontSize(Math.round(15 * s));
+    t.clock.setPosition(L.width - pad, pad * 0.6 + 44 * s).setFontSize(Math.round(15 * s));
     t.help.setPosition(L.width / 2, L.height - 8).setFontSize(Math.round(15 * Math.min(1, s)));
     t.banner.setPosition(L.width / 2, L.height * 0.42).setFontSize(Math.round(56 * s));
+    t.summary.setPosition(L.width / 2, L.height * 0.42 + 40 * s).setFontSize(Math.round(24 * s));
     t.attack.setPosition(L.attackBtn.x, L.attackBtn.y).setFontSize(Math.round(22 * s));
     t.dash.setPosition(L.dashBtn.x, L.dashBtn.y).setFontSize(Math.round(18 * s));
     Object.assign(this.view, { width: L.width, height: L.height, portrait: L.portrait, zoom: L.zoom });
@@ -245,6 +250,7 @@ export class ForestScene extends Phaser.Scene {
   private end(result: FightResult): void {
     this.finished = true;
     this.texts.banner.setText(result.won ? "PATH CLEAR" : "DEFEATED").setColor(result.won ? "#ffe066" : "#ff5a4f").setVisible(true);
+    this.texts.summary.setText(encounterSummary(this.cfg.encounter, result.won)).setVisible(true);
     this.time.delayedCall(1100, () => this.cfg.onEnd(result));
   }
 
@@ -413,7 +419,7 @@ export class ForestScene extends Phaser.Scene {
     bar(ui, pad, barY + 17 * sc, 240 * sc, 4 * sc, 1 - p.dashCdMs / PLAYER.dashCdMs, COL.player); // dash cooldown
     const alive = s.alive.length;
     this.texts.hp.setText(`You  ${p.hp} / ${p.maxHp}`);
-    this.texts.foes.setText(`Foes ${alive} / ${s.enemies.length}  ·  ${s.enemyHpLeft} HP`);
+    this.texts.foes.setText(`${s.enemies.length > 1 ? `${alive} / ${s.enemies.length} standing  ·  ` : ""}${s.enemyHpLeft} HP`);
     this.texts.clock.setText(`${(s.timeMs / 1000).toFixed(1)} s`);
     this.texts.help.setVisible(!this.touchUI && !this.finished);
     this.texts.attack.setVisible(this.touchUI);

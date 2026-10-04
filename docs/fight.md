@@ -213,6 +213,8 @@ These replace the arena's per-act tiers in forest mode (no double scaling); boss
 
 **Bosses:** a boss request (`enemy.boss`) is one boss with the engine's HP and name: `miniboss1` in act 1, `miniboss2` in act 2, `final_boss` in the last act.
 
+**Names:** the engine's enemy is the encounter. Its name heads the fight's HUD (`title`: "Cave rat", or "Cave rat and its pack" for a group) and labels the group's lead (the band's `lead`); the rest of the pack keep their roster labels (Slime, Demon, Skeleton archer), which say how they fight. The end banner's line is `encounterSummary`: "Cave rat falls." on a win, as the engine's `enemy_slain` toast says it, or "Cave rat still stands."
+
 Measured with a bot that walks at the nearest enemy swinging and never dodges (20 seeds, the same 40 HP player each time), the HP it loses goes from about 2 at the bottom of act 1 to about 7 in the middle of act 2 and about 10 at the top of act 3. A bot that dashes out of every telegraph loses almost nothing. These are **first guesses**, like the arena's.
 
 ### On the path

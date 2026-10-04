@@ -1,7 +1,9 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { ENEMIES, ENEMY_IDS, type EnemyId } from "./enemies";
-import { ENCOUNTER_BANDS, SCALING, bandAt, encounterFor, progressOf, scaleAt, scaledParams, splitHp, type ForestRequest } from "./encounters";
+import { ENCOUNTER_BANDS, SCALING, bandAt, encounterFor, encounterSummary, encounterTitle, progressOf, scaleAt, scaledParams, splitHp, type ForestRequest } from "./encounters";
+import { eventText } from "../ui/logic";
+import { FOES } from "../game/gameState";
 
 const SEEDS = Array.from({ length: 50 }, (_, i) => `seed-${i}`);
 
@@ -129,4 +131,26 @@ test("lab override: every enemy one kind, or a single boss", () => {
     assert.equal(e.enemies.reduce((n, m) => n + m.hp, 0), 20);
     if (ENEMIES[id].boss) assert.equal(e.enemies.length, 1);
   }
+});
+
+test("names: the engine's enemy is the encounter (title, the lead's label, the end line), the pack keeps roster labels", () => {
+  assert.equal(encounterTitle("cave rat", 1), "Cave rat");
+  assert.equal(encounterTitle("cave rat", 4), "Cave rat and its pack");
+  assert.equal(encounterTitle("the unlit", 3), "The unlit and its pack");
+  assert.equal(encounterTitle("the Gatekeeper", 1, true), "The Gatekeeper");
+  for (const foe of FOES.flat()) for (const seed of SEEDS.slice(0, 10)) for (const act of [1, 2, 3]) for (const layer of [0, 3, 6]) {
+    const r = req(act, layer, { seed, hp: 30 });
+    const e = encounterFor({ ...r, enemy: { ...r.enemy, name: foe } });
+    assert.equal(e.foe, foe);
+    assert.equal(e.title, encounterTitle(foe, e.enemies.length));
+    const named = e.enemies.filter((m) => m.name === foe.charAt(0).toUpperCase() + foe.slice(1));
+    assert.equal(named.length, 1, `exactly one mob carries the engine's name (${foe}, ${seed})`);
+    assert.equal(named[0].id, ENCOUNTER_BANDS[e.band].lead, "the band's lead");
+    for (const m of e.enemies) if (m !== named[0]) assert.equal(m.name, ENEMIES[m.id].label, "the rest keep their roster labels");
+    // The fight's end line agrees with the engine's own event, as the play page's toast words it.
+    assert.ok(eventText({ type: "enemy_slain", name: foe, gold: 5, boss: false }).startsWith(encounterSummary(e, true)), foe);
+  }
+  const boss = encounterFor(req(2, 6, { boss: true }));
+  assert.equal(boss.title, "The Gatekeeper");
+  assert.equal(encounterSummary(boss, false), "The Gatekeeper still stands.");
 });
