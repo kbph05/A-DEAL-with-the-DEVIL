@@ -21,7 +21,10 @@ export const TITLE: PauseState = { screen: "title", paused: false, confirmQuit: 
 
 /** First load goes straight into the run, as before; `?title=1` opens on the title screen instead. */
 export function startState(search: string): PauseState {
-  return new URLSearchParams(search).get("title") === "1" ? TITLE : RUNNING;
+  // The game opens on the title screen (kbph, 4 Oct). `?title=0`, or a dev/test link with `?seed=` or `?god=1`, starts the run straight away.
+  const q = new URLSearchParams(search);
+  if (q.get("title") === "1") return TITLE;
+  return q.get("title") === "0" || q.has("seed") || q.has("god") ? RUNNING : TITLE;
 }
 
 export type PauseAction = "pause" | "resume" | "quit" | "cancelQuit" | "confirmQuit" | "newGame" | "controls" | "back";

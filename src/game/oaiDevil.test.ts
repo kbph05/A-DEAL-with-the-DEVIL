@@ -292,3 +292,21 @@ test("CORS preflight and bad bodies", async () => {
     assert.equal(bad.status, 400);
   } finally { d.close(); }
 });
+
+test("death's door (context.kind death): the dying guidance is in the prompt; the stub's terms stand, the model only talks", async () => {
+  const d = await devil();
+  try {
+    reply = () => ok({ dialogue: "Dying already? Sign, and get up.", effects: { gold: 99, attack: 3 } }); // a greedy model: its numbers are ignored
+    const { state, context } = req("oai-death", { hp: 0 }, { kind: "death", opening: true });
+    const deal = await d.post(state, context, null);
+    assert.match(userText(seen[0].body), /The player is dying\. Offer to buy their soul for another life\. Be smug\. Any extras they ask for cost more/);
+    assert.equal(deal.dialogue, "Dying already? Sign, and get up.");
+    assert.deepEqual(deal.effects, (await new StubDevil().offer(state, context)).effects, "the bare bargain: the soul for the revival's HP");
+    assert.equal(deal.effects.soul, -1);
+    const haggle = { ...context, opening: undefined, haggle: 1, askIndex: context.askIndex + 1 };
+    const more = await d.post(state, haggle, "and a sharper sword");
+    const stub = await new StubDevil().offer(state, haggle, "and a sharper sword");
+    assert.deepEqual({ ...more, dialogue: "" }, { ...sanitizeDeal(stub), dialogue: "" }, "the extra, priced by the stub");
+    assert.equal(more.effects.attack, 1);
+  } finally { d.close(); }
+});

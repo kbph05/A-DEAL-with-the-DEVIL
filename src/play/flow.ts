@@ -10,13 +10,15 @@
  * - Well: buy a blessing, a deal when the devil is there, and Move on. The map is forced after Move on.
  * - Fight and boss: the realtime fight. Won (no enemy left): the map is forced. A revival fights again; death ends.
  * - Deal node: the devil's overlay until the deal is accepted, refused or ended (or you walk away); then the map is forced.
+ * - Death's door (HP 0 with the soul): the devil's overlay over the scene, wherever you fell, until you accept (sell the
+ *   soul, live) or refuse (die). Nothing else: no map, no prompts, no walking away.
  * - Never forced (nor open) while the devil is speaking, an offer stands, an enemy blocks the way or a fight is on.
  * - A run that is over shows the ending card.
  */
 import { MAX_ASKS, type Command, type Ending, type GameEvent, type View } from "../game";
 
 /** The parts of the engine's `View` the flow reads (a real `view(state)` fits). */
-export type FlowView = Pick<View, "nodeId" | "kind" | "enemy" | "offer" | "pending" | "resolved" | "ending" | "devilPresent" | "asksLeft" | "actions"> & Partial<Pick<View, "opening">>;
+export type FlowView = Pick<View, "nodeId" | "kind" | "enemy" | "offer" | "pending" | "resolved" | "ending" | "devilPresent" | "asksLeft" | "actions"> & Partial<Pick<View, "opening" | "dying">>;
 
 /** UI state the engine doesn't know about. Flags set at another node than `at` are ignored, so a move resets them. */
 export interface Local {
@@ -68,7 +70,7 @@ export function flow(v: FlowView, local: Local = LOCAL): Flow {
   if (v.ending) return { ...base, screen: "ending" };
 
   const fightOn = l.busy === "fight" || has(v.actions, "fight_result");
-  if (v.pending || l.busy === "devil") return { ...base, devil: true };
+  if (v.pending || l.busy === "devil" || v.dying) return { ...base, devil: true }; // death's door included
   if (fightOn) return { ...base, screen: "fight" };
   if (v.enemy) return { ...base, screen: "fight", prompts: has(v.actions, "fight") ? ["fight"] : [] };
   if (v.offer) return { ...base, devil: true };

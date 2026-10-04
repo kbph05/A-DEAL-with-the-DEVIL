@@ -6,19 +6,19 @@ Writing code with an AI assistant? Give it this page first. Then name the row of
 
 ## 1. What runs where
 
-**The game is `play.html`, started with `npm run game`.** It is in test builds only for now. The final build entry is still `index.html` (the plain DOM front end in `src/ui/`). [play.md](play.md), "Making it the main build", says how to swap them.
+**The game is the play page, `index.html` (`/`), started with `npm run game`, and it is the production build's entry.** The plain DOM front end in `src/ui/` is `classic.html`, in test builds only. See [play.md](play.md).
 
 | Command or page | What it is | Entry file |
 | --- | --- | --- |
-| `npm run game` (`/play.html`) | **The game**: village, forest fights, map, HUD, devil overlay, ending card. | `src/play/play.ts` |
-| `npm run dev` (`/index.html`) | Old DOM front end plus dev tools (Devil lab, autoplay, F12 console). Also the **final build entry**. | `src/main.ts` |
+| `npm run game` (`/`, `index.html`) | **The game**: village, forest fights, map, HUD, devil overlay, ending card. | `src/play/play.ts` |
+| `npm run classic` (`/classic.html`) | Old DOM front end plus dev tools (Devil lab, autoplay, F12 console). Test builds only. | `src/main.ts` |
 | `npm run world` (`/world.html`) | World lab: the village or forest scene on its own. | `src/world/dev.ts` |
 | `/fight.html` | Fight lab: the realtime fight on its own. | `src/fight/dev.ts` |
 | `npm run map` (`/map.html`) | Map lab: the act map on a real engine run. | `src/mapscene/dev.ts` |
 | `/hud.html` | HUD lab: the HUD with buttons that step a real run. | `src/hud/dev.ts` |
-| `npm run build` | **Final build** into `dist/`: `index.html` only, no labs, no dev tools. | `index.html` |
-| `npm run build:test` / `npm run build:game` | Test build into `dist-test/`: all pages, including the game. | `vite.config.ts` |
-| `npm run preview` / `preview:test` / `preview:game` | Serve a finished build. `preview:game` opens `/play.html`. | none |
+| `npm run build` | **Production build** into `dist/`: the play page (`index.html`) only, no labs, no classic UI, no test flags. | `index.html` |
+| `npm run build:test` / `npm run build:game` | Test build into `dist-test/`: all pages (play, classic, labs). | `vite.config.ts` |
+| `npm run preview` / `preview:test` / `preview:game` | Serve a finished build. `preview:game` opens `/`. | none |
 | `npm run mock:devil` | Fake devil backend on `localhost:8787/deal`. | `scripts/mock-devil-server.ts` |
 | `npm run devil:oai` | The LLM devil on `localhost:8788/deal`, over any OpenAI-compatible API (llama-swap by default, or Gemini). See [devil-api.md](devil-api.md). | `scripts/oai-devil.ts` |
 | `npm test` | All unit tests. | `src/**/*.test.ts`, `tools/*.test.ts` |
@@ -173,8 +173,8 @@ For a final build, set it at build time: `VITE_DEVIL_URL=https://your.host/deal 
 - **Opener**: the devil's free opening offer when he appears. No player text; it uses no question.
 - **Ask / question**: one message to the devil. At most 3 per node and 10 per run. A haggle counts too.
 - **Strike**: the devil lashes out instead of offering (`forced: true`). HP loss only, capped by `MAX_STRIKE_HP`. No accept step.
-- **Soul**: 1 while yours, 0 once sold or spent. It revives you once.
-- **Revive**: at 0 HP with the soul kept, you come back at half HP and the soul is spent. A second death ends the run.
+- **Soul**: 1 while yours, 0 once sold or spent. Selling it at death's door buys one more life.
+- **Death's door / revive**: at 0 HP with the soul kept, the devil offers another life for it (`context.kind` "death"). Accept (or haggle for extras, priced on top) and you come back at half HP or more, soul gone; refuse and the run ends ("lose"). A death without the soul ends the run. See [engine.md](engine.md), "Death's door".
 - **Hell ending**: you reach the final door after the soul is gone. You win, but in hell.
 - **Seed**: the text that fixes a run's map and dice. Same seed, same run.
 - **View**: the engine's read-only summary of the state for screens (`view` in `src/game/view.ts`).

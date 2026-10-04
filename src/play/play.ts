@@ -1,5 +1,5 @@
 /**
- * The play page (`/play.html`, docs/play.md): the game as one screen. The scene for the current node (the village to
+ * The play page (`/`, index.html, docs/play.md): the game as one screen. The scene for the current node (the village to
  * walk and shop in, the forest path for fights, a dim backdrop with a panel for campfires and wells), the HUD over it,
  * the act map when it is open or forced, the devil's full-screen overlay, and the ending card. Every engine command
  * goes through the one shared `Session`; what is on screen is derived from `flow(view, local)` (flow.ts) on each render.
@@ -15,13 +15,16 @@ import { mountHud } from "../hud/hud";
 import { hudModel } from "../hud/model";
 import { mountMap, type MapHandle } from "../mapscene";
 import { paintIcon, type IconKey } from "../mapscene/icons";
-import { effectChips, curseText, eventText, kindLookup, lastStrike, outcomeEvents, questionsText, restHint, rewriteText } from "../ui/logic";
+import { effectChips, curseText, kindLookup, lastStrike, outcomeEvents, questionsText, restHint, rewriteText } from "../ui/logic";
 import { mountScene, sceneById, type SceneHandle, type SceneZone, type WorldDebug } from "../world";
 import { shopPrompt } from "../world/shopZone";
+import { noticeOf, sceneTheme, shopIcon, type Notice, type NoticeIcon } from "./notice";
+import { paintNoticeIcon } from "./noticeIcons";
 import { CLOSE_DEVIL, LOCAL, OPEN_DEVIL, arrived, flow, setLocal, toastEvents, wantsOpener, wellChoice, wishToSend, type Flow, type Local } from "./flow";
 import wellArt from "../../assets/well.png";
 import { mountDevilArt } from "./devilArt";
 import { POSE_MS, devilPose } from "./devilPose";
+import titleDevil from "../../assets/devil_normal.png";
 import { CONTROLS, pauseKey, pauseStep, startState, type PauseAction, type PauseState } from "./pause";
 import { creditsBody, loadCredits } from "../render/credits";
 
@@ -51,6 +54,15 @@ function button(text: string, onClick: () => void, cls = "", sub?: string): HTML
   if (sub) b.append(h("span", "", text), h("small", "", sub)); else b.textContent = text;
   b.onclick = onClick;
   return b;
+}
+/** A notice card's icon: the map's flame (campfire), sword (fight) and devil (deal), and the coin, heart and X drawn in noticeIcons.ts. */
+function noteIcon(k: NoticeIcon): HTMLCanvasElement {
+  const c = h("canvas", "note-icon");
+  c.width = 16; c.height = 16;
+  const ctx = c.getContext("2d");
+  if (ctx) { if (k === "flame") paintIcon(ctx, "campfire"); else if (k === "sword") paintIcon(ctx, "fight"); else if (k === "devil") paintIcon(ctx, "deal"); else paintNoticeIcon(ctx, k); }
+  c.setAttribute("aria-hidden", "true");
+  return c;
 }
 function icon(k: IconKey): HTMLCanvasElement {
   const c = h("canvas");
@@ -162,7 +174,7 @@ let leaving = 0; // he left laughing: the portrait lingers, fading, until this t
 const reducedMotion = (): boolean => window.matchMedia?.("(prefers-reduced-motion: reduce)").matches === true;
 function updatePose(): void {
   const reduce = reducedMotion();
-  portrait.set(devilPose({ now: performance.now(), since: pose.since, typing: pose.engaged || wish.trim() !== "", offerAt: pose.offerAt, laughUntil: pose.laughUntil, reducedMotion: reduce }), reduce);
+  portrait.set(devilPose({ now: performance.now(), since: pose.since, typing: pose.engaged || wish.trim() !== "", offerAt: pose.offerAt, laughUntil: pose.laughUntil, reducedMotion: reduce, dying: session.game().view().dying }), reduce);
 }
 function laughNow(): void { pose.laughUntil = performance.now() + POSE_MS.laugh; }
 function stopTyping(): void {
@@ -183,15 +195,48 @@ let emitting: Command["cmd"] | null = null;
 function say(events: GameEvent[], cmd: Command["cmd"] | null = null): void {
   // Only the answer to a menu choice, or a lone rejection (toastEvents, flow.ts): no popup when a scene opens or a
   // fight ends (kbph). The devil's own words are in his overlay; HP and gold changes show on the HUD.
-  const shown = outcomeEvents(toastEvents(cmd, events));
-  const kindOf = kindLookup(session.game().view().map);
-  const text = shown.map((e) => eventText(e, kindOf)).filter(Boolean).join(" ");
-  if (!text) return;
-  toast.textContent = text;
-  toast.hidden = false;
-  clearTimeout(toastTimer);
-  toastTimer = window.setTimeout(() => { toast.hidden = true; }, Math.min(9000, 2500 + text.length * 45));
+  const n = noticeOf(outcomeEvents(toastEvents(cmd, events)), kindLookup(session.game().view().map));
+  if (n) showToast(n);
 }
+
+/** The toast: a notice card (docs/play.md, "Notices"): icon, line, coloured stat chips. One at a time; a tap dismisses it. */
+let fadeTimer = 0;
+function dropToast(): void {
+  clearTimeout(toastTimer); clearTimeout(fadeTimer);
+  toast.classList.remove("in", "out");
+  toast.hidden = true;
+}
+function showToast(n: Notice): void {
+  dropToast();
+  const body = h("div", "body");
+  body.append(h("div", "title", n.title));
+  if (n.chips.length) {
+    const row = h("div", "chip-row");
+    for (const c of n.chips) row.append(h("span", `note-chip ${c.tone}`, c.text));
+    body.append(row);
+  }
+  if (n.detail) body.append(h("div", "detail", n.detail));
+  toast.replaceChildren(noteIcon(n.icon), body);
+  toast.classList.toggle("reject", n.reject);
+  toast.hidden = false;
+  // After the render that follows this call (the map title, the shop prompt or a panel's card may have just appeared): clear them, then slide in.
+  queueMicrotask(() => {
+    if (toast.hidden) return;
+    toast.style.setProperty("--lift", "0px");
+    const r = toast.getBoundingClientRect();
+    let lift = 0;
+    for (const el of [prompt, mapTitle, panel.querySelector<HTMLElement>(".play-card"), devil.querySelector<HTMLElement>(".play-card")]) {
+      if (!el || el.closest("[hidden]")) continue;
+      const c = el.getBoundingClientRect();
+      if (c.right > r.left && c.left < r.right && c.top < r.bottom && c.bottom > r.top) lift = Math.max(lift, Math.ceil(r.bottom - c.top + 8));
+    }
+    toast.style.setProperty("--lift", `${lift}px`);
+    toast.classList.add("in");
+  });
+  const text = [n.title, n.detail, ...n.chips.map((c) => c.text)].join(" ");
+  toastTimer = window.setTimeout(() => { toast.classList.add("out"); fadeTimer = window.setTimeout(dropToast, 380); }, Math.min(9000, 2500 + text.length * 45));
+}
+toast.addEventListener("click", dropToast);
 
 /** Run one command through the session (the devil's `deal` is async), announce it, re-render. */
 async function send(c: Command): Promise<void> {
@@ -252,6 +297,15 @@ async function fight(): Promise<void> {
   mounted?.destroy(); mounted = null; // the next render puts the backdrop back (under the map, or the revival panel)
   if (session.game() !== g) { render(); return; }
   const r = g.fightResult(report ?? {}); // nothing reported: an unfinished fight, nothing changes
+  let death: GameEvent[] = [];
+  if (g.gameState.pending) { // died with the soul: the devil comes for it (his opener at death's door)
+    local = setLocal(local, g.view().nodeId, { busy: "devil" });
+    session.emit([...pre, ...r.events]); pre = []; // the fall shows at once, under "The devil considers…"
+    try { death = (await g.answerDevil())?.events ?? []; } finally { local = { ...local, busy: null }; }
+    if (session.game() !== g) return;
+    session.emit(death);
+    return;
+  }
   session.emit([...pre, ...r.events]);
 }
 
@@ -318,9 +372,12 @@ function renderPrompt(v: View, f: Flow): void {
   if (f.screen !== "village" || f.map !== "closed" || f.devil || !zone || zone.kind !== "shop") return;
   const p = shopPrompt(zone, v);
   prompt.hidden = false;
-  const buy = button(p.price !== null ? `Buy (${p.price}g)` : "Buy", () => { if (p.command) void send(p.command); });
+  const buy = button("Buy", () => { if (p.command) void send(p.command); });
+  buy.setAttribute("aria-label", p.price !== null ? `Buy ${p.title} for ${p.price} gold` : `Buy ${p.title}`);
   buy.disabled = !p.enabled;
-  prompt.append(h("b", "", p.title), buy, h("p", "", p.desc));
+  prompt.append(noteIcon(shopIcon(zone.item)), h("b", "", p.title));
+  if (p.price !== null) prompt.append(h("span", "note-chip gold", `${p.price} gold`));
+  prompt.append(buy, h("p", "", p.desc));
   if (p.reason) prompt.append(h("p", "why", p.reason));
 }
 
@@ -416,7 +473,8 @@ function renderDevil(v: View, f: Flow): void {
   const card = h("div", "play-card");
   const canAsk = v.actions.some((c) => c.cmd === "deal");
   const busy = local.busy === "devil" || v.pending;
-  card.append(h("h2", "", `The devil, ${WHERE[v.kind] ?? "here"}`));
+  card.append(h("h2", "", v.dying ? "Death's door" : `The devil, ${WHERE[v.kind] ?? "here"}`));
+  if (v.dying) card.append(h("p", "lead", "You fall. Your soul is still yours, and he wants it: sell it and live, or refuse and die."));
   const strike = lastStrike(log);
   if (strike) card.append(h("p", "strike", `The devil strikes! ${strike.dialogue}`));
   const line = busy ? "The devil considers…" : v.offer ? `“${v.offer.dialogue}”` : canAsk ? "“Well? Name your wish.”" : v.questionsLeft <= 0 ? "“I have heard enough from you this run.”" : "“We are done here.”";
@@ -450,8 +508,9 @@ function renderDevil(v: View, f: Flow): void {
     card.append(form);
   }
   const row = h("div", "row");
-  if (v.offer && !busy) row.append(button("Accept", () => void send({ cmd: "accept" })), button("Refuse", () => void send({ cmd: "refuse" }), "quiet"));
-  if (!v.offer && !busy) row.append(button("Walk away", () => patch(CLOSE_DEVIL), "quiet"));
+  if (v.offer && !busy && v.dying) row.append(button("Accept: sell your soul, live", () => void send({ cmd: "accept" })), button("Refuse: die", () => void send({ cmd: "refuse" }), "quiet"));
+  else if (v.offer && !busy) row.append(button("Accept", () => void send({ cmd: "accept" })), button("Refuse", () => void send({ cmd: "refuse" }), "quiet"));
+  if (!v.offer && !busy && !v.dying) row.append(button("Walk away", () => patch(CLOSE_DEVIL), "quiet"));
   card.append(row);
   devil.replaceChildren(portrait.el, card);
   updatePose();
@@ -501,6 +560,7 @@ function render(): void {
   const v = session.game().view();
   const f = flow(v, local);
   current = f;
+  root.dataset.scene = sceneTheme(f.screen, f.map, f.devil);
   mapTitle.hidden = f.map !== "forced"; // before renderMap: the map keeps its top nodes clear of the title as well as the HUD
   renderScene(v, f);
   renderMap(v, f);
@@ -516,6 +576,7 @@ function render(): void {
   renderDevil(v, f);
   if (f.screen !== "ending") ending.replaceChildren();
   renderEnding(f);
+  syncVillageKeys(!ps.paused && f.map === "closed" && !f.devil);
   if (ps.paused) return; // nothing starts behind the pause menu; resuming renders again
   // The devil appears: he opens with an offer of his own, unasked (free; see wantsOpener).
   if (wantsOpener(v, f, local)) queueMicrotask(() => void send({ cmd: "deal" }));
@@ -538,8 +599,25 @@ function setGamePaused(game: Phaser.Game, on: boolean): void {
   if (on) game.pause(); else game.resume();
   const kb = game.input?.keyboard;
   if (kb) kb.enabled = !on;
-  if (!on) for (const sc of game.scene.getScenes(true)) sc.input?.keyboard?.resetKeys(); // keys released while paused
+  if (!on) releaseKeys(game); // keys released while paused
 }
+
+/** Release every key a scene thinks is held (its keyup may have gone to the page while the key was off or hidden). */
+function releaseKeys(game: Phaser.Game | null): void {
+  for (const sc of game?.scene.getScenes(true) ?? []) sc.input?.keyboard?.resetKeys();
+}
+/** The village walks only while nothing is over it: the map (its arrow keys), the devil, the pause menu. Keys held when
+ *  one opened, and released under it, must not stay down when it closes. */
+function syncVillageKeys(on: boolean): void {
+  const kb = villageGame?.input?.keyboard;
+  if (!kb || kb.enabled === on) return;
+  kb.enabled = on;
+  releaseKeys(villageGame);
+}
+// Focus leaving the page (another window, a hidden tab): nothing stays held.
+const releaseAll = (): void => { releaseKeys(villageGame); releaseKeys(fightGame); };
+window.addEventListener("blur", releaseAll);
+document.addEventListener("visibilitychange", releaseAll);
 
 function doPause(a: PauseAction): void {
   const before = ps;
@@ -575,7 +653,7 @@ function quitRun(): void {
   devil.hidden = true; devil.classList.remove("leaving"); devil.removeAttribute("aria-hidden"); devil.inert = false;
   clearInterval(poseTimer); poseTimer = 0;
   ending.replaceChildren();
-  toast.hidden = true;
+  dropToast();
   local = { ...LOCAL };
   autoFought = null;
 }
@@ -657,7 +735,8 @@ pauseLayer.addEventListener("pointerdown", (e) => { if (e.target === pauseLayer)
 
 function renderTitle(): void {
   for (const el of [mapBtn, mapClose, mapTitle, prompt, panel, devil, ending, pauseBtn, hud.el]) el.hidden = true;
-  toast.hidden = true;
+  dropToast();
+  root.dataset.scene = "dark";
   titleLayer.hidden = false;
   if (titleLayer.childElementCount) return;
   const box = h("div", "");
@@ -667,7 +746,12 @@ function renderTitle(): void {
   const row = h("div", "play-title-row");
   row.append(start, creditsButton());
   box.append(head, row);
-  titleLayer.append(box);
+  const fig = h("div", "play-title-devil");
+  fig.setAttribute("aria-hidden", "true");
+  const img = document.createElement("img");
+  img.src = titleDevil; img.alt = ""; img.draggable = false;
+  fig.append(img);
+  titleLayer.append(fig, box);
   start.focus();
 }
 
@@ -700,7 +784,7 @@ if (TEST) {
     view: () => session.game().view(),
     map: () => map?.debug() ?? null,
     zone: () => zone?.id ?? null,
-    toast: () => (toast.hidden ? "" : toast.textContent),
+    toast: () => (toast.hidden || toast.classList.contains("out") ? "" : toast.textContent),
     pause: () => ps,
     /** Live positions: the village walker's feet, or the fight's player, enemies and clock. */
     probe: () => ({

@@ -33,6 +33,11 @@ export interface Observation {
   opening: boolean;
   /** How many more questions (asks and haggles) the devil will hear this run, at any deal node (MAX_DEVIL_QUERIES minus asks so far). */
   questionsLeft: number;
+  /**
+   * At death's door (additive, 4 Oct): HP hit 0 with the soul still yours, and the devil wants it for another life. His
+   * offer is pending or in `offer`; `accept`, `refuse` or haggle (`deal` with text; `asksLeft` counts the haggles left).
+   */
+  dying: boolean;
 }
 
 /** Everything the player may see in one object: the observation, the current act's map, and the legal commands. */
@@ -45,10 +50,11 @@ export function observation(s: GameState): Observation {
     enemy: s.enemy && enemyView(s.enemy), exits: exitsOf(s), offer: s.offer, resolved: s.resolved,
     pending: s.pending !== null, dealsDecided: s.dealsDecided, ending: s.ending,
     curses: s.curses.map((c) => ({ ...c, effect: { ...c.effect } })),
-    asksLeft: here && !devilDone(s) && !s.ending ? Math.max(0, MAX_ASKS - s.asks) : 0,
+    asksLeft: s.dying ? Math.max(0, MAX_ASKS - s.dying.haggles) : here && !devilDone(s) && !s.ending ? Math.max(0, MAX_ASKS - s.asks) : 0,
     devilPresent: here,
     opening: openerDue(s),
     questionsLeft: questionsLeft(s),
+    dying: !!s.dying,
   };
 }
 

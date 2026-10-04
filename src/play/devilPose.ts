@@ -38,6 +38,8 @@ export interface DevilOverlayState {
   laughUntil: number;
   /** prefers-reduced-motion: no idle cycling (and play.ts swaps instantly). */
   reducedMotion: boolean;
+  /** Death's door: he leans in over the dying player and stays leaning in (no idle shifts) until it is settled. */
+  dying?: boolean;
 }
 
 /** Cycle `k`'s length: 4 to 7 s, varied but deterministic (a small integer hash), so the shifts don't tick like a clock. */
@@ -58,7 +60,7 @@ export function idlePose(t: number): DevilPose {
 }
 
 /**
- * The pose now. Priority: laugh > head tilt (typing or haggling) > lean in (an offer just landed) > the idle cycle.
+ * The pose now. Priority: laugh > head tilt (typing or haggling) > lean in (an offer just landed, or death's door) > the idle cycle.
  * Idle counts from the latest of `since`, the end of the lean-in and the end of the laugh, so a shift never follows
  * straight on from another pose.
  */
@@ -66,7 +68,7 @@ export function devilPose(s: DevilOverlayState): DevilPose {
   if (s.now < s.laughUntil) return "laugh";
   if (s.typing) return "head_tilt";
   const leanEnd = s.offerAt === null ? -Infinity : s.offerAt + POSE_MS.leanIn;
-  if (s.now < leanEnd) return "lean_in";
+  if (s.now < leanEnd || s.dying) return "lean_in";
   if (s.reducedMotion) return "normal";
   return idlePose(s.now - Math.max(s.since, leanEnd, s.laughUntil));
 }

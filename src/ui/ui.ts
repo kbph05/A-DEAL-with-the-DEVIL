@@ -103,24 +103,35 @@ export function mountUI(root: HTMLElement, session: Session, opts: UIOptions = {
     if (session.game() !== g) { render(); return; } // a new game replaced the run mid-fight
     const r = g.fightResult(report ?? {}); // nothing reported (it failed): an unfinished fight, nothing changes
     const note: GameEvent[] = failure ? [{ type: "rejected", reason: `the realtime fight could not start (${failure}); try again or use Auto-resolve` }] : [];
-    session.emit([...pre, ...note, ...r.events]);
+    const death = await answerDeath(g); // died with the soul: the devil's offer at death's door
+    if (session.game() !== g) return;
+    session.emit([...pre, ...note, ...r.events, ...death]);
   }
 
-  /** The old turn-based fight, round after round until the enemy falls, you are revived, or the run ends. */
-  function quickFight() {
+  /** A death with the soul leaves the devil's request pending: ask him (async), so his offer shows. No events otherwise. */
+  async function answerDeath(g: ReturnType<typeof session.game>): Promise<GameEvent[]> {
+    if (!g.gameState.pending) return [];
+    busy = true; render();
+    try { return (await g.answerDevil())?.events ?? []; } finally { busy = false; }
+  }
+
+  /** The old turn-based fight, round after round until the enemy falls, you reach death's door, or the run ends. */
+  async function quickFight() {
     if (busy) return;
     const g = session.game(), events: GameEvent[] = [];
     for (let i = 0; i < 100; i++) {
       const r = g.fight();
       events.push(...r.events);
-      if (!r.ok || g.ending || !g.observe().enemy || r.events.some((e) => e.type === "revived")) break;
+      if (!r.ok || g.ending || !g.observe().enemy || g.gameState.pending || r.events.some((e) => e.type === "revived")) break;
     }
+    events.push(...await answerDeath(g));
+    if (session.game() !== g) return;
     refocus = true;
     session.emit(events);
   }
 
   const choices = mountChoices(ch.body, (c) => void run(c), {
-    realtime: () => void realtimeFight(), quick: quickFight, showQuick: () => opts.quickFight === true || fightBroken,
+    realtime: () => void realtimeFight(), quick: () => void quickFight(), showQuick: () => opts.quickFight === true || fightBroken,
   });
 
   function render() {

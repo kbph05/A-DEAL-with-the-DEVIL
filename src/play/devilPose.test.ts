@@ -75,3 +75,10 @@ test("devilPose: every pose is one of the seven pictures", () => {
     }
   }
 });
+
+test("death's door: he leans in and stays leaning in (no idle shifts); typing tilts the head, a struck deal laughs", () => {
+  for (const now of [T0, T0 + POSE_MS.leanIn + 1, T0 + 60_000]) assert.equal(devilPose(st({ now, dying: true, offerAt: T0 })), "lean_in");
+  assert.equal(devilPose(st({ now: T0 + 60_000, dying: true, reducedMotion: true })), "lean_in");
+  assert.equal(devilPose(st({ dying: true, typing: true })), "head_tilt");
+  assert.equal(devilPose(st({ dying: true, laughUntil: T0 + 1 })), "laugh");
+});

@@ -19,6 +19,7 @@
  * --state: every report line also carries the full GameState as `game_state` (save it, diff it, replay from it).
  * --manual-devil: `deal` does not call the StubDevil; the line carries `awaiting: {devil: request}` (the HTTP devil
  *   request body, docs/devil-api.md) and the next input must be `devil_reply` with your Deal: drive the devil by hand.
+ *   The same goes for a death with the soul (the devil's offer at death's door).
  */
 import { createInterface } from "node:readline/promises";
 import { stdin, stdout, argv, exit } from "node:process";
@@ -84,9 +85,12 @@ function showMap() {
     console.log("  " + l.nodes.map((n) => `${n.current ? "[" : " "}${n.kind}${n.rewritten ? "*" : ""}${n.visited ? "·" : ""}${n.current ? "]" : " "}`).join("  "));
 }
 
-/** One game command. With --manual-devil, `deal` only asks: the devil's answer comes in as a later `devil_reply`. */
+/**
+ * One game command. With --manual-devil, nothing calls the StubDevil: `deal` only asks, and a death with the soul (his
+ * offer at death's door, `context.kind` "death") leaves his request pending too; the answer comes as a later `devil_reply`.
+ */
 async function run(c: Command): Promise<Result> {
-  if (!(MANUAL_DEVIL && c.cmd === "deal")) return execute(game, c);
+  if (!MANUAL_DEVIL) return execute(game, c);
   const r = game.step(c);
   return { ok: r.ok, events: r.events, state: { ...game.state, log: [...game.state.log] } };
 }

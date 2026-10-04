@@ -1,9 +1,9 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { createRequire } from "node:module";
-import { GAME_FPS } from "./gameLoop";
-import { WALK, stepVelocity } from "./world/logic";
-import { moveDir } from "./input/dir";
+import { GAME_FPS } from "../gameLoop";
+import { WALK, stepVelocity } from "./logic";
+import { moveDir } from "../input/dir";
 
 // Phaser's own TimeStep (no DOM needed beyond performance.now), driven by hand at a fixed frame rate.
 const require = createRequire(import.meta.url);

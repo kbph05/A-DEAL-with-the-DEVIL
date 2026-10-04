@@ -47,6 +47,18 @@ One JSON-serializable object with everything the engine needs to continue a run 
 
 The `devil_stage_entered`/`devil_stage_left` sync events stay on deal nodes only.
 
+## Death's door (4 Oct)
+
+Big Chungus: "when you die with your soul, the devil should come up and offer for you to continue by forfeiting your soul. you may haggle with the devil for more stuff when you come back too." There is no automatic revival any more.
+
+- **Dying with the soul.** When HP hits 0 while `soul` is 1 (any cause: a fight, a curse, a strike, a deal), `settleHp` sets `GameState.dying` (optional, additive: `{ cause, haggles, standing? }`) and emits `devil_at_death { cause, nodeId }`. The command finishes as it would have, without healing and without firing more curses (those wait for their next trigger). It then ends with `awaiting: { devil }`: the devil's free opener, with `context.kind: "death"`, `context.opening: true` and `playerText: null`. No question is spent. A death on the way out of a node (a `next_node` curse) stops the move.
+- **While dying** only `devil_reply`, `deal` (a haggle with text), `accept`, `refuse` and `look` are legal; anything else is rejected with "you are dying: the devil wants an answer (accept, refuse, or haggle)". `exits` is empty and `Observation.dying` (additive) is true. A haggle counts toward `MAX_DEVIL_QUERIES` like any ask; at most `MAX_ASKS` haggles per death (`asksLeft` counts them); `context.haggle` is the number made so far. The node's own `asks`, `resolved` and `dealsDecided` are left alone. An offer standing at the node when you died comes back after the revival.
+- **`accept`**: his effects apply, then the engine holds the core of the bargain whatever his offer said: **the soul goes (0)** and **HP is at least the old revival's** (`reviveHp(maxHp)` = half max HP, rounded up). So junk, silence or a spiteful reply can neither strand you at 0 HP nor let you keep the soul. A curse or rewrite in the offer applies as usual. Events: `deal_applied`, `curse_added` / `node_rewritten` if any, then `revived { hp }`. The log line starts "soul spent on a revival", as before (the HUD reads it).
+- **`refuse`**: the death stands: `deal_refused`, then `lost { cause }`, ending **`lose`** (you died with your soul). The endings are unchanged: `win` is the final door with the soul, `hell` the final door without it, `lose` any death that ends the run.
+- **A strike at death's door** (gibberish, off-topic text or a jailbreak, and a bad roll): he takes the soul anyway, for **1 HP and no extras**, and the run goes on (`devil_struck`, then `revived { hp: 1 }`). That is never better than his offer, and a typo doesn't end a run: Refuse is how you choose to die.
+- **Dying without the soul** works as before: `lost`, ending `lose`.
+- `Game.answerDevil()` answers a pending request with the game's devil; `execute` (autoplay.ts) calls it after any command that leaves one pending, so bots, the REPL and the pages see his offer. The bot accepts the opener (`botPolicyAtDeath("haggle" | "refuse")` for the other choices). With `--manual-devil` the REPL leaves the death's-door request for you to answer.
+
 ## actions
 
 Every step result carries `actions`: the exact legal next commands, computed by the same rule checks `step` uses (`legalActions(state)` gives the same list for any state). They come in this order:
@@ -91,7 +103,7 @@ The devil is outside the engine; it may be a network call.
 
 1. `step(s, {"cmd":"deal","text":"..."})` returns `awaiting: { devil: request }` and records the request in `state.pending`. The request has the exact body shape `HttpDevil` POSTs (docs/devil-api.md): `{ state, context, playerText }`. `playerText` is the text cut to `MAX_PLAYER_TEXT` (2000) code units; a non-string `text` becomes `null`.
 2. Send the request to any devil and wait.
-3. `step(s, {"cmd":"devil_reply","deal": answer})` runs `sanitizeDeal` on the answer, puts the offer on the table and emits `deal_offered`. **Forced replies:** if the sanitized deal has `forced: true` the devil strikes instead: nothing is put on the table (a standing offer from an earlier haggle is untouched); the HP loss (only HP, at most `MAX_STRIKE_HP` = 8, no curse, rewrite, gold or soul) is applied at once, `devil_struck { dialogue, effects }` is emitted (`effects` = the deltas that landed), the usual death check runs (revival, or `lost` with cause "the devil's wrath"), and the node is **not** resolved. The ask counted as usual (`asks`, `totalAsks`). So after a strike `accept`/`refuse` stay unavailable unless an older offer stands, and `deal` stays legal while asks and questions remain (docs/devil-api.md, "Forced replies"). Junk, `null` and missing answers become the devil's silence. Any other command (except `look`) is rejected with "the devil is still speaking" until the reply arrives.
+3. `step(s, {"cmd":"devil_reply","deal": answer})` runs `sanitizeDeal` on the answer, puts the offer on the table and emits `deal_offered`. **Forced replies:** if the sanitized deal has `forced: true` the devil strikes instead: nothing is put on the table (a standing offer from an earlier haggle is untouched); the HP loss (only HP, at most `MAX_STRIKE_HP` = 8, no curse, rewrite, gold or soul) is applied at once, `devil_struck { dialogue, effects }` is emitted (`effects` = the deltas that landed), the usual death check runs (death's door with the soul, or `lost` with cause "the devil's wrath"), and the node is **not** resolved. The ask counted as usual (`asks`, `totalAsks`). So after a strike `accept`/`refuse` stay unavailable unless an older offer stands, and `deal` stays legal while asks and questions remain (docs/devil-api.md, "Forced replies"). Junk, `null` and missing answers become the devil's silence. Any other command (except `look`) is rejected with "the devil is still speaking" until the reply arrives.
 
 **Run-wide query cap.** Every `deal` that reaches the devil (first asks and haggles, at any node) counts toward `MAX_DEVIL_QUERIES` (10), tracked by the existing `state.totalAsks` (no new state field). When it is spent, `deal` drops out of `actions` and is rejected with "The devil has heard enough from you this run."; an offer already on the table can still be accepted or refused. The separate per-node limit (`MAX_ASKS = 3`) still applies. The devil is told in `context.questionsLeft` (questions left after this one).
 
@@ -109,7 +121,7 @@ Details, the sanitizing rules and the UI flow are in docs/fight.md ("Engine hook
    - `fought` (with the optional `bout: { timeMs, hits, enemy, outcome }`, present only for realtime fights; `describe` then reads "After 12.4 s of fighting you dealt 10 and took 5 (2 hits).")
    - `damaged`
    - the `on_hit` curses, once, if a hit landed
-   - `revived` or `lost`
+   - `devil_at_death` (died with the soul: see "Death's door") or `lost`
    - then `enemy_slain`, the gold and the boss's heal, if the enemy fell
    Any other command (except `look`) is rejected with "the fight is still on; send fight_result".
 
