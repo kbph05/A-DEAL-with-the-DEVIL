@@ -80,7 +80,7 @@ Big Chungus: "when you die with your soul, the devil should come up and offer fo
 - **Nonsense, off-topic text and jailbreaks** anger him as anywhere. A strike (`forced: true`) here means he loses patience and **takes the soul for 1 HP, no extras** (the engine applies that, whatever HP loss you send); otherwise answer with the bare bargain at a worse price.
 - **The engine holds the core.** On accept the soul always goes and the player always wakes with at least half max HP, whatever you sent; a refusal ends the run ("lose"). So a timeout or junk here is safe, and you cannot keep the player dead or alive by mistake.
 
-The StubDevil's version is `deathOffer` in `src/game/devil.ts`. `npm run devil:oai` lets the model write only the words there and keeps the stub's numbers (`DEATH_TASK` in `scripts/oai-devil.ts`).
+The StubDevil's version is `deathOffer` in `src/game/devil.ts`. `npm run devil:oai` lets the model write only the words there and keeps the stub's numbers (`DEATH_TASK` in `server/devil-core.ts`, shared with the Vercel function `api/deal.ts`; `npm run build:api` rebuilds `api/_lib/devil.mjs`).
 
 ## Gold: be stingy, especially early (4 Oct)
 
