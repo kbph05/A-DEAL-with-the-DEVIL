@@ -62,6 +62,13 @@ mapLayer.hidden = true;
 root.append(sceneLayer, mapLayer);
 const session = createSession(params.get("seed") ?? undefined);
 const hud = mountHud(root, { onUseItem: (item) => { if (item.command) void send(item.command); } });
+// Portrait puts the map title and the toast under the HUD's stats, which grow with the devil's line and curse chips:
+// keep --hud-bottom (play.css) on the stats' real bottom edge. A hidden HUD (during a fight) keeps the last value.
+const hudStats = hud.el.querySelector<HTMLElement>(".hud-stats");
+if (hudStats) new ResizeObserver(() => {
+  const b = hudStats.getBoundingClientRect();
+  if (b.height > 0) root.style.setProperty("--hud-bottom", `${Math.round(b.bottom)}px`);
+}).observe(hudStats);
 const mapBtn = button("Map", () => toggleMap(true), "play-mapbtn");
 mapBtn.append(h("span", "key", " (M)"));
 mapBtn.setAttribute("aria-keyshortcuts", "M");
