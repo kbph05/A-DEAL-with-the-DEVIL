@@ -21,6 +21,7 @@ One JSON-serializable object with everything the engine needs to continue a run 
 | `resolved`, `offer`, `asks`, `totalAsks`, `dealsDecided` | node and devil bookkeeping |
 | `ending` | `null`, `"win"`, `"lose"` or `"hell"` |
 | `pending` | the devil request awaiting an answer, or `null` |
+| `pendingFight` | the realtime fight awaiting its result (a `FightRequest`); absent or `null` otherwise. Optional, so older saves stay valid |
 
 `initialState(seed)` makes a new run. Treat states as immutable: `step` always returns a new one.
 
@@ -28,7 +29,7 @@ One JSON-serializable object with everything the engine needs to continue a run 
 
 `step(state, command) → { ok, state, events, actions, awaiting? }` is pure and synchronous. It never mutates its input, does no I/O, and reads no clock or `Math.random`.
 
-- **Commands:** the existing `Command` objects (`{"cmd":"go","n":1}`, `fight`, `rest`, `train` (campfire: one or the other with `rest`), `buy` with an `item`, `deal` with optional `text`, `accept`, `refuse`, `look`), plus `{"cmd":"devil_reply","deal":...}`.
+- **Commands:** the existing `Command` objects (`{"cmd":"go","n":1}`, `fight`, `rest`, `train` (campfire: one or the other with `rest`), `buy` with an `item`, `deal` with optional `text`, `accept`, `refuse`, `look`), plus `{"cmd":"devil_reply","deal":...}`, `{"cmd":"fight","realtime":true}` and `{"cmd":"fight_result",...}` (the realtime fight, below).
 - **Rejection:** a rejected command returns `ok: false`, the input state itself (unchanged), and exactly one `rejected` event. The reasons are the same strings as before.
 - **`look`:** always accepted, including after the run ends and while the devil is pending. It changes nothing.
 
@@ -36,7 +37,7 @@ One JSON-serializable object with everything the engine needs to continue a run 
 
 Every step result carries `actions`: the exact legal next commands, computed by the same rule checks `step` uses (`legalActions(state)` gives the same list for any state). They come in this order:
 
-1. `fight`
+1. `fight`, then `{"cmd":"fight","realtime":true}` (both while an enemy blocks the way)
 2. `rest`
 3. `train`
 4. affordable `buy`s
@@ -44,9 +45,10 @@ Every step result carries `actions`: the exact legal next commands, computed by 
 6. `accept` and `refuse` (when an offer stands)
 7. `go n` (one per exit)
 
-Three special cases:
+Special cases:
 
 - While the devil is pending, `actions` is only `[{"cmd":"devil_reply","deal":null}]`.
+- While a realtime fight is pending, `actions` is only a `fight_result` meaning "nothing happened" (`won: false`, the current `hpLeft` and `enemyHpLeft`, zeros elsewhere). It is always safe to send.
 - When the run is over, it is `[]`.
 - `look` is never listed.
 
@@ -80,6 +82,22 @@ The devil is outside the engine; it may be a network call.
 
 `Game.deal(text)` does all three steps, catching devil errors exactly as before. In the REPL, `--manual-devil` stops after step 1 so you can type the reply yourself.
 
+## The realtime fight round trip
+
+Details, the sanitizing rules and the UI flow are in docs/fight.md ("Engine hookup").
+
+1. `step(s, {"cmd":"fight","realtime":true})` returns `awaiting: { fight: request }` and records the request in `state.pendingFight`. It emits no events and rolls no dice. The request is `{ player: {hp, maxHp, attack}, enemy: {name, hp, maxHp, power, boss}, seed }`, where `seed` is `` `${seed}:${nodeId}:${bout}` ``.
+2. Play the fight (`runFight` in src/fight) and wait.
+3. `step(s, {"cmd":"fight_result","won","hpLeft","timeMs","hitsTaken","damageDealt","enemyHpLeft"})` runs `sanitizeFightResult` against the request and applies the result through the round's events:
+   - `fought`
+   - `damaged`
+   - the `on_hit` curses, once, if a hit landed
+   - `revived` or `lost`
+   - then `enemy_slain`, the gold and the boss's heal, if the enemy fell
+   Any other command (except `look`) is rejected with "the fight is still on; send fight_result".
+
+The plain `{"cmd":"fight"}` is unchanged (one round), so bots, autoplay and the recorded fixtures do not use this path. `Game.fight(true)` and `Game.fightResult(result)` are the wrapper's raw access. In the REPL, the JSON line carries `awaiting.fight` while a fight is pending.
+
 ## Sync hooks
 
 Plan: keep the state client-side and exchange it with the backend only when entering or leaving the devil stage and at the end of the game.
@@ -96,7 +114,7 @@ Plan: keep the state client-side and exchange it with the backend only when ente
 { "ok": true,
   "events": [ { "type": "moved", "from": "a0n0", "to": "a0n1", "kind": "fight", "act": 0 },
               { "type": "enemy_appeared", "enemy": { "name": "cave rat", "hp": 10, "maxHp": 10, "boss": false } } ],
-  "actions": [ { "cmd": "fight" } ],
+  "actions": [ { "cmd": "fight" }, { "cmd": "fight", "realtime": true } ],
   "state": { "v": 1, "seed": "demo", "rng": { "s": 189795653 }, "acts": ["…"],
              "player": { "hp": 30, "maxHp": 30, "gold": 10, "attack": 3, "soul": 1, "act": 0, "nodeId": "a0n1", "log": [] },
              "curses": [], "enemy": { "name": "cave rat", "hp": 10, "maxHp": 10, "power": 2, "boss": false },

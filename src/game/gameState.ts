@@ -5,6 +5,7 @@
 import { ACTS, generateAct, hashSeed, markVisited, rngState, type Act, type MapNode, type RngState } from "../map";
 import type { Curse, Deal, DevilContext } from "./devil";
 import type { EnemyView, Ending, Exit, GameEvent } from "./events";
+import type { FightRequest } from "./fightResult";
 import type { DevilRequest } from "./httpDevil";
 import { newPlayer, normalize, type PlayerState } from "./state";
 
@@ -26,16 +27,23 @@ export const FOES = [["cave rat", "drowned monk", "ash hound"], ["bone mason", "
 export const BOSSES = ["the Gatekeeper", "the Cartographer of Ruin", "the Devil's Left Hand"];
 
 /** An enemy as the engine keeps it (`power` is hidden from the player). */
-export interface Enemy extends EnemyView { power: number }
+export interface Enemy extends EnemyView {
+  power: number;
+  /** Realtime fights started against this enemy so far (the `n` in the fight seed); absent until the first. */
+  bouts?: number;
+}
 
 /**
  * Every input the engine accepts. `devil_reply` answers a pending devil request (see StepResult.awaiting).
  * At a campfire, `rest` (heal) and `train` (+1 attack) are alternatives: either one spends the fire.
+ * `fight` is one round; `fight` with `realtime: true` instead asks the client to play a realtime fight (StepResult.awaiting
+ * `fight`), answered by `fight_result` (untrusted; sanitized, see fightResult.ts).
  */
 export type Command =
-  | { cmd: "look" } | { cmd: "go"; n: number } | { cmd: "fight" } | { cmd: "rest" } | { cmd: "train" }
+  | { cmd: "look" } | { cmd: "go"; n: number } | { cmd: "fight"; realtime?: boolean } | { cmd: "rest" } | { cmd: "train" }
   | { cmd: "buy"; item?: string } | { cmd: "deal"; text?: string } | { cmd: "accept" } | { cmd: "refuse" }
-  | { cmd: "devil_reply"; deal: unknown };
+  | { cmd: "devil_reply"; deal: unknown }
+  | { cmd: "fight_result"; won: unknown; hpLeft: unknown; timeMs?: unknown; hitsTaken?: unknown; damageDealt?: unknown; enemyHpLeft?: unknown };
 
 /**
  * Everything needed to continue a run exactly: `JSON.parse(JSON.stringify(state))` continues identically.
@@ -63,6 +71,8 @@ export interface GameState {
   ending: Ending | null;
   /** Set while the devil has been asked and has not answered: the next command must be `devil_reply`. */
   pending: DevilRequest | null;
+  /** Set while a realtime fight is being played: the next command must be `fight_result`. Absent (or null) otherwise. */
+  pendingFight?: FightRequest | null;
 }
 
 /** What `step` returns. `ok: false` carries exactly one `rejected` event and the input state unchanged. */
@@ -72,8 +82,11 @@ export interface StepResult {
   events: GameEvent[];
   /** The legal next commands (see actions.ts). */
   actions: Command[];
-  /** Present when the engine needs the devil: send this request to a Devil, then step `devil_reply` with its answer. */
-  awaiting?: { devil: DevilRequest };
+  /**
+   * Present when the engine needs something from outside. `devil`: send it to a Devil, then step `devil_reply` with the
+   * answer. `fight`: play it (src/fight `runFight`), then step `fight_result` with the result.
+   */
+  awaiting?: { devil?: DevilRequest; fight?: FightRequest };
 }
 
 /** A new run on `seed`, standing on act 1's entry. */

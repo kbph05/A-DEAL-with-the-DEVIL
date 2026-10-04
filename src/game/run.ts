@@ -54,7 +54,13 @@ export class Game {
 
   look(): Result { return this.run({ cmd: "look" }); }
   go(n: number | string): Result { return this.run({ cmd: "go", n: n as number }); }
-  fight(): Result { return this.run({ cmd: "fight" }); }
+  /** One combat round; or, with `realtime`, start a realtime fight (the state then awaits `fightResult`). */
+  fight(realtime = false): Result { return this.run(realtime ? { cmd: "fight", realtime: true } : { cmd: "fight" }); }
+  /** Report how a realtime fight went (src/fight's FightResult; it is sanitized). */
+  fightResult(result: unknown): Result {
+    const r = (typeof result === "object" && result !== null ? result : {}) as Record<string, unknown>;
+    return this.run({ ...r, cmd: "fight_result", won: r.won, hpLeft: r.hpLeft });
+  }
   rest(): Result { return this.run({ cmd: "rest" }); }
   /** Campfire: +1 attack instead of resting (one or the other). */
   train(): Result { return this.run({ cmd: "train" }); }
@@ -67,7 +73,7 @@ export class Game {
   /** Ask the devil (async: the backend is a network call). Replies, even junk or a throw, become a sanitized offer. */
   async deal(text?: string): Promise<Result> {
     const asked = this.step({ cmd: "deal", text });
-    if (!asked.awaiting) return { ok: asked.ok, events: asked.events, state: snapshot(this.gs.player) };
+    if (!asked.awaiting?.devil) return { ok: asked.ok, events: asked.events, state: snapshot(this.gs.player) };
     const req = structuredClone(asked.awaiting.devil);
     let raw: unknown;
     try { raw = await this.devil.offer(req.state, req.context, req.playerText ?? undefined); } catch { raw = undefined; }

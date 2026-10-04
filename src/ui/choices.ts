@@ -14,8 +14,15 @@ import {
 
 export interface Choices { render(v: View, A: Actions, busy: boolean, end: DealEnd, fire?: FireChoice, strike?: DevilStrike | null): void }
 
+/**
+ * The Fight panel's hooks (ui.ts): `realtime` plays the realtime fight (or resumes a pending one); `quick` resolves it
+ * with the old one-round fights; `showQuick` says whether the quick button is offered (test builds, or after the realtime
+ * fight failed to load).
+ */
+export interface FightHooks { realtime(): void; quick(): void; showQuick(): boolean }
+
 /** `send` runs a command; the wish input is read at click time, so it stays current. */
-export function mountChoices(el: HTMLElement, send: (c: Command) => void): Choices {
+export function mountChoices(el: HTMLElement, send: (c: Command) => void, fight?: FightHooks): Choices {
   const wish = h("input", { id: "wish", class: "wish" });
   wish.placeholder = "e.g. a sharper sword, and I'm not afraid of a curse";
   wish.autocomplete = "off";
@@ -109,8 +116,23 @@ export function mountChoices(el: HTMLElement, send: (c: Command) => void): Choic
   }
 
   function fightPanel(o: View, A: Actions): HTMLElement {
-    return panel("fight", h("p", { class: "muted", text: "Something blocks the way. Beat it to move on." }),
-      o.enemy ? btn(fightLabel(o.enemy), { cmd: "fight" }, A.locked || !A.fight, "choice primary") : h("span"));
+    if (!o.enemy) return panel("fight", h("span"));
+    if (!fight) return panel("fight", h("p", { class: "muted", text: "Something blocks the way. Beat it to move on." }),
+      btn(fightLabel(o.enemy), { cmd: "fight" }, A.locked || !A.fight, "choice primary"));
+    const pending = o.actions.some((c) => c.cmd === "fight_result");
+    const canRt = pending || o.actions.some((c) => c.cmd === "fight" && c.realtime === true);
+    const go = (f: () => void, label: string, off: boolean, cls: string) => {
+      const b = h("button", { text: label, class: cls });
+      b.type = "button"; b.disabled = off; b.onclick = f;
+      return b;
+    };
+    const kids: Node[] = [
+      h("p", { class: "muted", text: `The ${o.enemy.name} blocks the way. Beat it to move on.` }),
+      h("p", { class: "muted fight-help", text: "Keys: WASD or arrows to move, Space to attack, Shift to dash. Touch: stick and buttons on screen." }),
+      go(() => fight.realtime(), pending ? "Resume the fight (realtime)" : "Fight! (realtime)", A.locked || !canRt, "choice primary fight-rt"),
+    ];
+    if (fight.showQuick() && !pending) kids.push(go(() => fight.quick(), "Auto-resolve (quick)", A.locked || !A.fight, "choice fight-quick"));
+    return panel("fight", ...kids);
   }
 
   const dag = mountDag(send);

@@ -29,6 +29,12 @@ async function* randomPlay(seed: string, maxSteps = 300): AsyncGenerator<{ befor
     let cmd = acts[Math.floor(rng() * acts.length)];
     if (cmd.cmd === "deal") cmd = { cmd: "deal", text: ["gold", "I read the fine print", "", "soul"][Math.floor(rng() * 4)] };
     if (cmd.cmd === "devil_reply") { const q = s.pending!; cmd = { cmd: "devil_reply", deal: await devil.offer(q.state, q.context, q.playerText ?? undefined) }; }
+    if (cmd.cmd === "fight_result") { // a realtime fight: won, lost, the listed no-op, or junk
+      const f = s.pendingFight!, k = Math.floor(rng() * 4), hp = 1 + Math.floor(rng() * f.player.hp);
+      if (k === 0) cmd = { cmd: "fight_result", won: true, hpLeft: hp, hitsTaken: f.player.hp - hp, timeMs: 3000, damageDealt: f.enemy.hp, enemyHpLeft: 0 };
+      else if (k === 1) cmd = { cmd: "fight_result", won: false, hpLeft: 0, hitsTaken: 9, timeMs: 5000, damageDealt: 1, enemyHpLeft: f.enemy.hp - 1 };
+      else if (k === 2) cmd = { cmd: "fight_result", won: "yes", hpLeft: NaN, hitsTaken: -4, enemyHpLeft: 1e9 };
+    }
     const before = s;
     const r = step(s, cmd);
     yield { before, cmd, r };
@@ -76,13 +82,14 @@ test("actions: every listed action is accepted; unlisted plausible commands are 
   assert.ok(checked > 1000, `only ${checked} rejections checked`);
 });
 
-test("actions: [] once over, only devil_reply while awaiting; every step result and view carry them", async () => {
+test("actions: [] once over, only devil_reply (or fight_result) while awaiting; every step result and view carry them", async () => {
   for (let i = 0; i < 20; i++) {
     for await (const { r } of randomPlay(`aw-${i}`)) {
       assert.deepEqual(r.actions, legalActions(r.state));
       assert.deepEqual(view(r.state).actions, r.actions);
       if (r.state.ending) assert.deepEqual(r.actions, []);
-      if (r.awaiting) assert.deepEqual(r.actions, [{ cmd: "devil_reply", deal: null }]);
+      if (r.awaiting?.devil) assert.deepEqual(r.actions, [{ cmd: "devil_reply", deal: null }]);
+      if (r.awaiting?.fight) assert.deepEqual(r.actions.map((c) => c.cmd), ["fight_result"]);
     }
   }
 });

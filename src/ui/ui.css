@@ -102,6 +102,12 @@ button.choose-card:disabled:not(.chosen) { border-style: dashed; }
 /* Fight */
 .panel-fight { background: #2a0e0c; border-color: #d0503a; }
 .panel-fight .panel-h { color: #ffb4a4; }
+.panel-fight .fight-help { font-size: 14px; }
+.panel-fight button.fight-rt { width: 100%; }
+.panel-fight button.fight-quick { margin-top: 8px; min-height: 44px; font-size: 15px; font-weight: 500; }
+/* The realtime fight's stage replaces the choices while it runs; Phaser fits its canvas into it (landscape or portrait). */
+.fight-stage { width: 100%; aspect-ratio: 1160 / 820; max-height: 80vh; min-height: 320px; background: #120a0a; border-radius: 8px; overflow: hidden; touch-action: none; }
+.fight-stage[hidden] { display: none; }
 
 /* Where to next: the act's DAG. Edges are an SVG overlay (pointer-events: none) drawn from the live layout. */
 .dag-wrap { margin: 4px 0; }
@@ -162,6 +168,7 @@ pre { margin: 0; padding: 8px; background: #0c0606; border-radius: 6px; overflow
 .diff li { color: #ffd070; } .ok { color: #a0e8a0; } .err { color: #ff9a8a; }
 
 @media (max-width: 800px) {
+  .fight-stage { aspect-ratio: auto; height: min(82vh, 900px); }
   .layout.with-tools { grid-template-columns: 1fr; }
   .lab-cols { grid-template-columns: 1fr; }
   .statbar { grid-template-columns: repeat(3, 1fr); } .statbar .bar { grid-column: 1 / -1; }

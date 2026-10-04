@@ -1,6 +1,6 @@
 # The realtime fight
 
-Fights are a short realtime 2D brawl in a top-down room, not menu choices (Big Chungus). The fight lives in `src/fight/`. It is **not yet wired into the engine or the test UI**; for now it runs on its own on the fight lab page (`/fight.html`, test builds only).
+Fights are a short realtime 2D brawl in a top-down room, not menu choices (Big Chungus). The fight lives in `src/fight/`. Fight and boss nodes in the game play it (see "Engine hookup" below). It also runs on its own on the fight lab page (`/fight.html`, test builds only).
 
 | File | What it is |
 | --- | --- |
@@ -17,7 +17,7 @@ Fights are a short realtime 2D brawl in a top-down room, not menu choices (Big C
 - Pick act 1 to 3 and Boss, then press **Fight**. The stats come prefilled from the engine formulas and you can edit them.
 - When the fight ends, the page shows the `FightResult` JSON and a **Fight again** button.
 - Query string: `?act=2&boss=1&seed=abc&auto=1` (`auto` starts the fight straight away). `&touch=1` / `&touch=0` forces the touch controls on or off.
-- The final build (`npm run build`) does not contain the page or Phaser. `vite.config.ts` adds `fight.html` as an input only in mode `test`.
+- The final build (`npm run build`) does not contain the lab page: `vite.config.ts` adds `fight.html` as an input only in mode `test`. It does contain the fight and Phaser, as their own chunk (about 1.2 MB, 330 kB gzipped) that loads on the first fight, so the page itself stays light (about 50 kB of JS).
 
 ## Controls
 
@@ -103,18 +103,52 @@ interface FightResult {
 - The fight knows nothing about the soul. At 0 HP it simply reports `won: false, hpLeft: 0`, and the engine decides about revival.
 - `options.onDebug(sim)` exposes the live `FightSim` (the lab page and the smoke test use it). `options.touch` forces the touch controls on or off.
 
-## Proposed engine hookup (next step, additive only)
+## Engine hookup (implemented)
 
-The pattern is the same as the devil round trip, so the contract stays additive and the equivalence fixtures stay valid:
+**Status: implemented.** Fight and boss nodes in the game UI now play this fight. The engine side is `src/game/fightResult.ts` plus a few lines in `state-machine.ts` and `actions.ts`; tests are in `src/game/fightResult.test.ts`. It works like the devil round trip, and the JSON contract only grew. A plain `{"cmd":"fight"}` is still the one-round fight that bots, autoplay, the REPL and the 700 recorded runs use, so the equivalence fixtures did not change.
 
-1. **Start.** `{"cmd":"fight","realtime":true}` returns `awaiting: { fight: FightRequest }` and records it in a new `state.pendingFight`. `FightRequest` is `{ player: {hp, maxHp, attack}, enemy: {name, hp, maxHp, power, boss}, seed }`, where `seed` is `` `${state.seed}:${nodeId}:${n}` ``, so a restored state replays the same arena and dice. A plain `{"cmd":"fight"}` stays the one-round fight that bots, the REPL and the 700 recorded runs use.
-2. **Play.** The UI calls `runFight(el, awaiting.fight)`.
-3. **Report.** The UI sends `{"cmd":"fight_result","won":..,"hpLeft":..,"timeMs":..,"hitsTaken":..,"damageDealt":..,"enemyHpLeft":..}`.
-   - The engine sanitizes the result like `sanitizeDeal`: `hpLeft` is clamped to `0..hp before the fight` (a fight never heals), and `enemyHpLeft` to `0..enemy hp before`.
-   - It then applies the result through the existing events: `fought` (dealt and taken), then `enemy_slain` with the gold, the boss heal and the stairs, or `damaged`.
-   - Then it fires `on_hit` curses (once, if `hitsTaken > 0`) and runs `settle()`.
-4. **While a fight is pending**, `actions` is `[{"cmd":"fight_result", ...}]`, `look` still works, and everything else is rejected ("the fight is still on"), just like `devil_reply`.
-5. **Revival.** If `settle()` spends the soul, the enemy stays at `enemyHpLeft` and the engine awaits a fresh fight (a new seed suffix `n`) against it.
+1. **Start.** `{"cmd":"fight","realtime":true}` (only while an enemy blocks the way) returns `awaiting: { fight: FightRequest }` and stores it in `state.pendingFight`. It emits no events and rolls no dice.
+   - `FightRequest` is `{ player: {hp, maxHp, attack}, enemy: {name, hp, maxHp, power, boss}, seed }`. It has the same shape as the fight's `FightInput`, so the UI passes it straight to `runFight`.
+   - `seed` is `` `${state.seed}:${nodeId}:${n}` ``, where `n` counts the bouts against this enemy (`enemy.bouts`: 1, then 2 after a revival...). A saved state replays the same arena and dice.
+2. **While it is pending:**
+   - `actions` is a single `fight_result`, listed as "nothing happened": `{won:false, hpLeft: <player hp>, timeMs:0, hitsTaken:0, damageDealt:0, enemyHpLeft: <enemy hp>}`. It is always safe to send, which makes it the abort.
+   - `look` still works.
+   - Anything else is rejected with "the fight is still on; send fight_result". `fight_result` with no fight on is rejected with "no fight is on; fight with realtime first".
+3. **Play.** The UI calls `runFight(el, awaiting.fight)`.
+4. **Report.** The UI sends `{"cmd":"fight_result","won":..,"hpLeft":..,"timeMs":..,"hitsTaken":..,"damageDealt":..,"enemyHpLeft":..}`, which is the `FightResult` as it is.
+5. **Sanitizing** (`sanitizeFightResult`). The client is never trusted. Junk is treated as "nothing happened", and nothing throws.
+   - `hpLeft` is clamped to `0..player hp at the start`, because a fight never heals. If it is missing, HP is unchanged.
+   - `enemyHpLeft` is clamped to `0..enemy hp at the start`. If it is missing, it is worked out from `damageDealt`; failing that it is 0 when `won === true`, and otherwise unchanged. When `enemyHpLeft` is given, `damageDealt` is ignored and recomputed as the enemy's HP before minus after.
+   - **Outcome:**
+     - **Won** only if `won === true`, the enemy is at 0, and the player is above 0. The sim stops at the first death, so both can't drop.
+     - A claimed win with the enemy still standing, or with the player at 0, is not a win. An enemy that was not beaten keeps at least 1 HP.
+     - **Lost** means the player is at 0.
+     - **Unfinished** means both are still standing (an abort, a crash, later maybe a flee). It is accepted: partial damage sticks and the enemy stays.
+   - `hitsTaken` is clamped to `[1 if any HP was lost else 0, HP lost]`, because every hit does at least 1. `timeMs` is clamped to 0..1 h; it is for information only.
+6. **Applying** goes through the round's own events, in this order:
+   1. `fought { dealt, enemyHp, taken }`
+   2. `damaged` (if HP was lost)
+   3. the `on_hit` curses, if `hitsTaken > 0`. They fire once: a curse is spent when it fires, so "once per hit" would come to the same thing.
+   4. the death check: `revived` or `lost`
+   5. if the enemy fell and the run goes on: `enemy_slain` with the gold roll, and the boss's `healed` (victory)
+7. **Revival.** If the soul pays, the same enemy stays at `enemyHpLeft` and the player wakes at half HP. The state is not awaiting anything: the player starts a new bout (seed `n + 1`), or uses the plain `fight`.
+
+**In the UI** (`src/ui/ui.ts`, `choices.ts`):
+
+- On a fight or boss node, the Fight panel's main button is **Fight! (realtime)**. If a fight is already pending (for example one started from the console), it reads **Resume the fight (realtime)**.
+- Clicking it steps the realtime `fight`, then hides the choices and shows a fight stage in their place, in the "Your choices" card. The stage fits the card's width: landscape on wide screens, portrait with the touch controls below on phones.
+- Then it loads the fight module (a separate, lazily loaded chunk with Phaser), plays it, and steps `fight_result`. The Outcome box shows the events of both steps.
+- While the fight runs, the choices are gone, the active element is blurred (so Space does not press a button), and the dev tools column is `inert`.
+- If the fight module fails to load, the engine gets the "nothing happened" result. The Outcome says why, and the panel then also offers the quick fight.
+- **Auto-resolve (quick)** is a small secondary button, in test builds only. It plays the old one-round fight again and again until the enemy falls, the soul revives you, or the run ends.
+- Test builds expose the live sim as `window.__fightSim` (null between fights).
+
+**Console and REPL:**
+
+- **Console:** `fight(true)` starts a realtime fight and logs the request; `fightResult({...})` reports it.
+- **REPL:**
+  - `--json` takes `{"cmd":"fight","realtime":true}` and `{"cmd":"fight_result",...}`. While a fight is pending, each line carries `awaiting.fight`.
+  - Text mode: `fight realtime` and `result {json}`.
 
 ## Open questions for the designer
 
@@ -125,9 +159,10 @@ The pattern is the same as the devil round trip, so the contract stays additive 
    - more aggressive enemy timing.
 
    Which feel do you want: quick skirmishes, or 10 to 20 s duels?
-2. **Revival mid-fight.** Should a revival resume the same fight (as proposed above), or end it?
-3. **Curses in realtime.** Does `on_hit` fire once per fight or once per hit taken? Any curse ideas that only make sense in realtime (slower dash, a shorter swing, reversed controls for 3 s)?
-4. **Fleeing and timeouts.** Should there be a time limit or an escape? The engine currently forbids leaving a live enemy.
+2. **Revival mid-fight.** Implemented: the same enemy stays at the HP it was left on, and you start another bout yourself. Should it instead resume at once, or end the fight?
+3. **Curses in realtime.** `on_hit` fires once if you were hit at all. Curses are spent when they fire, so once per hit would be the same. Should there be lasting curses that fire on every hit? Any curse ideas that only make sense in realtime (slower dash, a shorter swing, reversed controls for 3 s)?
+4. **Fleeing and timeouts.** Should there be a time limit or an escape? The engine still forbids leaving a live enemy. It already accepts an "unfinished" result: partial damage sticks and the enemy stays. A flee button or a timeout could report that.
 5. **Enemy variety.** Today all enemies of an act share one behaviour. Should the roster names get distinct patterns (rat: fast and weak; hollow knight: slow lunges and a shield)? And should each boss get its own second pattern instead of the shared radial burst?
 6. **Arena.** It is a 720×720 room with one of four pillar layouts picked from the seed (bosses get open or four pillars). Tiled maps or OpenGameArt art later?
 7. **Joystick.** It is hand-written (about 30 lines in `FightScene`) instead of rexrainbow's VirtualJoystick, to avoid a dependency. Fine to keep?
+8. **Quick fight in the final game.** Auto-resolve (the old round-based fight) is offered in test builds only, and as a fallback when the fight fails to load. Should players get it too, for example as an accessibility option?

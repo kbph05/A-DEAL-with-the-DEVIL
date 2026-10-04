@@ -13,6 +13,8 @@ const HELP = [
   "look()            describe where you are and the numbered exits",
   "go(n)             take exit n",
   "fight()           one round against the enemy here",
+  "fight(true)       start a realtime fight instead: logs the request; answer with fightResult({...})",
+  "fightResult(r)    report a realtime fight: {won, hpLeft, timeMs, hitsTaken, damageDealt, enemyHpLeft}",
   "rest()            campfire: heal (or train(): one or the other)",
   "train()           campfire: +1 attack instead of resting",
   "buy(item)         village: 'heal' | 'blade'; well: 'blessing'",
@@ -38,7 +40,13 @@ export function installConsole(target: object = window, session: Session | strin
     help: () => log(HELP),
     look: () => show(game().look()),
     go: (n: number | string) => { const r = game().go(n); show(r); if (r.ok && !game().ending) show(game().look()); },
-    fight: () => { const r = game().fight(); show(r); if (r.ok && !game().ending && !game().observe().enemy) show(game().look()); },
+    fight: (realtime?: boolean) => {
+      const r = game().fight(realtime === true); show(r);
+      const req = game().gameState.pendingFight;
+      if (req) log("realtime fight request (play it, then fightResult({...})):", req);
+      else if (r.ok && !game().ending && !game().observe().enemy) show(game().look());
+    },
+    fightResult: (result: unknown) => { const r = game().fightResult(result); show(r); if (r.ok && !game().ending && !game().observe().enemy) show(game().look()); },
     rest: () => show(game().rest()),
     train: () => show(game().train()),
     buy: (item?: string) => show(game().buy(item)),

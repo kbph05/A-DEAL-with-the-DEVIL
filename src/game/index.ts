@@ -1,5 +1,6 @@
 export { autoplay, simulate, botPolicy, execute, type AutoplayResult, type Command, type Outcome, type Policy, type Tally } from "./autoplay";
 export { sanitizeDeal } from "./deal";
+export { sanitizeFightResult, fightRequest, type FightRequest, type FightOutcome } from "./fightResult";
 export { HttpDevil, DEFAULT_DEVIL_URL, type DevilRequest, type Exchange } from "./httpDevil";
 export { devilFor, setDevil, StubDevil, isGibberish, type Curse, type CurseTrigger, type Deal, type Devil, type DevilContext } from "./devil";
 export { describe, isSyncMarker, type GameEvent, type Result, type Ending } from "./events";

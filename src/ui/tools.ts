@@ -1,6 +1,8 @@
 /** Test-only "Run & dev tools" column: seed, autoplay, raw state, and the devil lab (HTTP backend tester). Loaded by dynamic import in test builds only; final builds tree-shake it out. */
 import { autoplay, sanitizeDeal, setDevil, HttpDevil, DEFAULT_DEVIL_URL, type Exchange } from "../game";
 import type { Session } from "../game/session";
+import type { FightSim } from "../fight";
+import type { UIOptions } from "./ui";
 import { diffDeal } from "./dealDiff";
 
 export interface DevilConfig { mode: "stub" | "http"; url: string }
@@ -22,6 +24,14 @@ export function applyDevilConfig(c: DevilConfig): void {
 }
 /** Call once at boot, before the first game is created. */
 export const applyStoredDevil = (): void => applyDevilConfig(loadDevilConfig());
+
+declare global {
+  /** Test builds: the live simulation of the realtime fight on screen (null between fights), for smoke tests and poking. */
+  interface Window { __fightSim?: FightSim | null }
+}
+
+/** Game UI options in test builds: the quick (turn-based) fight button, and the live fight exposed as `window.__fightSim`. */
+export const uiOptions = (): UIOptions => ({ quickFight: true, onFightDebug: (sim) => { window.__fightSim = sim; } });
 
 const el = <K extends keyof HTMLElementTagNameMap>(tag: K, cls = "", text?: string): HTMLElementTagNameMap[K] => {
   const e = document.createElement(tag); e.className = cls; if (text !== undefined) e.textContent = text; return e;

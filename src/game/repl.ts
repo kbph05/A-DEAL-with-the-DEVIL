@@ -1,16 +1,21 @@
 /**
  * Play the headless engine one command at a time in a terminal: `npm run play [-- seed] [--json] [--state] [--manual-devil]`.
  *
- * Text mode: look | go N | fight | rest | train | buy ITEM | deal [text] | accept | refuse | reply {deal json} | map | new [seed] | help | quit
+ * Text mode: look | go N | fight | fight realtime | result {fight result json} | rest | train | buy ITEM | deal [text] | accept | refuse
+ *            | reply {deal json} | map | new [seed] | help | quit
  *
  * --json: JSON in, JSON out, one object per line (for scripts, jq, or an LLM driving the game).
  *   in:  {"cmd":"go","n":1} | {"cmd":"fight"} | {"cmd":"buy","item":"blade"} | {"cmd":"deal","text":"..."}
  *        | {"cmd":"accept"} | {"cmd":"refuse"} | {"cmd":"rest"} | {"cmd":"train"} | {"cmd":"look"} | {"cmd":"map"}
  *        | {"cmd":"devil_reply","deal":{...}}  (answers a pending devil request; see --manual-devil)
+ *        | {"cmd":"fight","realtime":true}     (starts a realtime fight: the line carries `awaiting: {fight: request}`)
+ *        | {"cmd":"fight_result","won":true,"hpLeft":20,"timeMs":4000,"hitsTaken":2,"damageDealt":10,"enemyHpLeft":0}
+ *                                              (reports it; clamped against the request, docs/fight.md)
  *        | {"cmd":"new","seed":"abc"}            (the same Command shape autoplay uses, plus map/new)
  *   out: {"cmd", "ok", "text":[...], "events", "state", "observation", "map", "ending", "actions", "awaiting"?, "game_state"?}
  *        or {"ok":false,"error":"..."} for unparseable input. Text commands still work and answer in JSON.
- *        `actions` lists the legal next commands; `awaiting` is present while the devil's answer is pending.
+ *        `actions` lists the legal next commands; `awaiting` is present while the devil's answer (`devil`) or a
+ *        realtime fight's result (`fight`) is pending.
  * --state: every report line also carries the full GameState as `game_state` (save it, diff it, replay from it).
  * --manual-devil: `deal` does not call the StubDevil; the line carries `awaiting: {devil: request}` (the HTTP devil
  *   request body, docs/devil-api.md) and the next input must be `devil_reply` with your Deal: drive the devil by hand.
@@ -22,7 +27,7 @@ import { legalActions } from "./actions";
 import { describe, isSyncMarker, type Result } from "./events";
 import { createGame } from "./run";
 
-const HELP = "look | go N | fight | rest | train | buy heal|blade|blessing | deal [text] | accept | refuse | reply {deal} | map | new [seed] | help | quit";
+const HELP = "look | go N | fight | fight realtime | result {fight result} | rest | train | buy heal|blade|blessing | deal [text] | accept | refuse | reply {deal} | map | new [seed] | help | quit";
 const JSON_MODE = argv.includes("--json");
 const WITH_STATE = argv.includes("--state");
 const MANUAL_DEVIL = argv.includes("--manual-devil");
@@ -30,7 +35,7 @@ let seed = argv.slice(2).find((a) => !a.startsWith("--")) ?? "demo";
 let game = createGame(seed);
 
 type Input = Command | { cmd: "map" } | { cmd: "new"; seed?: string } | { cmd: "help" } | { cmd: "quit" };
-const GAME_CMDS = new Set(["look", "go", "fight", "rest", "train", "buy", "deal", "accept", "refuse", "devil_reply"]);
+const GAME_CMDS = new Set(["look", "go", "fight", "rest", "train", "buy", "deal", "accept", "refuse", "devil_reply", "fight_result"]);
 
 /** Text or JSON line -> Input. Throws with a readable message on bad input. */
 function parse(line: string): Input {
@@ -49,8 +54,10 @@ function parse(line: string): Input {
     case "deal": return { cmd: "deal", text: arg || undefined };
     case "new": return { cmd: "new", seed: arg || undefined };
     case "reply": return { cmd: "devil_reply", deal: arg ? JSON.parse(arg) : undefined };
+    case "result": return { cmd: "fight_result", ...(arg ? JSON.parse(arg) as object : {}) } as Input;
     case "exit": return { cmd: "quit" };
-    case "look": case "fight": case "rest": case "train": case "accept": case "refuse": case "map": case "help": case "quit":
+    case "fight": return arg.toLowerCase() === "realtime" ? { cmd: "fight", realtime: true } : { cmd: "fight" };
+    case "look": case "rest": case "train": case "accept": case "refuse": case "map": case "help": case "quit":
       return { cmd: cmd.toLowerCase() } as Input;
     default: throw new Error(`unknown command "${cmd}". ${HELP}`);
   }
@@ -61,10 +68,11 @@ function report(cmd: Input | string, r: Result) {
     const gs = game.gameState;
     console.log(JSON.stringify({ cmd, ok: r.ok, text: r.events.filter((e) => !isSyncMarker(e)).map(describe), events: r.events, state: r.state,
       observation: game.observe(), map: game.map(), ending: game.ending, actions: legalActions(gs),
-      ...(gs.pending ? { awaiting: { devil: gs.pending } } : {}), ...(WITH_STATE ? { game_state: gs } : {}) }));
+      ...(gs.pending ? { awaiting: { devil: gs.pending } } : gs.pendingFight ? { awaiting: { fight: gs.pendingFight } } : {}), ...(WITH_STATE ? { game_state: gs } : {}) }));
   } else {
     for (const e of r.events) if (!isSyncMarker(e)) console.log(describe(e).replace(/^/gm, "  "));
     if (game.gameState.pending) console.log(`  (the devil awaits your answer for him: reply {"dialogue":"...","effects":{...}})\n  request: ${JSON.stringify(game.gameState.pending)}`);
+    if (game.gameState.pendingFight) console.log(`  (a realtime fight is on: answer with result {"won":..,"hpLeft":..,"hitsTaken":..,"enemyHpLeft":..})\n  request: ${JSON.stringify(game.gameState.pendingFight)}`);
     if (game.ending) console.log(`  -- ${game.ending.toUpperCase()} -- type "new" to play again`);
   }
 }

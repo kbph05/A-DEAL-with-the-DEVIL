@@ -8,12 +8,17 @@
  * Asking the devil is a round trip: `deal` returns `awaiting: { devil: request }` and records the request in
  * `state.pending`; the next command must be `{ cmd: "devil_reply", deal }` with whatever the devil answered (it is
  * sanitized here). `look` stays allowed while waiting (it changes nothing); everything else is rejected.
+ *
+ * A realtime fight is the same kind of round trip: `{cmd:"fight", realtime:true}` returns `awaiting: { fight: request }`
+ * (recorded in `state.pendingFight`), and the next command must be `{cmd:"fight_result", ...}` with what the client's
+ * fight reported (sanitized by fightResult.ts). Plain `{cmd:"fight"}` stays the one-round fight.
  */
 import { generateAct, markVisited, nextRandom, rewriteNode } from "../map";
 import { legalActions } from "./actions";
 import { sanitizeDeal } from "./deal";
 import type { Curse, Deal } from "./devil";
 import type { Deltas, GameEvent } from "./events";
+import { fightRequest, sanitizeFightResult } from "./fightResult";
 import {
   BOSSES, FOES, MAX_ASKS, MAX_CURSES, MAX_DEVIL_QUERIES, TRAIN_ATTACK, WARES, currentAct, currentNode, devilContext, enemyView, exitsOf,
   type Command, type Enemy, type GameState, type StepResult,
@@ -27,6 +32,7 @@ export function rejection(s: GameState, cmd: Command): string | null {
   const c = cmd as { cmd: unknown };
   if (c.cmd === "look") return null;
   if (s.pending && c.cmd !== "devil_reply") return "the devil is still speaking";
+  if (s.pendingFight && c.cmd !== "fight_result") return "the fight is still on; send fight_result";
   const over = s.ending ? `the run is over (${s.ending}); start a new game` : null;
   switch (cmd.cmd) {
     case "go": {
@@ -64,6 +70,7 @@ export function rejection(s: GameState, cmd: Command): string | null {
     }
     case "accept": case "refuse": return over ?? (s.offer ? null : "no offer on the table; deal()");
     case "devil_reply": return over ?? (s.pending ? null : "nobody asked the devil anything; deal() first");
+    case "fight_result": return over ?? (s.pendingFight ? null : "no fight is on; fight with realtime first");
     default: return `unknown command ${JSON.stringify(c.cmd)}`;
   }
 }
@@ -79,7 +86,14 @@ export function step(state: GameState, cmd: Command): StepResult {
   const d = clone(state), ev: GameEvent[] = [];
   switch (cmd.cmd) {
     case "go": go(d, ev, goIndex(cmd.n)); break;
-    case "fight": fight(d, ev); break;
+    case "fight":
+      if (cmd.realtime === true) { // the realtime round trip: no dice used here, the client plays it out
+        const e = d.enemy!;
+        e.bouts = (e.bouts ?? 0) + 1;
+        d.pendingFight = fightRequest(d, e, e.bouts);
+      } else fight(d, ev);
+      break;
+    case "fight_result": fightResult(d, ev, cmd); break;
     case "rest":
       d.resolved = true;
       healBy(d, ev, Math.ceil(d.player.maxHp * 0.4), "the campfire");
@@ -111,7 +125,8 @@ export function step(state: GameState, cmd: Command): StepResult {
   return { ok: true, state: d, events: ev, actions: legalActions(d), ...awaitingOf(d) };
 }
 
-const awaitingOf = (s: GameState): Pick<StepResult, "awaiting"> => (s.pending ? { awaiting: { devil: clone(s.pending) } } : {});
+const awaitingOf = (s: GameState): Pick<StepResult, "awaiting"> =>
+  s.pending ? { awaiting: { devil: clone(s.pending) } } : s.pendingFight ? { awaiting: { fight: clone(s.pendingFight) } } : {};
 
 // ---- the rules (each mutates the draft only) ---------------------------------------------------------------------
 
@@ -221,6 +236,33 @@ function fight(d: GameState, ev: GameEvent[]): void {
   ev.push({ type: "fought", dealt, enemyHp: e.hp, taken }, { type: "damaged", amount: taken, source: e.name, hp: d.player.hp });
   fire(d, ev, "on_hit");
   settleHp(d, ev, e.name);
+}
+
+/**
+ * Apply a realtime fight's (sanitized) result through the same events as a round: `fought`, `damaged`, the `on_hit`
+ * curses (once if any hit landed: curses are spent when they fire, so once per hit would be the same), the death check
+ * (revival keeps the enemy, at the HP it was left on, for another fight), then, if the enemy fell, `enemy_slain`, gold
+ * and the boss's victory heal. An unfinished fight just leaves both sides where they were.
+ */
+function fightResult(d: GameState, ev: GameEvent[], report: unknown): void {
+  const req = d.pendingFight!, e = d.enemy!;
+  d.pendingFight = null;
+  const r = sanitizeFightResult(report, req);
+  const taken = req.player.hp - r.hpLeft;
+  e.hp = r.enemyHpLeft;
+  ev.push({ type: "fought", dealt: r.damageDealt, enemyHp: e.hp, taken });
+  if (taken > 0) {
+    hurt(d.player, taken);
+    ev.push({ type: "damaged", amount: taken, source: e.name, hp: d.player.hp });
+  }
+  if (r.hitsTaken > 0) fire(d, ev, "on_hit");
+  settleHp(d, ev, e.name);
+  if (d.ending || r.outcome !== "won") return;
+  const gold = e.boss ? 12 + roll(d, 6) : 4 + roll(d, 5) + d.player.act;
+  addGold(d.player, gold);
+  d.enemy = null; d.resolved = true;
+  ev.push({ type: "enemy_slain", name: e.name, gold, boss: e.boss });
+  if (e.boss) healBy(d, ev, 10, "victory");
 }
 
 function buy(d: GameState, ev: GameEvent[], name: string): void {

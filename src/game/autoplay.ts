@@ -16,7 +16,8 @@ export async function execute(g: Game, c: Command): Promise<Result> {
   switch (c.cmd) {
     case "look": return g.look();
     case "go": return g.go(c.n);
-    case "fight": return g.fight();
+    case "fight": return g.fight(c.realtime === true);
+    case "fight_result": return g.fightResult(c);
     case "rest": return g.rest();
     case "train": return g.train();
     case "buy": return g.buy(c.item);

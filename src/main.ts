@@ -12,7 +12,7 @@ async function main() {
   if (tools) tools.applyStoredDevil(); // before the first game is created: a game keeps the devil it starts with
   else if (import.meta.env.VITE_DEVIL_URL) setDevil(new HttpDevil(import.meta.env.VITE_DEVIL_URL)); // else: StubDevil
   const session = createSession(seed);
-  const ui = mountUI(document.getElementById("app")!, session);
+  const ui = mountUI(document.getElementById("app")!, session, tools ? tools.uiOptions() : {});
   if (tools) {
     tools.mountTools(ui.layout, session);
     (await import("./game/console")).installConsole(window, session); // same Game instance as the UI

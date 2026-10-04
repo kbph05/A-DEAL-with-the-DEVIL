@@ -23,8 +23,8 @@ test("MAX_DEVIL_QUERIES is 10 and questionsLeft counts down from it", () => {
 test("the devil's context says how many questions are left after this one", () => {
   const s = onDeal("q");
   const r = step(s, { cmd: "deal", text: "gold" });
-  assert.equal(r.awaiting!.devil.context.askIndex, 1);
-  assert.equal(r.awaiting!.devil.context.questionsLeft, MAX_DEVIL_QUERIES - 1);
+  assert.equal(r.awaiting!.devil!.context.askIndex, 1);
+  assert.equal(r.awaiting!.devil!.context.questionsLeft, MAX_DEVIL_QUERIES - 1);
 });
 
 test("run-wide cap: the 11th deal is not legal and is rejected with the reason; an offer on the table can still be decided", async () => {
