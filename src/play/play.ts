@@ -18,7 +18,7 @@ import { paintIcon, type IconKey } from "../mapscene/icons";
 import { effectChips, curseText, eventText, kindLookup, lastStrike, outcomeEvents, questionsText, restHint, rewriteText } from "../ui/logic";
 import { mountScene, sceneById, type SceneHandle, type SceneZone, type WorldDebug } from "../world";
 import { shopPrompt } from "../world/shopZone";
-import { CLOSE_DEVIL, LOCAL, OPEN_DEVIL, arrived, flow, setLocal, wantsOpener, wellChoice, wishToSend, type Flow, type Local } from "./flow";
+import { CLOSE_DEVIL, LOCAL, OPEN_DEVIL, arrived, flow, setLocal, toastEvents, wantsOpener, wellChoice, wishToSend, type Flow, type Local } from "./flow";
 import wellArt from "../../assets/well.png";
 import { mountDevilArt } from "./devilArt";
 import { POSE_MS, devilPose } from "./devilPose";
@@ -177,12 +177,13 @@ devil.addEventListener("focusout", (e) => { if (e.target instanceof HTMLInputEle
 
 function patch(p: Partial<Local>): void { local = setLocal(local, session.game().view().nodeId, p); render(); }
 
-const ARRIVAL_EVENTS = new Set<string>(["moved", "devil_appears", "enemy_appeared", "act_advanced", "looked", "started"]);
+/** The command whose events are being emitted (send), for the toast: null for arrivals and fight results. */
+let emitting: Command["cmd"] | null = null;
 
-function say(events: GameEvent[]): void {
-  // The devil's own words are in his overlay; the toast carries everything else (and a lone rejection).
-  // No arrival popups (kbph): the scene itself says where you are and who's there.
-  const shown = outcomeEvents(events).filter((e) => !ARRIVAL_EVENTS.has(e.type) && e.type !== "deal_offered" && e.type !== "devil_struck" && (e.type !== "rejected" || events.length === 1));
+function say(events: GameEvent[], cmd: Command["cmd"] | null = null): void {
+  // Only the answer to a menu choice, or a lone rejection (toastEvents, flow.ts): no popup when a scene opens or a
+  // fight ends (kbph). The devil's own words are in his overlay; HP and gold changes show on the HUD.
+  const shown = outcomeEvents(toastEvents(cmd, events));
   const kindOf = kindLookup(session.game().view().map);
   const text = shown.map((e) => eventText(e, kindOf)).filter(Boolean).join(" ");
   if (!text) return;
@@ -202,7 +203,8 @@ async function send(c: Command): Promise<void> {
   let events: GameEvent[] = [];
   try { events = (await execute(g, c)).events; } finally { local = { ...local, busy: null }; }
   if (session.game() !== g) return;
-  session.emit(events);
+  emitting = c.cmd;
+  try { session.emit(events); } finally { emitting = null; }
 }
 
 session.subscribe((events) => {
@@ -216,7 +218,7 @@ session.subscribe((events) => {
     if (e.type === "deal_offered" || e.type === "devil_struck") pose.scorn = false;
   }
   log = log.slice(0, 200);
-  say(events);
+  say(events, emitting);
   render();
 });
 

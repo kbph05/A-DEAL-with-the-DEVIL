@@ -148,3 +148,23 @@ export function wishToSend(text: string, opening: boolean | undefined): string |
   const t = text.trim();
   return t || opening === true ? t : null;
 }
+
+/** The commands whose answer the toast shows: the player's own choice in a menu (a stall, the campfire, the well, the devil's offer). */
+const TOAST_COMMANDS: ReadonlySet<Command["cmd"]> = new Set<Command["cmd"]>(["buy", "rest", "train", "accept", "refuse"]);
+/** Never toasted (kbph, 4 Oct): arrivals (the scene says where you are), fight results (the HUD shows HP and gold), the
+ *  devil's own words (his overlay) and the ending (its card). */
+const NEVER_TOASTED: ReadonlySet<GameEvent["type"]> = new Set<GameEvent["type"]>([
+  "started", "looked", "moved", "act_advanced", "enemy_appeared", "devil_appears", "devil_stage_entered", "devil_stage_left",
+  "fought", "enemy_slain", "revived", "deal_offered", "devil_struck", "won", "hell", "lost",
+]);
+
+/**
+ * What the play page's toast shows for the events one command produced (`cmd` null: not a command the player gave in
+ * a menu, e.g. a fight's result or an arrival). A lone engine rejection always shows; otherwise only the answer to a
+ * menu choice (Bought …, a rest, a sharpened weapon, a deal accepted or refused), never a popup on a scene change.
+ */
+export function toastEvents(cmd: Command["cmd"] | null, events: readonly GameEvent[]): GameEvent[] {
+  if (events.length === 1 && events[0].type === "rejected") return [...events];
+  if (cmd === null || !TOAST_COMMANDS.has(cmd)) return [];
+  return events.filter((e) => !NEVER_TOASTED.has(e.type) && e.type !== "rejected");
+}
