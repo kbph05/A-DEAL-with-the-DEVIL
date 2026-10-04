@@ -1,5 +1,5 @@
 /**
- * The play page (`/play.html`, docs/play.md): the game as one screen. The scene for the current node (the village to
+ * The play page (`/`, index.html, docs/play.md): the game as one screen. The scene for the current node (the village to
  * walk and shop in, the forest path for fights, a dim backdrop with a panel for campfires and wells), the HUD over it,
  * the act map when it is open or forced, the devil's full-screen overlay, and the ending card. Every engine command
  * goes through the one shared `Session`; what is on screen is derived from `flow(view, local)` (flow.ts) on each render.

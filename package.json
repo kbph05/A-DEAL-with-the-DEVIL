@@ -5,7 +5,8 @@
   "type": "module",
   "scripts": {
     "dev": "vite --mode test",
-    "game": "vite --mode test --open /play.html",
+    "game": "vite --mode test --open /",
+    "classic": "vite --mode test --open /classic.html",
     "world": "vite --mode test --open /world.html",
     "map": "vite --mode test --open /map.html",
     "build": "tsc && vite build",
@@ -13,7 +14,7 @@
     "preview": "vite preview",
     "preview:test": "vite preview --outDir dist-test",
     "build:game": "npm run build:test",
-    "preview:game": "vite preview --outDir dist-test --open /play.html",
+    "preview:game": "vite preview --outDir dist-test --open /",
     "mock:devil": "tsx scripts/mock-devil-server.ts",
     "test": "tsx --test src/**/*.test.ts tools/*.test.ts",
     "play": "tsx src/game/repl.ts",

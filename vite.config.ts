@@ -6,9 +6,9 @@ import { encryptedAssets } from "./tools/vite-plugin-encrypted-assets.ts";
 // The realtime fight (src/fight, with Phaser: about 1.2 MB) is part of the game and loads lazily on the first fight, as
 // its own chunk, so the page itself stays light; hence the higher chunk-size warning limit in both modes. Test builds
 // (mode "test": `npm run dev`, `npm run game`, `npm run build:test`) also ship the lab pages (fight.html,
-// world.html, hud.html, map.html) and the play page, play.html (docs/play.md); the final build has the single entry
-// index.html, so the labs and the play page are not in dist/ (nor are the dev tools:
-// see src/main.ts).
+// world.html, hud.html, map.html) and the old DOM UI, classic.html (src/main.ts, with its dev tools). The entry
+// index.html is the play page (docs/play.md) in every mode; the final build has only that entry, so the labs and
+// the classic UI are not in dist/ (nor are the test-only flags: see src/play/play.ts).
 //
 // Private art hook (docs/world.md): the files in the gitignored public/assets/private/ (and its subfolders, e.g.
 // scenes/<id>/background.png) are listed at startup and baked in as __PRIVATE_ASSETS__ (paths relative to that
@@ -28,5 +28,5 @@ const plugins = [encryptedAssets()];
 const phaserChunk = { codeSplitting: { groups: [{ name: "phaser", test: /[\\/]node_modules[\\/]phaser[\\/]/ }] } };
 
 export default defineConfig(({ mode }) => (mode === "test"
-  ? { define, plugins, build: { chunkSizeWarningLimit: 1400, rolldownOptions: { input: { index: "index.html", fight: "fight.html", world: "world.html", hud: "hud.html", map: "map.html", play: "play.html" }, output: phaserChunk } } }
+  ? { define, plugins, build: { chunkSizeWarningLimit: 1400, rolldownOptions: { input: { index: "index.html", classic: "classic.html", fight: "fight.html", world: "world.html", hud: "hud.html", map: "map.html" }, output: phaserChunk } } }
   : { define, plugins, build: { chunkSizeWarningLimit: 1400 } }));

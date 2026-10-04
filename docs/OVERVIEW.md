@@ -6,19 +6,19 @@ Writing code with an AI assistant? Give it this page first. Then name the row of
 
 ## 1. What runs where
 
-**The game is `play.html`, started with `npm run game`.** It is in test builds only for now. The final build entry is still `index.html` (the plain DOM front end in `src/ui/`). [play.md](play.md), "Making it the main build", says how to swap them.
+**The game is the play page, `index.html` (`/`), started with `npm run game`, and it is the production build's entry.** The plain DOM front end in `src/ui/` is `classic.html`, in test builds only. See [play.md](play.md).
 
 | Command or page | What it is | Entry file |
 | --- | --- | --- |
-| `npm run game` (`/play.html`) | **The game**: village, forest fights, map, HUD, devil overlay, ending card. | `src/play/play.ts` |
-| `npm run dev` (`/index.html`) | Old DOM front end plus dev tools (Devil lab, autoplay, F12 console). Also the **final build entry**. | `src/main.ts` |
+| `npm run game` (`/`, `index.html`) | **The game**: village, forest fights, map, HUD, devil overlay, ending card. | `src/play/play.ts` |
+| `npm run classic` (`/classic.html`) | Old DOM front end plus dev tools (Devil lab, autoplay, F12 console). Test builds only. | `src/main.ts` |
 | `npm run world` (`/world.html`) | World lab: the village or forest scene on its own. | `src/world/dev.ts` |
 | `/fight.html` | Fight lab: the realtime fight on its own. | `src/fight/dev.ts` |
 | `npm run map` (`/map.html`) | Map lab: the act map on a real engine run. | `src/mapscene/dev.ts` |
 | `/hud.html` | HUD lab: the HUD with buttons that step a real run. | `src/hud/dev.ts` |
-| `npm run build` | **Final build** into `dist/`: `index.html` only, no labs, no dev tools. | `index.html` |
-| `npm run build:test` / `npm run build:game` | Test build into `dist-test/`: all pages, including the game. | `vite.config.ts` |
-| `npm run preview` / `preview:test` / `preview:game` | Serve a finished build. `preview:game` opens `/play.html`. | none |
+| `npm run build` | **Production build** into `dist/`: the play page (`index.html`) only, no labs, no classic UI, no test flags. | `index.html` |
+| `npm run build:test` / `npm run build:game` | Test build into `dist-test/`: all pages (play, classic, labs). | `vite.config.ts` |
+| `npm run preview` / `preview:test` / `preview:game` | Serve a finished build. `preview:game` opens `/`. | none |
 | `npm run mock:devil` | Fake devil backend on `localhost:8787/deal`. | `scripts/mock-devil-server.ts` |
 | `npm test` | All unit tests. | `src/**/*.test.ts`, `tools/*.test.ts` |
 | `npm run fixtures` | Re-record the engine fixtures. Rare. See section 4. | `src/game/__fixtures__/generate.ts` |

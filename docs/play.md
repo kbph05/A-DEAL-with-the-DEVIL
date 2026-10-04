@@ -1,4 +1,4 @@
-# The play page (`src/play/`, `/play.html`)
+# The play page (`src/play/`, `/`, `index.html`)
 
 The game as one screen: the scene for the current node, the HUD over it, the act map when it is open or forced, the devil's full-screen overlay, and an ending card. It strings together the pieces that already existed on their own lab pages: the world scene (docs/world.md), the forest fight (docs/fight.md), the map scene (docs/mapscene.md) and the HUD (docs/hud.md). Every engine command goes through one shared `Session` (src/game/session.ts), as in the DOM UI.
 
@@ -8,14 +8,16 @@ kbph asked for it (4 Oct): "create a button that opens the map and allows the pl
 
 | Command | What it does |
 | --- | --- |
-| `npm run game` | Dev server (test mode) that opens `/play.html`. |
-| `npm run build:game` / `npm run preview:game` | The test build into `dist-test/`, then serve it and open `/play.html`. |
-| `npm run world` | The world lab (`/world.html`), which `npm run game` used to open. |
+| `npm run game` (or `npm run dev`) | Dev server (test mode) that opens `/`, the play page. |
+| `npm run build` / `npm run preview` | **The production build** into `dist/`: the play page as the site's entry (`index.html`), nothing else. |
+| `npm run build:game` / `npm run preview:game` | The test build into `dist-test/`, then serve it and open `/`. |
+| `npm run classic` | The old DOM UI with its dev tools (`/classic.html`, test builds only). |
+| `npm run world` | The world lab (`/world.html`). |
 
 Query string:
 
 - `?seed=abc` fixes the run's seed.
-- `?god=1` (test builds only) plays fights with 9999 HP and 99 attack. Only the request handed to the fight is changed. The engine's `sanitizeFightResult` clamps the reported HP back to your real HP, so a god fight costs nothing and changes nothing else. A final build ignores the flag.
+- `?god=1` (test builds only) plays fights with 9999 HP and 99 attack. Only the request handed to the fight is changed. The engine's `sanitizeFightResult` clamps the reported HP back to your real HP, so a god fight costs nothing and changes nothing else. The production build ignores the flag (the code is compiled out, `import.meta.env.MODE`).
 
 The devil is the StubDevil, or the HTTP devil when the build sets `VITE_DEVIL_URL` (the same switch as `src/main.ts`).
 
@@ -84,27 +86,20 @@ A property test plays 150 random legal runs on the real engine. At every state i
 | `flow.test.ts` | Its tests. |
 | `play.ts` | The page: mounts the layers, runs commands through the session, renders from `flow`. |
 | `play.css` | The page's styles. Portrait screens keep the prompt clear of the HUD's item column and put the map title and toast under the stats. Short landscape screens (a turned phone) put the map title under the stats on the left, off your node. |
-| `/play.html` | The entry. Test builds only (`vite.config.ts` lists it in mode `test`). |
+| `/index.html` | The entry, in production and test builds alike (it loads `play.ts`). The old `play.html` is gone; the old DOM UI is `classic.html`. |
 
 Test builds expose `window.__play`: `{ session, flow(), local(), view(), map(), zone(), toast(), send(cmd) }`. `map()` is the map scene's `debug()` while it is up.
 
 The visual check (Playwright) plays seed `play-8` from the village through a fight, a campfire, a deal node and a well, at 1366×768 and 390×844, with `?god=1`. A second run loses a fight on purpose: the revival, "Fight on", death, the ending card and Play again.
 
-## Making it the main build (kbph)
+## The main build (done)
 
-The final build (`npm run build`) still has the single entry `index.html`, the DOM UI. To ship the play page instead, point `index.html` at it. Replace its body with:
+`index.html` is the play page: it mounts `src/play/play.ts` into `<main id="play">`. `npm run build` therefore ships the play flow as the site's entry, and `dist/` holds only that page, its CSS, the main chunk and the lazily loaded fight chunk (Phaser).
 
-```html
-<main id="play" aria-label="A DEAL with the DEVIL"></main>
-<script type="module" src="/src/play/play.ts"></script>
-```
-
-That is the whole swap. The rest follows from it:
-
-- The lab flags (`?god=1`, `window.__play`) are behind `import.meta.env.MODE === "test"`, so the final build drops them.
-- `VITE_DEVIL_URL` picks the HTTP devil, as before.
-- The DOM UI stays in `src/ui/`. It is still reachable in test builds if you keep it under another page name, for example by copying the old `index.html` to `ui.html` and adding it to the test inputs in `vite.config.ts`.
-- The play page doesn't load the test UI's dev tools (the console commands and the devil lab).
+- The test-only parts are behind `import.meta.env.MODE === "test"` and are compiled out of `dist/`: `?god=1` and `window.__play`. The lab pages (fight, world, hud, map) are test inputs only, so they are not in `dist/` either. Check with `grep -rl "__play\|god" dist/`, which should print nothing.
+- `VITE_DEVIL_URL` picks the HTTP devil (`VITE_DEVIL_URL=https://example.com/deal npm run build`); without it the StubDevil plays.
+- The old plain-DOM UI is `classic.html` (`src/main.ts`, `src/ui/`), listed in the test inputs of `vite.config.ts`: `npm run classic`, or `/classic.html` in `dist-test/`. It is not in the production build. Its dev tools (console commands, devil lab) stay with it.
+- The play page does not load the DOM UI's dev tools.
 
 ## Not done yet
 
