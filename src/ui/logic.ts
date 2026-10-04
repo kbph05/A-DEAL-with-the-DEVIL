@@ -153,14 +153,23 @@ export function nodeState(n: Pick<MapNodeView, "id" | "current" | "visited">, ne
 const DAG_WORD: Record<DagKind, string> = { ...KIND_WORD, stairs: "Stairs" };
 export const dagWord = (k: DagKind): string => DAG_WORD[k];
 
-function dagLabel(kind: DagKind, id: string, state: DagState, rewritten: boolean, then: Kind[], lock: string | null): string {
+/** Where a node stands among the others in its row, in words ("on the left"), so two of a kind can be told apart without ids. "" when it is alone. */
+export function placeWord(i: number, count: number): string {
+  if (count <= 1) return "";
+  if (count === 2) return i === 0 ? "on the left" : "on the right";
+  if (count === 3) return ["on the left", "in the middle", "on the right"][i];
+  if (count === 4) return ["on the far left", "left of centre", "right of centre", "on the far right"][i];
+  return `${i + 1} of ${count} from the left`;
+}
+
+function dagLabel(kind: DagKind, id: string, state: DagState, rewritten: boolean, then: Kind[], lock: string | null, place = ""): string {
   const word = kind.toLowerCase(), star = rewritten ? " (rewritten by the devil)" : "";
   if (kind === "stairs") return state === "next" ? `Go down the stairs to the next act${lock ? `. ${lock}` : ""}` : "Stairs to the next act, not reachable yet";
-  const here = id === "final" ? "the final door" : `${word} ${id}`;
+  const here = id === "final" ? "the final door" : `${word}${place ? ` ${place}` : ""}`; // never the node id: it means nothing to the player
   if (state === "current") return `You are here: ${here}${star}`;
   if (state === "visited") return `${here}, visited${star}`;
   if (state === "far") return `${here}, not reachable yet${star}`;
-  return `Go to ${id === "final" ? "the final door" : here}${then.length ? `, then ${then.join(" or ")}` : ""}${star}${lock ? `. ${lock}` : ""}`;
+  return `Go to ${here}${then.length ? `, then ${then.join(" or ")}` : ""}${star}${lock ? `. ${lock}` : ""}`;
 }
 
 /**
@@ -175,10 +184,10 @@ export function dagModel(o: Observation, map: MapView, busy = false, legal?: rea
   const all = [...nodes.keys(), ...(map.final ? [] : [STAIRS_ID])];
   const nextIds = new Set(all.filter((id) => exitNumber(o, map, id) !== null));
   const bossHere = nodes.get(o.nodeId)?.kind === "boss";
-  const mk = (n: MapNodeView): DagNode => {
+  const mk = (n: MapNodeView, place = ""): DagNode => {
     const state = nodeState(n, nextIds);
     const num = state === "next" ? exitNumber(o, map, n.id) : null, why = state === "next" ? off(num) : null;
-    return { id: n.id, kind: n.kind, state, rewritten: n.rewritten, n: num, disabled: why, label: dagLabel(n.kind, n.id, state, n.rewritten, afterKinds(map, n.id), why) };
+    return { id: n.id, kind: n.kind, state, rewritten: n.rewritten, n: num, disabled: why, label: dagLabel(n.kind, n.id, state, n.rewritten, afterKinds(map, n.id), why, place) };
   };
   const top: DagNode = map.final ? mk(map.final) : {
     id: STAIRS_ID, kind: STAIRS_ID, state: bossHere ? "next" : "far", rewritten: false, n: bossHere ? 1 : null,
@@ -188,7 +197,7 @@ export function dagModel(o: Observation, map: MapView, busy = false, legal?: rea
   for (const n of nodes.values()) for (const t of n.next) edges.push([n.id, t]);
   // Lay each layer out to avoid crossing edges (kbph: "the graph should be planar").
   const { order } = planarOrder(map.layers.map((l) => l.nodes.map((n) => n.id)), edges);
-  const rows = [[top], ...order.map((ids) => ids.map((id) => mk(nodes.get(id)!))).reverse()];
+  const rows = [[top], ...order.map((ids) => ids.map((id, i) => mk(nodes.get(id)!, placeWord(i, ids.length)))).reverse()];
   const boss = [...nodes.values()].find((n) => n.kind === "boss");
   if (boss) edges.push([boss.id, top.id]);
   return { rows, edges, lock };

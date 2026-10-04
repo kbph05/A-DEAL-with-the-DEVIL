@@ -44,12 +44,12 @@ map.debug();                            // test hook: { dag, layout, screenOf(id
 
 **Input.**
 
-- **Tap or click** a pulsing node to move. Tapping any other node shows its label for a moment ("fight a1n4, not reachable yet").
+- **Tap or click** a pulsing node to move. Tapping any other node shows its label for a moment ("fight on the left, not reachable yet": never a node id; siblings in a row are told apart by place).
 - **Scroll** with drag, touch-drag or the mouse wheel. A press that travels more than 7 px is a drag, never a tap.
 - **On every update**, the camera scrolls to a point between the current node and the next nodes.
 - **Hover** shows a tooltip with the node's label.
 
-**Accessibility.** The canvas is backed by a visually hidden `<nav aria-label="Map">`. It holds a heading ("Map, act 2"), where you are ("You are here: village a1n0"), and one `<button>` per next node, labelled like the DAG ("Go to fight a1n2, then campfire or village").
+**Accessibility.** The canvas is backed by a visually hidden `<nav aria-label="Map">`. It holds a heading ("Map, act 2"), where you are ("You are here: village"), and one `<button>` per next node, labelled like the DAG ("Go to fight on the left, then campfire or village").
 
 - **Locked nodes** stay focusable with `aria-disabled`, and their label carries the reason.
 - **Tab** reaches the list, which uses a roving tabindex.

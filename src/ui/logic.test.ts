@@ -3,7 +3,7 @@ import type { MapView, Observation } from "../game";
 import assert from "node:assert/strict";
 import { createGame, describe } from "../game";
 import type { Command, GameEvent } from "../game";
-import { availableActions, blurbOf, chooseCards, fireChoice, type FireChoice, dealEnd, devilPhase, askBlockReason, haggleText, questionsText, panelKinds, shopItems, buyLabel, curseText, effectChips, eventClass, afterKinds, dagModel, exitNumber, fightLabel, lockReason, moveLock, nodeState, nodeTitle, capitalize, eventText, kindLookup, rejectedText, rewriteText, outcomeEvents, pct, STAIRS_ID, topId } from "./logic";
+import { availableActions, blurbOf, chooseCards, fireChoice, type FireChoice, dealEnd, devilPhase, askBlockReason, haggleText, questionsText, panelKinds, shopItems, buyLabel, curseText, effectChips, eventClass, afterKinds, dagModel, exitNumber, fightLabel, lockReason, moveLock, nodeState, nodeTitle, placeWord, capitalize, eventText, kindLookup, rejectedText, rewriteText, outcomeEvents, pct, STAIRS_ID, topId } from "./logic";
 import { FULL_HEALTH, pointlessBuy } from "./shopGuard";
 import { diffDeal } from "./dealDiff";
 import { lastStrike, STRIKE_HEAD } from "./logic";
@@ -131,8 +131,9 @@ test("dagModel: rows top to bottom, node states, edges, labels", () => {
   assert.deepEqual([by.b.n, by.c.n, by.d.n, by.a.n], [1, 2, null, null]);
   assert.equal(by.c.rewritten, true);
   assert.equal(by.b.disabled, null);
-  assert.equal(by.b.label, "Go to fight b, then deal");
-  assert.equal(by.a.label, "You are here: deal a");
+  assert.equal(by.b.label, "Go to fight on the left, then deal");
+  assert.equal(by.c.label, "Go to fight on the right, then campfire (rewritten by the devil)");
+  assert.equal(by.a.label, "You are here: deal");
   assert.deepEqual(d.edges.filter(([f]) => f === "a"), [["a", "b"], ["a", "c"]]);
   assert.ok(d.edges.some(([f, t]) => f === "x" && t === STAIRS_ID), "boss -> stairs edge");
   assert.equal(d.lock, null);
@@ -553,4 +554,18 @@ test("DOM shop: the Heal card is disabled at full HP with the reason, enabled wh
   assert.deepEqual([bladeFull.item, bladeFull.affordable, bladeFull.reason], ["blade", true, null], "the blade is not guarded");
   const [healHurt] = at(o.state.maxHp - 1);
   assert.deepEqual([healHurt.affordable, healHurt.reason], [true, null]);
+});
+
+test("placeWord tells siblings apart without ids", () => {
+  assert.equal(placeWord(0, 1), "");
+  assert.deepEqual([0, 1].map((i) => placeWord(i, 2)), ["on the left", "on the right"]);
+  assert.deepEqual([0, 1, 2].map((i) => placeWord(i, 3)), ["on the left", "in the middle", "on the right"]);
+  assert.equal(new Set([0, 1, 2, 3].map((i) => placeWord(i, 4))).size, 4);
+  assert.equal(placeWord(4, 6), "5 of 6 from the left");
+});
+
+test("map labels name no node id, on a real act", () => {
+  const g = createGame("label-ids"), v = g.view();
+  const d = dagModel(v, v.map, false, v.actions);
+  for (const n of d.rows.flat()) assert.ok(!/\ba\d+n\d+\b/.test(n.label), n.label);
 });
