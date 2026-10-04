@@ -5,6 +5,7 @@
  */
 import { isGameState, MAX_DEVIL_QUERIES, WARES, type Command, type GameState } from "../game/gameState";
 import { view, type View } from "../game/view";
+import { pointlessBuy } from "../ui/shopGuard";
 
 /** One slot in the item bar: a ware you can buy here, or a consumable you hold. */
 export interface HudItem {
@@ -166,7 +167,9 @@ export function hudModel(source: View | GameState | unknown): HudModel {
     const command = legal(actions, (c) => c.cmd === "buy" && c.item === id);
     let reason: string | null = null;
     if (!command) reason = ending || busy ? blocked() : kind === "well" && src.resolved === true ? "the well is spent" : gold < cost ? `need ${cost - gold}g more` : "not now";
-    items.push({ id, label: info.label, hint: info.hint, kind: "ware", cost, count: null, usable: command !== null, reason, command: command ?? { cmd: "buy", item: id } });
+    const pointless = command ? pointlessBuy(id, hp, maxHp) : null; // legal, but takes the gold for nothing (UI-only guard)
+    if (pointless) reason = pointless;
+    items.push({ id, label: info.label, hint: info.hint, kind: "ware", cost, count: null, usable: command !== null && !pointless, reason, command: command ?? { cmd: "buy", item: id } });
   }
   for (const [id, count] of inventoryOf(src, player)) {
     const command = legal(actions, (c) => c.item === id && c.cmd !== "buy");

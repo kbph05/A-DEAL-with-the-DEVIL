@@ -8,6 +8,7 @@ import { pointIn, type SceneZone } from "./scene";
 const village = sceneById("village")!;
 const zone = (item: string): SceneZone => village.zones!.find((z) => z.kind === "shop" && z.item === item)!;
 const withGold = (s: GameState, gold: number): GameState => ({ ...s, player: { ...s.player, gold } });
+const withHp = (s: GameState, hp: number): GameState => ({ ...s, player: { ...s.player, hp } });
 
 test("village: three stalls, one shop zone per engine ware, and an exit", () => {
   const shops = village.zones!.filter((z) => z.kind === "shop");
@@ -38,7 +39,7 @@ test("village: the stalls form an evenly spaced row on the top edge, outside bou
 });
 
 test("shopPrompt: enabled exactly when the engine lists the buy, and Buy sends it", () => {
-  const s = initialState("shop-test");
+  const s = withHp(withGold(initialState("shop-test"), WARES.heal.cost + 5), 20); // hurt, so a heal is worth buying
   const v = view(s);
   assert.equal(v.kind, "village", "act 1 starts at the village");
   const heal = shopPrompt(zone("heal"), v);
@@ -85,4 +86,17 @@ test("shopPrompt: a well's blessing is locked once the devil was asked there (on
   const p = shopPrompt(z, { kind: "well", state: { gold: 20 }, actions: [], resolved: false, devilPresent: true, asksLeft: 2 });
   assert.equal(p.enabled, false);
   assert.equal(p.reason, "You chose the devil at this well");
+});
+
+test("shopPrompt: a heal at full health is disabled with the reason (UI-only: the engine still lists the buy)", () => {
+  const s = withGold(initialState("shop-test"), 99);
+  const full = view(s);
+  assert.equal(full.state.hp, full.state.maxHp);
+  assert.ok(full.actions.some((c) => c.cmd === "buy" && c.item === "heal"), "the engine would take the gold");
+  const heal = shopPrompt(zone("heal"), full);
+  assert.deepEqual([heal.enabled, heal.reason, heal.command], [false, "You're at full health", undefined]);
+  assert.equal(heal.price, WARES.heal.cost, "the price is still shown");
+  const hurt = shopPrompt(zone("heal"), view(withHp(s, full.state.maxHp - 1)));
+  assert.deepEqual([hurt.enabled, hurt.reason, hurt.command], [true, undefined, { cmd: "buy", item: "heal" }]);
+  assert.equal(shopPrompt(zone("blade"), full).enabled, true, "other wares are not guarded");
 });

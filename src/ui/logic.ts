@@ -4,6 +4,7 @@ import type { EnemyView } from "../game/events";
 import { MAX_ASKS, TRAIN_ATTACK, WARES } from "../game/gameState";
 import { STAT_RANGE } from "../game/state";
 import type { Kind } from "../map";
+import { pointlessBuy } from "./shopGuard";
 
 export type Ware = keyof typeof WARES;
 export interface Actions {
@@ -439,9 +440,12 @@ const WARE_ICON: Record<Ware, string> = { heal: "❤️", blade: "🗡️", bles
 
 export interface ShopItem { item: Ware; icon: string; name: string; effect: string; cost: number; affordable: boolean; /** e.g. "need 3 more gold"; null when affordable. */ reason: string | null }
 /** The shop's price tags (village only: the well's single blessing is a choice, not a shop). */
-export function shopItems(o: Pick<Observation, "kind" | "state">, A: Pick<Actions, "buy">): ShopItem[] {
+export function shopItems(o: Pick<Observation, "kind"> & { state: Pick<Observation["state"], "gold"> & Partial<Pick<Observation["state"], "hp" | "maxHp">> }, A: Pick<Actions, "buy">): ShopItem[] {
   if (o.kind !== "village") return [];
-  return A.buy.map((w) => ({ item: w.item, icon: WARE_ICON[w.item], name: WARE_NAME[w.item], effect: WARE_EFFECT[w.item], cost: w.cost, affordable: w.affordable, reason: buyLabel(w, o.state.gold).reason }));
+  return A.buy.map((w) => {
+    const pointless = w.affordable ? pointlessBuy(w.item, o.state.hp, o.state.maxHp) : null; // a heal at full HP: UI-only guard
+    return { item: w.item, icon: WARE_ICON[w.item], name: WARE_NAME[w.item], effect: WARE_EFFECT[w.item], cost: w.cost, affordable: w.affordable && !pointless, reason: pointless ?? buyLabel(w, o.state.gold).reason };
+  });
 }
 
 export interface ChooseCard {

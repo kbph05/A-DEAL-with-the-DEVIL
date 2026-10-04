@@ -4,6 +4,7 @@ import assert from "node:assert/strict";
 import { createGame, describe } from "../game";
 import type { Command, GameEvent } from "../game";
 import { availableActions, blurbOf, chooseCards, fireChoice, type FireChoice, dealEnd, devilPhase, askBlockReason, haggleText, questionsText, panelKinds, shopItems, buyLabel, curseText, effectChips, eventClass, afterKinds, dagModel, exitNumber, fightLabel, lockReason, moveLock, nodeState, nodeTitle, capitalize, eventText, kindLookup, rejectedText, rewriteText, outcomeEvents, pct, STAIRS_ID, topId } from "./logic";
+import { FULL_HEALTH, pointlessBuy } from "./shopGuard";
 import { diffDeal } from "./dealDiff";
 import { lastStrike, STRIKE_HEAD } from "./logic";
 import { sanitizeDeal } from "../game/deal";
@@ -308,7 +309,7 @@ test("askBlockReason: the run-wide limit outranks the per-node haggle limit; nul
 
 test("shop lists price tags at the village only; the well's blessing is a single-use choice", () => {
   const g = createGame("ui-1"), o = g.observe();
-  const village = { ...o, kind: "village" as const, state: { ...o.state, gold: 10 } };
+  const village = { ...o, kind: "village" as const, state: { ...o.state, gold: 10, hp: o.state.maxHp - 5 } };
   const items = shopItems(village, availableActions(village));
   assert.deepEqual(items.map((i) => [i.item, i.cost, i.affordable, i.reason]), [["heal", 10, true, null], ["blade", 12, false, "need 2 more gold"]]);
   const well = { ...o, kind: "well" as const, resolved: false, state: { ...o.state, gold: 12 } };
@@ -531,4 +532,25 @@ test("eventText: the fight summary starts every sentence with a capital", () => 
   assert.equal(bout, "After 20.1 s of fighting you dealt 9 and took no damage.");
   assert.equal(eventText({ type: "rejected", reason: "the embers are spent" }), "The embers are spent.");
   assert.equal(eventText({ type: "enemy_appeared", enemy: { name: "cave rat", hp: 6, maxHp: 6, boss: false } }), "An enemy appears: cave rat (6 HP).");
+});
+
+test("shopGuard: a heal at full HP is pointless (UI-only); nothing else is guarded", () => {
+  assert.equal(pointlessBuy("heal", 30, 30), FULL_HEALTH);
+  assert.equal(pointlessBuy("heal", 31, 30), FULL_HEALTH);
+  assert.equal(pointlessBuy("heal", 29, 30), null);
+  assert.equal(pointlessBuy("blade", 30, 30), null);
+  assert.equal(pointlessBuy("blessing", 30, 30), null);
+  assert.equal(pointlessBuy("heal", undefined, undefined), null, "unknown HP: leave it to the engine");
+  assert.equal(pointlessBuy("heal", 0, 0), null);
+  assert.equal(FULL_HEALTH, "You're at full health");
+});
+
+test("DOM shop: the Heal card is disabled at full HP with the reason, enabled when hurt", () => {
+  const g = createGame("ui-1"), o = g.observe();
+  const at = (hp: number) => { const v = { ...o, kind: "village" as const, state: { ...o.state, gold: 99, hp } }; return shopItems(v, availableActions(v)); };
+  const [healFull, bladeFull] = at(o.state.maxHp);
+  assert.deepEqual([healFull.item, healFull.affordable, healFull.reason], ["heal", false, FULL_HEALTH]);
+  assert.deepEqual([bladeFull.item, bladeFull.affordable, bladeFull.reason], ["blade", true, null], "the blade is not guarded");
+  const [healHurt] = at(o.state.maxHp - 1);
+  assert.deepEqual([healHurt.affordable, healHurt.reason], [true, null]);
 });
