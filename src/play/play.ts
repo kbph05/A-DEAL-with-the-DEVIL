@@ -5,20 +5,23 @@
  * goes through the one shared `Session`; what is on screen is derived from `flow(view, local)` (flow.ts) on each render.
  */
 import "./play.css";
+import type Phaser from "phaser";
 import { HttpDevil, ONE_CHOICE, execute, isGibberish, setDevil, type Command, type GameEvent, type View } from "../game";
 import { offTopicKind } from "../game/devil";
 import { createSession } from "../game/session";
-import { runForestFight } from "../fight";
+import { destroyGame } from "../destroyGame";
+import { runForestFight, type FightSim } from "../fight";
 import { mountHud } from "../hud/hud";
 import { hudModel } from "../hud/model";
 import { mountMap, type MapHandle } from "../mapscene";
 import { paintIcon, type IconKey } from "../mapscene/icons";
 import { effectChips, curseText, eventText, kindLookup, lastStrike, outcomeEvents, questionsText, restHint, rewriteText } from "../ui/logic";
-import { mountScene, sceneById, type SceneHandle, type SceneZone } from "../world";
+import { mountScene, sceneById, type SceneHandle, type SceneZone, type WorldDebug } from "../world";
 import { shopPrompt } from "../world/shopZone";
 import { CLOSE_DEVIL, LOCAL, OPEN_DEVIL, arrived, flow, setLocal, wantsOpener, wellChoice, wishToSend, type Flow, type Local } from "./flow";
 import { mountDevilArt } from "./devilArt";
 import { POSE_MS, devilPose } from "./devilPose";
+import { CONTROLS, pauseKey, pauseStep, startState, type PauseAction, type PauseState } from "./pause";
 
 const params = new URLSearchParams(location.search);
 const TEST = import.meta.env.MODE === "test";
@@ -64,7 +67,8 @@ const mapLayer = h("div", "play-layer play-map");
 mapLayer.hidden = true;
 root.append(sceneLayer, mapLayer);
 const session = createSession(params.get("seed") ?? undefined);
-const hud = mountHud(root, { onUseItem: (item) => { if (item.command) void send(item.command); } });
+// The play page's HUD: no item bar (the village's stalls sell), ATK, Soul or Revive (kbph, 4 Oct; hudShown in src/hud/model.ts).
+const hud = mountHud(root, { variant: "play" });
 // Portrait puts the map title and the toast under the HUD's stats, which grow with the devil's line and curse chips:
 // keep --hud-bottom (play.css) on the stats' real bottom edge. A hidden HUD (during a fight) keeps the last value.
 const hudStats = hud.el.querySelector<HTMLElement>(".hud-stats");
@@ -93,7 +97,22 @@ const toast = h("div", "play-toast");
 toast.setAttribute("role", "status");
 toast.setAttribute("aria-live", "polite");
 toast.hidden = true;
-root.append(mapBtn, mapClose, mapTitle, prompt, panel, devil, ending, toast);
+const pauseBtn = button("", () => undefined, "play-pausebtn quiet"); // two bars, drawn in play.css (a ⏸ glyph is missing from some fonts)
+let pausedByPointer = false; // a click (not Enter/Space) opened the menu: focus doesn't go back to the button on Resume
+pauseBtn.onclick = (e) => { pausedByPointer = e.detail > 0; doPause("pause"); pausedByPointer = false; };
+pauseBtn.setAttribute("aria-label", "Pause");
+pauseBtn.setAttribute("aria-keyshortcuts", "Escape P");
+pauseBtn.title = "Pause (Esc or P)";
+const pauseLayer = h("div", "play-layer play-pause");
+pauseLayer.setAttribute("role", "dialog");
+pauseLayer.setAttribute("aria-modal", "true");
+pauseLayer.setAttribute("aria-labelledby", "play-pause-title");
+pauseLayer.hidden = true;
+const titleLayer = h("div", "play-layer play-title");
+titleLayer.setAttribute("role", "region");
+titleLayer.setAttribute("aria-label", "Title screen");
+titleLayer.hidden = true;
+root.append(mapBtn, mapClose, mapTitle, prompt, panel, devil, ending, toast, pauseBtn, pauseLayer, titleLayer);
 
 // ---- state -------------------------------------------------------------------------------------------------------
 let local: Local = LOCAL;
@@ -106,6 +125,16 @@ let autoFought: string | null = null; // the node whose fight was started on arr
 let wish = "";
 let toastTimer = 0;
 let current: Flow = flow(session.game().view(), local);
+// The pause menu and the title screen (pause.ts). The village's and the fight's Phaser games, to pause them.
+let ps: PauseState = startState(location.search);
+let villageGame: Phaser.Game | null = null;
+let fightGame: Phaser.Game | null = null;
+let returnFocus: HTMLElement | null = null;
+// Test builds: live positions, for the check that a paused game stands still.
+let worldDebug: WorldDebug | null = null;
+let fightSim: FightSim | null = null;
+/** Focus an element, unless the pause menu (or the title screen) is up: a render behind it must not steal its focus. */
+function focus(el: HTMLElement | null | undefined): void { if (!ps.paused && ps.screen === "run") el?.focus(); }
 
 // ---- the devil's portrait: which pose (devilPose.ts), from his overlay's state and the clock ------------------------
 const pose = {
@@ -197,7 +226,14 @@ async function fight(): Promise<void> {
   (document.activeElement as HTMLElement | null)?.blur(); // Space must not press a button behind the fight
   const input = GOD ? { ...req, player: { hp: 9999, maxHp: 9999, attack: 99 } } : req;
   let report: unknown = null;
-  try { report = await runForestFight(stage, input); } catch (err) { say([{ type: "rejected", reason: `the fight could not start (${err instanceof Error ? err.message : String(err)})` }]); }
+  try {
+    report = await runForestFight(stage, input, {
+      help: false, // the pause menu lists the controls
+      onGame: (game) => { fightGame = game; if (ps.paused) setGamePaused(game, true); },
+      onDebug: TEST ? (sim) => { fightSim = sim; } : undefined,
+    });
+  } catch (err) { say([{ type: "rejected", reason: `the fight could not start (${err instanceof Error ? err.message : String(err)})` }]); }
+  fightGame = null; fightSim = null;
   local = { ...local, busy: null };
   mounted?.destroy(); mounted = null; // the next render puts the backdrop back (under the map, or the revival panel)
   if (session.game() !== g) { render(); return; }
@@ -239,6 +275,9 @@ function renderScene(v: View, f: Flow): void {
     sceneLayer.append(el);
     world = mountScene(el, {
       scene: sceneById("village"),
+      help: false, // the pause menu lists the controls
+      onGame: (game) => { villageGame = game; if (ps.paused) setGamePaused(game, true); },
+      onDebug: TEST ? (d) => { worldDebug = d; } : undefined,
       onEnterZone: (z) => {
         if (z.kind === "shop") { zone = z; render(); }
         if (z.kind === "exit") toggleMap(true);
@@ -246,7 +285,7 @@ function renderScene(v: View, f: Flow): void {
       onLeaveZone: (z) => { if (zone?.id === z.id) { zone = null; render(); } },
     });
     const w = world;
-    mounted = { key, destroy: () => { w.destroy(); el.remove(); } };
+    mounted = { key, destroy: () => { w.destroy(); el.remove(); villageGame = null; worldDebug = null; } };
     return;
   }
   const bd = h("div", "play-layer play-backdrop");
@@ -313,7 +352,7 @@ function renderPanel(v: View, f: Flow): void {
   }
   card.append(list);
   panel.replaceChildren(card);
-  list.querySelector<HTMLButtonElement>("button:not(:disabled)")?.focus();
+  focus(list.querySelector<HTMLButtonElement>("button:not(:disabled)"));
 }
 
 /** The overlay goes away. If he is laughing (a deal struck, a strike), his portrait lingers and fades over what comes next. */
@@ -399,7 +438,7 @@ function renderDevil(v: View, f: Flow): void {
   updatePose();
   // Focus the wish box with a keyboard; on a touch screen that would pop the on-screen keyboard over the offer.
   const coarse = window.matchMedia?.("(pointer: coarse)").matches === true;
-  (devil.querySelector<HTMLElement>(coarse ? "button:not(:disabled)" : "input:not(:disabled)") ?? devil.querySelector<HTMLElement>("button:not(:disabled)"))?.focus();
+  focus(devil.querySelector<HTMLElement>(coarse ? "button:not(:disabled)" : "input:not(:disabled)") ?? devil.querySelector<HTMLElement>("button:not(:disabled)"));
 }
 
 function renderEnding(f: Flow): void {
@@ -410,10 +449,13 @@ function renderEnding(f: Flow): void {
   const again = button("Play again", () => { ending.replaceChildren(); session.newGame(); });
   ending.append(h("div", "", undefined));
   ending.firstElementChild!.append(h("h2", "", head), h("p", "", body), again);
-  again.focus();
+  focus(again);
 }
 
 function render(): void {
+  renderPause();
+  if (ps.screen === "title") { renderTitle(); return; }
+  titleLayer.hidden = true;
   const v = session.game().view();
   const f = flow(v, local);
   current = f;
@@ -421,15 +463,18 @@ function render(): void {
   renderScene(v, f);
   renderMap(v, f);
   hud.el.hidden = f.screen === "fight" && local.busy === "fight";
+  root.classList.toggle("fighting", f.screen === "fight" && local.busy === "fight");
   hud.update(hudModel(v));
   mapBtn.hidden = !f.mapButton || f.map !== "closed" || f.devil;
   mapClose.hidden = f.map !== "open";
   mapTitle.hidden = f.map !== "forced";
+  pauseBtn.hidden = f.screen === "ending" || f.devil;
   renderPrompt(v, f);
   renderPanel(v, f);
   renderDevil(v, f);
   if (f.screen !== "ending") ending.replaceChildren();
   renderEnding(f);
+  if (ps.paused) return; // nothing starts behind the pause menu; resuming renders again
   // The devil appears: he opens with an offer of his own, unasked (free; see wantsOpener).
   if (wantsOpener(v, f, local)) queueMicrotask(() => void send({ cmd: "deal" }));
   // A fight node: start the fight on arrival (a revival asks first, with "Fight on").
@@ -444,12 +489,130 @@ function shape(): "wide" | "tall" { return innerWidth >= innerHeight ? "wide" : 
 let lastShape = shape();
 window.addEventListener("resize", () => { if (shape() !== lastShape) { lastShape = shape(); render(); } });
 
+// ---- pause, quit and the title screen (pause.ts) -------------------------------------------------------------------
+/** Pause or resume a scene's Phaser game: no update or render, and its keyboard off (the fight captures Space and Shift
+ *  on the window, which would keep Space from pressing the menu's buttons and replay it as an attack on resume). */
+function setGamePaused(game: Phaser.Game, on: boolean): void {
+  if (on) game.pause(); else game.resume();
+  const kb = game.input?.keyboard;
+  if (kb) kb.enabled = !on;
+  if (!on) for (const sc of game.scene.getScenes(true)) sc.input?.keyboard?.resetKeys(); // keys released while paused
+}
+
+function doPause(a: PauseAction): void {
+  const before = ps;
+  const next = pauseStep(ps, a);
+  if (next === ps) return;
+  ps = next;
+  if (!before.paused && ps.paused) { // opening
+    returnFocus = document.activeElement instanceof HTMLElement && document.activeElement !== document.body ? document.activeElement : null;
+    if (returnFocus === pauseBtn && pausedByPointer) returnFocus = null; // else Enter/E at a stall would press it, not buy
+    for (const g of [villageGame, fightGame]) if (g) setGamePaused(g, true);
+  }
+  if (before.screen === "run" && ps.screen === "title") quitRun();
+  if (before.paused && !ps.paused && ps.screen === "run") { // resumed
+    for (const g of [villageGame, fightGame]) if (g) setGamePaused(g, false);
+    const back = returnFocus;
+    returnFocus = null;
+    // Back where focus was. In a fight Space attacks, so it must not land on a button (the ⏸ one) to press it again.
+    if (back && back.isConnected && !(local.busy === "fight" && back.tagName === "BUTTON")) back.focus();
+    else (document.activeElement as HTMLElement | null)?.blur();
+  }
+  if (before.screen === "title" && ps.screen === "run") { session.newGame(); return; } // a fresh run, a new seed; it renders
+  render();
+}
+
+/** Quit: tear the run's scenes down (a fight in progress is destroyed with its game; its promise is left unresolved). */
+function quitRun(): void {
+  if (fightGame) { const g = fightGame; fightGame = null; fightSim = null; g.resume(); destroyGame(g); }
+  mounted?.destroy(); mounted = null; world = null; zone = null;
+  sceneLayer.replaceChildren();
+  map?.destroy(); map = null;
+  mapLayer.hidden = true;
+  if (leaving) { clearTimeout(leaving); leaving = 0; }
+  devil.hidden = true; devil.classList.remove("leaving"); devil.removeAttribute("aria-hidden"); devil.inert = false;
+  clearInterval(poseTimer); poseTimer = 0;
+  ending.replaceChildren();
+  toast.hidden = true;
+  local = { ...LOCAL };
+  autoFought = null;
+}
+
+let pauseKeyState = "";
+function renderPause(): void {
+  pauseLayer.hidden = !ps.paused;
+  if (!ps.paused) { pauseKeyState = ""; return; }
+  const key = JSON.stringify(ps);
+  if (key === pauseKeyState) return;
+  pauseKeyState = key;
+  const card = h("div", "play-card");
+  const title = h("h2", "", ps.confirmQuit ? "Quit this run?" : "Paused");
+  title.id = "play-pause-title";
+  card.append(title);
+  const row = h("div", "row");
+  if (ps.confirmQuit) {
+    card.append(h("p", "lead", "Progress will be lost."));
+    const no = button("Cancel", () => doPause("cancelQuit"), "quiet");
+    const yes = button("Quit game", () => doPause("confirmQuit"));
+    yes.setAttribute("aria-label", "Quit game, progress will be lost");
+    row.append(no, yes);
+    card.append(row);
+    pauseLayer.replaceChildren(card);
+    no.focus(); // the safe choice first
+    return;
+  }
+  for (const [head, list] of [["Keyboard", CONTROLS.keyboard], ["Touch", CONTROLS.touch]] as const) {
+    const sec = h("section", "controls");
+    sec.setAttribute("aria-label", `${head} controls`);
+    const dl = h("dl");
+    for (const [k, what] of list) dl.append(h("dt", "", k), h("dd", "", what));
+    sec.append(h("h3", "", head), dl);
+    card.append(sec);
+  }
+  const resume = button("Resume", () => doPause("resume"));
+  resume.setAttribute("aria-keyshortcuts", "Escape P");
+  const quit = button("Quit game", () => doPause("quit"), "quiet");
+  row.append(resume, quit);
+  card.append(row);
+  pauseLayer.replaceChildren(card);
+  resume.focus();
+}
+// Focus trap: Tab and Shift+Tab cycle through the menu's buttons.
+pauseLayer.addEventListener("keydown", (e) => {
+  if (e.key !== "Tab") return;
+  const list = [...pauseLayer.querySelectorAll<HTMLElement>("button:not(:disabled)")];
+  if (!list.length) return;
+  const i = list.indexOf(document.activeElement as HTMLElement);
+  const next = e.shiftKey ? (i <= 0 ? list.length - 1 : i - 1) : (i === list.length - 1 ? 0 : i + 1);
+  list[next].focus();
+  e.preventDefault();
+});
+// Focus that leaves the open menu by other means (a click on its backdrop) comes back to it.
+pauseLayer.addEventListener("pointerdown", (e) => { if (e.target === pauseLayer) e.preventDefault(); });
+
+function renderTitle(): void {
+  for (const el of [mapBtn, mapClose, mapTitle, prompt, panel, devil, ending, pauseBtn, hud.el]) el.hidden = true;
+  toast.hidden = true;
+  titleLayer.hidden = false;
+  if (titleLayer.childElementCount) return;
+  const box = h("div", "");
+  const head = h("h1", "");
+  head.append("A ", h("b", "", "DEAL"), " with the ", h("b", "", "DEVIL"));
+  const start = button("New game", () => { titleLayer.replaceChildren(); doPause("newGame"); });
+  box.append(head, start);
+  titleLayer.append(box);
+  start.focus();
+}
+
 // ---- keys ----------------------------------------------------------------------------------------------------------
 window.addEventListener("keydown", (e) => {
   const t = e.target as HTMLElement | null;
   if (t && (t.tagName === "INPUT" || t.tagName === "TEXTAREA" || t.isContentEditable)) return;
+  const a = e.repeat ? null : pauseKey(ps, e.key, { map: current.map, typing: false, ending: current.screen === "ending" });
+  if (a === "closeMap") { toggleMap(false); e.preventDefault(); return; }
+  if (a) { doPause(a); e.preventDefault(); return; }
+  if (ps.paused || ps.screen === "title") return;
   if ((e.key === "m" || e.key === "M") && current.mapButton && !e.repeat) { toggleMap(current.map === "closed"); e.preventDefault(); }
-  else if (e.key === "Escape" && current.map === "open") toggleMap(false);
   else if ((e.key === "e" || e.key === "E" || e.key === "Enter") && zone?.kind === "shop" && current.map === "closed" && !current.devil && (t === document.body || t?.tagName === "CANVAS")) {
     const p = shopPrompt(zone, session.game().view());
     if (p.command) void send(p.command);
@@ -467,6 +630,12 @@ if (TEST) {
     map: () => map?.debug() ?? null,
     zone: () => zone?.id ?? null,
     toast: () => (toast.hidden ? "" : toast.textContent),
+    pause: () => ps,
+    /** Live positions: the village walker's feet, or the fight's player, enemies and clock. */
+    probe: () => ({
+      village: worldDebug ? { ...worldDebug.pos } : null,
+      fight: fightSim ? { timeMs: fightSim.timeMs, player: { ...fightSim.player.pos }, enemies: fightSim.enemies.map((e) => ({ ...e.pos })) } : null,
+    }),
     send: (c: Command) => send(c),
   };
 }

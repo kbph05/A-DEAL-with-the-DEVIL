@@ -14,7 +14,8 @@ kbph asked for it (4 Oct): "create a button that opens the map and allows the pl
 
 Query string:
 
-- `?seed=abc` fixes the run's seed.
+- `?seed=abc` fixes the run's seed (the first run only; New game on the title screen picks a new one).
+- `?title=1` opens on the title screen instead of going straight into the run. Without it, first load is unchanged.
 - `?god=1` (test builds only) plays fights with 9999 HP and 99 attack. Only the request handed to the fight is changed. The engine's `sanitizeFightResult` clamps the reported HP back to your real HP, so a god fight costs nothing and changes nothing else. A final build ignores the flag.
 
 The devil is the StubDevil, or the HTTP devil when the build sets `VITE_DEVIL_URL` (the same switch as `src/main.ts`).
@@ -32,6 +33,10 @@ Each node kind has a screen:
 | Deal | The devil's full-screen overlay. | **Forced** once the deal is accepted, refused or ended, or you walk away. |
 | Stairs, final door | Reached through the map. The stairs lead to the next act's first node. The final door ends the run. | |
 | Run over (win, hell, lose) | An ending card with **Play again** (a new run). | None. |
+
+**The HUD** on this page is trimmed (kbph, 4 Oct): HP, gold, curses, the devil's questions (at a deal node), act, layer and node. No item buttons (the village's stalls sell), no ATK, Soul or Revive. See docs/hud.md, "Variants".
+
+**No controls line** at the bottom of the village or the fight: the pause menu lists the controls (`help: false` to `mountScene` and `runForestFight`; the labs keep the line).
 
 **A forced map** has no close button, and Escape and M do nothing: the player must pick the next node. A "Choose where to go next" line says so.
 
@@ -67,11 +72,34 @@ Each node kind has a screen:
 1. the scene (the village, the fight's own Phaser game, or a dim backdrop with the node's map icon);
 2. the map;
 3. the HUD (hidden while a fight is on screen; the fight draws its own);
-4. the Map button and the shop prompt;
+4. the Map and pause buttons and the shop prompt;
 5. the campfire and well panel;
 6. the devil's overlay;
 7. the ending card;
-8. the toast.
+8. the toast;
+9. the pause menu;
+10. the title screen.
+
+## Pause and quit (`pause.ts`)
+
+kbph asked for it (4 Oct): "make a pause menu with what controls are used, and then remove the bottom text that shows controls. Also make the menu have a quit game option too."
+
+- **Opening it:** Esc or P, or the pause button (two bars, 44 px) at the top right, under the Map button. In a fight it sits lower, under the fight's title, enemy count and clock. It is hidden while the devil's overlay or the ending card is up; Esc and P still work over the devil when focus is not in the wish box.
+- **Escape order:** an open map (village) closes first. Then Escape pauses. In the menu it resumes, and in the quit question it goes back to the menu. A forced map can't close, so Escape pauses there. P pauses and resumes, but does nothing in the quit question. Keys typed in a text box are text, and no key works on the title screen or the ending card.
+- **Pausing pauses the game:** the village's or the fight's `Phaser.Game` is paused (`game.pause()`: no update, no render, so no movement, no enemy actions and no fight clock). Its keyboard is switched off, so Space can press the menu's buttons and isn't replayed as an attack. Keys are reset on resume, so one released during the pause doesn't stick. Nothing new starts behind the menu (the auto-fight, the devil's opener); renders behind it don't take focus.
+- **The menu** is a dialog (`role="dialog"`, `aria-modal`, labelled by its title) with "Paused", the keyboard and touch controls (`CONTROLS` in `pause.ts`, checked against the code), **Resume** and **Quit game**. Tab is trapped in it; focus returns where it was on Resume (in a fight, not to a button, since Space attacks).
+
+| Keyboard | | Touch | |
+| --- | --- | --- | --- |
+| WASD / arrow keys | Move | Drag | The stick: anywhere in the village, the left half in a fight |
+| Space / left click | Attack (fights) | Attack, Dash | The buttons at the bottom right (fights) |
+| Shift | Dash (fights) | Map | The Map button, top right (village) |
+| M | Open or close the map (village) | Buy | The Buy button at a stall |
+| E / Enter | Buy at a stall | Pause | The pause button, top right |
+| Esc / P | Pause; Esc closes the map first | | |
+
+- **Quit game** asks "Quit this run? Progress will be lost." (Cancel, the default, or Quit game). Quitting tears the run's scenes down (a fight in progress is destroyed with its game) and shows the **title screen**: "A DEAL with the DEVIL" and **New game**, which starts a fresh run with a new seed. There is no credits screen yet, so no Credits button. Quit is the only way to the title screen, besides `?title=1`.
+- `pauseStep(state, action)` and `pauseKey(state, key, context)` are pure; `src/play/pause.test.ts` covers the transitions, the key order and the controls list.
 
 ## The controller (`flow.ts`)
 
@@ -95,11 +123,14 @@ A property test plays 150 random legal runs on the real engine. At every state i
 | `flow.test.ts` | Its tests. |
 | `devilPose.ts`, `devilPose.test.ts` | Which devil pose shows, from the overlay's state and the clock. Pure, and its tests. |
 | `devilArt.ts` | The devil's portrait: the seven PNGs, stacked and cross-faded. |
+| `pause.ts`, `pause.test.ts` | The pause menu and title screen state, the key rules and the controls list. Pure, and its tests. |
 | `play.ts` | The page: mounts the layers, runs commands through the session, renders from `flow`. |
-| `play.css` | The page's styles. Portrait screens keep the prompt clear of the HUD's item column and put the map title and toast under the stats. Short landscape screens (a turned phone) put the map title under the stats on the left, off your node. |
+| `play.css` | The page's styles. Portrait screens put the map title and toast under the stats. Short landscape screens (a turned phone) put the map title under the stats on the left, off your node. |
 | `/play.html` | The entry. Test builds only (`vite.config.ts` lists it in mode `test`). |
 
-Test builds expose `window.__play`: `{ session, flow(), local(), view(), map(), zone(), toast(), send(cmd) }`. `map()` is the map scene's `debug()` while it is up.
+Test builds expose `window.__play`: `{ session, flow(), local(), view(), map(), zone(), toast(), send(cmd), pause(), probe() }`. `map()` is the map scene's `debug()` while it is up. `pause()` is the pause state; `probe()` gives live positions (the village walker's feet, or the fight's player, enemies and clock), for checking that a paused game stands still.
+
+The pause check (Playwright, like the visual check above) holds an arrow key through a pause in the village and in a fight, and checks that nothing moves for 1 s and that it moves again after Resume. It also checks the trimmed HUD, the 44 px button clear of the Map button and HUD, the focus trap, Escape closing the map first, Quit (with its question) to the title screen with no canvas left, New game on a new seed, and `?title=1`.
 
 The visual check (Playwright) plays seed `play-8` from the village through a fight, a campfire, a deal node and a well, at 1366×768 and 390×844, with `?god=1`. A second run loses a fight on purpose: the revival, "Fight on", death, the ending card and Play again.
 

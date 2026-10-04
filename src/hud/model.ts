@@ -207,3 +207,20 @@ export function announce(prev: HudModel | null, next: HudModel): string {
   if (prev.revive === "available" && next.revive === "used") out.push("Your soul paid for a revival.");
   return out.join(" ");
 }
+
+/**
+ * Which HUD parts show. "full" (the labs) shows everything the model has; "play" (the play page, kbph 4 Oct) drops
+ * the item bar (the village's stalls sell instead), ATK, Soul and Revive. The model keeps those fields either way.
+ */
+export type HudVariant = "full" | "play";
+export interface HudShown { attack: boolean; speed: boolean; soul: boolean; revive: boolean; devil: boolean; curses: boolean; items: boolean }
+export function hudShown(m: HudModel, variant: HudVariant = "full"): HudShown {
+  const full = variant === "full";
+  return {
+    attack: full, soul: full, revive: full,
+    speed: m.speed !== null,
+    devil: m.devil.asksLeft !== null,
+    curses: m.curses.length > 0,
+    items: full && m.items.length > 0,
+  };
+}
