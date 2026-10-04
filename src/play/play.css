@@ -65,4 +65,10 @@ body { overflow: hidden; }
 @media (min-aspect-ratio: 1/1) and (max-width: 1299px) {
   .play-toast { left: calc(max(8px, env(safe-area-inset-left)) + 356px); right: max(8px, env(safe-area-inset-right)); transform: none; margin-inline: auto; box-sizing: border-box; max-width: min(560px, calc(100% - 372px)); }
 }
+/* Short landscape (a turned phone, 844x390): the map keeps your node near the bottom of the screen, where the centred
+   "Choose where to go next" sat on it. Put the title under the HUD's stats on the left, beside the parchment instead;
+   where they still meet (narrower phones), the map scrolls its top clear of the title (it is one of the map's overlays). */
+@media (min-aspect-ratio: 1/1) and (max-height: 540px) {
+  .play-maptitle { left: max(8px, env(safe-area-inset-left)); transform: none; bottom: auto; top: calc(var(--hud-bottom, 96px) + 8px); }
+}
 .play [hidden]:not(.play-toast) { display: none !important; }

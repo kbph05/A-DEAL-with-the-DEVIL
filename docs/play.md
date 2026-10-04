@@ -83,7 +83,7 @@ A property test plays 150 random legal runs on the real engine. At every state i
 | `flow.ts` | The controller. Pure. |
 | `flow.test.ts` | Its tests. |
 | `play.ts` | The page: mounts the layers, runs commands through the session, renders from `flow`. |
-| `play.css` | The page's styles. Portrait screens keep the prompt clear of the HUD's item column and put the map title and toast under the stats. |
+| `play.css` | The page's styles. Portrait screens keep the prompt clear of the HUD's item column and put the map title and toast under the stats. Short landscape screens (a turned phone) put the map title under the stats on the left, off your node. |
 | `/play.html` | The entry. Test builds only (`vite.config.ts` lists it in mode `test`). |
 
 Test builds expose `window.__play`: `{ session, flow(), local(), view(), map(), zone(), toast(), send(cmd) }`. `map()` is the map scene's `debug()` while it is up.
