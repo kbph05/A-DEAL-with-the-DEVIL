@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { initialState, legalActions, step, view, type Command, type GameState } from "../game";
 import { mulberry32 } from "../map/rng";
-import { CLOSE_DEVIL, LOCAL, OPEN_DEVIL, arrived, flow, setLocal, wantsOpener, wellChoice, wishToSend, type FlowView, type Local } from "./flow";
+import { CLOSE_DEVIL, LOCAL, OPEN_DEVIL, arrived, flow, setLocal, toastEvents, wantsOpener, wellChoice, wishToSend, type FlowView, type Local } from "./flow";
 import type { GameEvent } from "../game";
 
 const go: Command = { cmd: "go", n: 1 };
@@ -192,4 +192,25 @@ test("wishToSend: a blank wish is sent only while the free opener is due", () =>
   assert.equal(wishToSend("   ", false), null, "a blank Ask or Haggle would spend a question");
   assert.equal(wishToSend("", undefined), null);
   assert.equal(wishToSend("", true), "", "blank before the opener is the opener, which is free");
+});
+
+test("toast: only a menu choice's answer or a lone rejection; no arrival or fight-result popups (kbph)", () => {
+  const fightEnd: GameEvent[] = [
+    { type: "fought", dealt: 10, enemyHp: 0, taken: 2, bout: { timeMs: 2900, hits: 1, enemy: "cave rat", outcome: "won" } },
+    { type: "damaged", amount: 2, source: "cave rat", hp: 8 },
+    { type: "enemy_slain", name: "cave rat", gold: 10, boss: false },
+    { type: "act_advanced", act: 2 },
+  ];
+  assert.deepEqual(toastEvents(null, fightEnd), []);
+  assert.deepEqual(toastEvents("fight_result", fightEnd), []);
+  const arrival: GameEvent[] = [{ type: "moved", from: "a0n0", to: "a0n1", kind: "fight", act: 1 }, { type: "enemy_appeared", enemy }];
+  assert.deepEqual(toastEvents("go", arrival), []);
+  const bought: GameEvent = { type: "bought", item: "heal", cost: 5, changes: { hp: 5 } };
+  assert.deepEqual(toastEvents("buy", [bought]), [bought]);
+  const rested: GameEvent = { type: "healed", amount: 4, source: "rest", hp: 10 };
+  assert.deepEqual(toastEvents("rest", [rested, { type: "act_advanced", act: 2 }]), [rested]);
+  const no: GameEvent = { type: "rejected", reason: "not enough gold" };
+  assert.deepEqual(toastEvents("buy", [no]), [no]);
+  assert.deepEqual(toastEvents(null, [no]), [no]);
+  assert.deepEqual(toastEvents("deal", [{ type: "deal_offered", deal: offer as never }]), []);
 });

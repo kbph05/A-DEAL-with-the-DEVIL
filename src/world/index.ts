@@ -10,6 +10,7 @@ import { worldLayout } from "./logic";
 import { parseSceneDef, type SceneDef, type SceneZone } from "./scene";
 import { SCENES } from "./scenes";
 import { WorldScene, type WorldDebug } from "./WorldScene";
+import { GAME_FPS } from "../gameLoop";
 
 export type { WorldDebug, Art } from "./WorldScene";
 export type { SceneDef, SceneZone, SceneActor, Rect } from "./scene";
@@ -60,6 +61,7 @@ export function mountScene(parent: HTMLElement, options: MountSceneOptions = {})
     parent,
     backgroundColor: "#0b0707",
     banner: false,
+    fps: GAME_FPS, // no half-speed start (src/gameLoop.ts)
     pixelArt: true,
     disableContextMenu: true,
     audio: { noAudio: true },
