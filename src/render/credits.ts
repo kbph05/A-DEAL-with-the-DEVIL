@@ -17,6 +17,7 @@ let cache: Promise<CreditEntry[]> | null = null;
  * bundled by Vite), which names the sprite packs and their authors.
  */
 export const STATIC_CREDITS: readonly CreditEntry[] = [
+  { pack: "Programming / Development", text: "Kirstin Horvat (kbph05) and Terrace Hung (terraceonhigh)." },
   { pack: "Scene art", text: "Devil, forest, well and village art by Armand Baril (Big Chungus)." },
   { pack: "Sprite packs", text: attribution.trim() },
 ];
