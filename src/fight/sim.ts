@@ -12,8 +12,8 @@
 import { hashSeed, mulberry32, type Rng } from "../map/rng";
 import {
   ARENA, KNOCK_DECAY, PLAYER, STEP_MS, burstDamage, canBeHit, clampToRect, contactDamage, d3, dist,
-  inSwingArc, isReady, knockback, lungeDamage, norm, playerHitDamage, pushOutOfRect, sanitizeInput, sub,
-  tick, circleHitsRect,
+  hitBySwing, isReady, knockback, lungeDamage, norm, playerHitDamage, pushOutOfRect, sanitizeInput, sub,
+  tick, circleHitsRect, swingArc,
   type FightInput, type FightResult, type Rect, type Vec,
 } from "./logic";
 import { arrowDamage, enemyParams, enemyTier, newBrain, tickBrain, type EnemyBrain, type EnemyId, type EnemyParams } from "./enemies";
@@ -201,8 +201,9 @@ export class FightSim {
       p.swingMs = PLAYER.swingMs;
       p.attackCdMs = PLAYER.attackCdMs;
       this.fx.push("swing");
+      const arc = swingArc(p.pos, p.swingDir, p.radius);
       for (const e of this.enemies) {
-        if (e.hp <= 0 || !inSwingArc(p.pos, p.swingDir, p.radius + PLAYER.swingRange, PLAYER.swingHalfAngle, e.pos, e.radius)) continue;
+        if (e.hp <= 0 || !hitBySwing(arc, e.pos, e.radius)) continue;
         const dmg = Math.min(e.hp, playerHitDamage(p.attack, d3(this.rng)));
         e.hp -= dmg;
         this.damageDealt += dmg;

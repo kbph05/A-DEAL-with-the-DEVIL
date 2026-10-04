@@ -108,6 +108,43 @@ export function inSwingArc(origin: Vec, facing: Vec, reach: number, halfAngle: n
   return Math.acos(Math.max(-1, Math.min(1, cos))) <= halfAngle + widen;
 }
 
+/** The sword swing's hitbox (and what the scenes draw): see `swingArc`. */
+export interface SwingArc {
+  /** The player's centre, where the sector is anchored. */
+  origin: Vec;
+  /** Unit direction the blade swings toward: the player's facing at the swing. */
+  dir: Vec;
+  /** Sector radius: the player's radius plus PLAYER.swingRange. */
+  reach: number;
+  /** Angle of `dir` and the sector's two edges (radians, screen coordinates: y down). */
+  angle: number; from: number; to: number;
+  /** The middle of the blade's edge: `origin + dir * reach`. */
+  tip: Vec;
+}
+
+/**
+ * The swing's hitbox: a sector of radius `playerRadius + PLAYER.swingRange`, ±PLAYER.swingHalfAngle around `dir`. `dir` is
+ * the player's facing: the last non-zero move (keys or stick, 8 ways), or toward the pointer on a mouse click. The sim
+ * hits with it (`hitBySwing`) and both scenes draw it, so the arc on screen is the hitbox. A zero `dir` faces right.
+ */
+export function swingArc(origin: Vec, dir: Vec, playerRadius: number): SwingArc {
+  const d = norm(dir);
+  const u = d.x === 0 && d.y === 0 ? { x: 1, y: 0 } : d;
+  const reach = playerRadius + PLAYER.swingRange, angle = Math.atan2(u.y, u.x);
+  return {
+    origin: { ...origin }, dir: u, reach, angle, from: angle - PLAYER.swingHalfAngle, to: angle + PLAYER.swingHalfAngle,
+    tip: { x: origin.x + u.x * reach, y: origin.y + u.y * reach },
+  };
+}
+/** Does the swing `arc` hit a circle at `target`? */
+export const hitBySwing = (arc: SwingArc, target: Vec, targetRadius: number): boolean =>
+  inSwingArc(arc.origin, arc.dir, arc.reach, PLAYER.swingHalfAngle, target, targetRadius);
+/**
+ * Should a swing turn toward the pointer? Only on a real mouse click. Space and the touch Attack button swing where the
+ * player faces (a resting mouse pointer used to pull every Space swing toward it, usually to the right).
+ */
+export const aimAtPointer = (mouseClick: boolean, touchUI: boolean): boolean => mouseClick && !touchUI;
+
 /** Knockback impulse pushing `to` away from `from`. Straight down if they coincide. */
 export function knockback(from: Vec, to: Vec, strength: number): Vec {
   const d = norm(sub(to, from));

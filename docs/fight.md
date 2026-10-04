@@ -28,10 +28,11 @@ Fights are a short realtime 2D brawl in a top-down room, not menu choices (Big C
 | | Desktop | Touch |
 | --- | --- | --- |
 | Move (8 directions) | WASD or arrow keys | Left-thumb joystick: it re-centres where your thumb lands on the left half of the screen, and snaps to 8 directions with a dead zone |
-| Attack | Space (hold to keep swinging), or left click (aims at the cursor) | **Attack** button (hold to keep swinging) |
+| Attack | Space (hold to keep swinging; swings where you face), or left click (aims at the cursor) | **Attack** button (hold to keep swinging; swings where you face) |
 | Dash | Shift | **Dash** button (it shows its cooldown) |
 
 - **Attack:** a 120 degree swing in front of you. It has a 0.42 s cooldown and knocks regular enemies back.
+- **The swing follows your facing** (kbph, 4 Oct: "when player switches direction, the blade swings the other way"), in the arena and the forest alike. Your facing is your last non-zero move (keys or the touch stick), any of the 8 directions; standing still keeps it. Space and the touch **Attack** button swing that way; only a real mouse click turns the swing toward the cursor (`aimAtPointer` in `src/fight/logic.ts`; a mouse resting on the canvas used to pull every Space swing toward it, usually to the right, and on touch the Attack button never aims). The hitbox is `swingArc(pos, facing, radius)`: a sector of radius player radius + 46 around the facing; the sim hits with it (`hitBySwing`) and both scenes draw that same sector, so the white arc on screen is exactly what hits. Enemies are unaffected. Tests: `src/fight/swing.test.ts` (the hitbox for all 8 facings; in both modes an enemy on your left is hit facing left and missed facing right).
 - **Dash:** a quick burst (0.16 s) with 0.22 s of invulnerability. You pass through the enemy and its bullets. Cooldown 0.8 s; the thin blue bar under your HP shows it.
 - **Getting hit:** you are knocked back, the camera shakes, and you blink through 0.8 s of i-frames.
 - The touch controls show when the device reports touch input. They also appear on the first touch.

@@ -1,6 +1,6 @@
 import Phaser from "phaser";
 import { FloatingStick } from "../input/stick";
-import { ARENA, PLAYER, STEP_MS, moveDir, type Circle, type FightLayout, type FightResult, type Vec } from "./logic";
+import { ARENA, PLAYER, STEP_MS, aimAtPointer, moveDir, swingArc, type Circle, type FightLayout, type FightResult, type Vec } from "./logic";
 import { FightSim, type FightControls } from "./sim";
 import type { FightInput } from "./logic";
 
@@ -35,6 +35,8 @@ export class FightScene extends Phaser.Scene {
   private touchUI: boolean;
   // Queued presses survive frames that run no sim step (very fast displays).
   private attackQueued = false;
+  /** The queued attack came from a mouse click (only those aim at the pointer: `aimAtPointer`). */
+  private clickQueued = false;
   private dashQueued = false;
   private mouseDown = false;
   private mouseAim: Vec | null = null;
@@ -107,6 +109,7 @@ export class FightScene extends Phaser.Scene {
       while (this.acc >= STEP_MS && !this.sim.over) {
         this.sim.step(this.controls());
         this.attackQueued = false;
+        this.clickQueued = false;
         this.dashQueued = false;
         this.acc -= STEP_MS;
         if (this.sim.fx.includes("hurt")) this.cameras.main.shake(140, 0.008);
@@ -135,7 +138,7 @@ export class FightScene extends Phaser.Scene {
       const s = this.stick.dir();
       if (s.x !== 0 || s.y !== 0) move = s;
     }
-    const mouse = this.mouseDown || (this.attackQueued && this.mouseAim !== null);
+    const mouse = aimAtPointer(this.mouseDown || this.clickQueued, this.touchUI) && this.mouseAim !== null;
     return {
       move,
       attack: this.attackQueued || k.SPACE.isDown || this.mouseDown || this.attackPtr !== null,
@@ -159,7 +162,7 @@ export class FightScene extends Phaser.Scene {
       return;
     }
     this.mouseAim = this.toArena(p);
-    if (p.leftButtonDown()) { this.mouseDown = true; this.attackQueued = true; }
+    if (p.leftButtonDown()) { this.mouseDown = true; this.attackQueued = true; this.clickQueued = true; }
   }
 
   private pointerMove(p: Phaser.Input.Pointer): void {
@@ -239,10 +242,10 @@ export class FightScene extends Phaser.Scene {
     const px = ox + p.pos.x;
     const py = oy + p.pos.y;
     if (p.swingMs > 0) {
-      const a = Math.atan2(p.swingDir.y, p.swingDir.x);
+      const arc = swingArc(p.pos, p.swingDir, p.radius); // the hitbox itself, so it turns with the facing
       const k = p.swingMs / PLAYER.swingMs;
-      g.fillStyle(0xffffff, 0.35 * k).slice(px, py, p.radius + PLAYER.swingRange, a - PLAYER.swingHalfAngle, a + PLAYER.swingHalfAngle, false).fillPath();
-      g.lineStyle(4, 0xffffff, 0.8 * k).beginPath().arc(px, py, p.radius + PLAYER.swingRange, a - PLAYER.swingHalfAngle, a + PLAYER.swingHalfAngle, false).strokePath();
+      g.fillStyle(0xffffff, 0.35 * k).slice(px, py, arc.reach, arc.from, arc.to, false).fillPath();
+      g.lineStyle(4, 0xffffff, 0.8 * k).beginPath().arc(px, py, arc.reach, arc.from, arc.to, false).strokePath();
     }
     if (p.dashMs > 0) for (let i = 1; i <= 3; i++) g.fillStyle(COL.player, 0.18).fillCircle(px - p.dashDir.x * i * 14, py - p.dashDir.y * i * 14, p.radius);
     const alpha = p.iframesMs > 0 && blink ? 0.35 : 1;

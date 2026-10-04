@@ -9,7 +9,7 @@ import { COL, bar, button, inCircle, lerpColor } from "./draw";
 import { ENEMY_ART_SIZE, enemyTextureKey, ensureEnemyTextures } from "./enemyArt";
 import type { Encounter } from "./encounters";
 import { UNITS_PER_PX, footPx, forestLayout, toPx, type ForestLayout } from "./forest";
-import { PLAYER, STEP_MS, moveDir, type FightInput, type FightResult, type Vec } from "./logic";
+import { PLAYER, STEP_MS, aimAtPointer, moveDir, swingArc, type FightInput, type FightResult, type Vec } from "./logic";
 import { FightSim, type EnemyBody, type FightControls, type SimWorld } from "./sim";
 
 /** Live, read-only view of the forest scene for the lab and smoke tests (the sim itself comes via `onDebug` too). */
@@ -66,6 +66,8 @@ export class ForestScene extends Phaser.Scene {
   private finished = false;
   private touchUI: boolean;
   private attackQueued = false;
+  /** The queued attack came from a mouse click (only those aim at the pointer: `aimAtPointer`). */
+  private clickQueued = false;
   private dashQueued = false;
   private mouseDown = false;
   private mouseScreen: Vec | null = null;
@@ -228,6 +230,7 @@ export class ForestScene extends Phaser.Scene {
       while (this.acc >= STEP_MS && !this.sim.over) {
         this.sim.step(this.controls());
         this.attackQueued = false;
+        this.clickQueued = false;
         this.dashQueued = false;
         this.acc -= STEP_MS;
         if (this.sim.fx.includes("hurt")) this.cameras.main.shake(140, 0.006);
@@ -257,7 +260,7 @@ export class ForestScene extends Phaser.Scene {
       const s = this.stick.dir();
       if (s.x !== 0 || s.y !== 0) move = s;
     }
-    const mouse = this.mouseDown || (this.attackQueued && this.mouseScreen !== null);
+    const mouse = aimAtPointer(this.mouseDown || this.clickQueued, this.touchUI) && this.mouseScreen !== null;
     let aim: Vec | null = null;
     if (mouse && this.mouseScreen) {
       const wp = this.cameras.main.getWorldPoint(this.mouseScreen.x, this.mouseScreen.y);
@@ -276,7 +279,7 @@ export class ForestScene extends Phaser.Scene {
       return;
     }
     this.mouseScreen = { x: p.x, y: p.y };
-    if (p.leftButtonDown()) { this.mouseDown = true; this.attackQueued = true; }
+    if (p.leftButtonDown()) { this.mouseDown = true; this.attackQueued = true; this.clickQueued = true; }
   }
 
   private pointerMove(p: Phaser.Input.Pointer): void {
@@ -394,11 +397,11 @@ export class ForestScene extends Phaser.Scene {
     // The player's swing and dash trail.
     const px = toPx(p.pos.x), py = toPx(p.pos.y) - 3;
     if (p.swingMs > 0) {
-      const a = Math.atan2(p.swingDir.y, p.swingDir.x);
+      const arc = swingArc(p.pos, p.swingDir, p.radius); // the hitbox itself, so it turns with the facing
       const k = p.swingMs / PLAYER.swingMs;
-      const r = toPx(p.radius + PLAYER.swingRange);
-      f.fillStyle(0xffffff, 0.3 * k).slice(px, py, r, a - PLAYER.swingHalfAngle, a + PLAYER.swingHalfAngle, false).fillPath();
-      f.lineStyle(1.5, 0xffffff, 0.85 * k).beginPath().arc(px, py, r, a - PLAYER.swingHalfAngle, a + PLAYER.swingHalfAngle, false).strokePath();
+      const r = toPx(arc.reach);
+      f.fillStyle(0xffffff, 0.3 * k).slice(px, py, r, arc.from, arc.to, false).fillPath();
+      f.lineStyle(1.5, 0xffffff, 0.85 * k).beginPath().arc(px, py, r, arc.from, arc.to, false).strokePath();
     }
     if (p.dashMs > 0) for (let i = 1; i <= 3; i++) f.fillStyle(COL.player, 0.2).fillCircle(px - p.dashDir.x * i * 5, py - p.dashDir.y * i * 5, 5);
 
