@@ -18,10 +18,10 @@ const scene = (over: Record<string, unknown> = {}): Record<string, unknown> => (
 });
 
 test("SceneDef: the sample scenes are valid and findable", () => {
-  assert.ok(SCENES.length >= 3);
+  assert.ok(SCENES.length === 2);
   assert.equal(SCENES[0].id, "village", "the village is the default scene (act 1 starts there)");
   for (const s of SCENES) assert.deepEqual(sceneErrors(s), [], s.id);
-  assert.equal(sceneById("crossroads")?.size.w, 960);
+  assert.equal(sceneById("forest")?.size.w, 1280);
   assert.equal(sceneById("nope"), undefined);
 });
 
@@ -104,13 +104,13 @@ test("zones: point tests, enter and leave once each, no entry for the spawn zone
 
 test("art: private file beats the def's URL or key; extensions; URL detection", () => {
   const url = (f: string) => `/assets/private/${f}`;
-  const files = ["player-idle.png", "scenes/crossroads/background.png", "scenes/crossroads/actors/devil.webp"];
-  assert.deepEqual(artSource(files, "crossroads", "background", "bg-key", url), { kind: "private", url: "/assets/private/scenes/crossroads/background.png" });
-  assert.deepEqual(artSource(files, "crossroads", "actors/devil", undefined, url), { kind: "private", url: "/assets/private/scenes/crossroads/actors/devil.webp" });
-  assert.deepEqual(artSource(files, "crossroads", "overlay", "art/over.png", url), { kind: "url", url: "art/over.png" });
-  assert.deepEqual(artSource(files, "chapel", "background", "bg-key", url), { kind: "key", key: "bg-key" });
-  assert.equal(artSource(files, "chapel", "overlay", undefined, url), null);
-  assert.ok(isUrl("/x/y.png") && isUrl("https://a.b/c") && isUrl("bg.jpg") && !isUrl("scene-crossroads-bg"));
+  const files = ["player-idle.png", "scenes/village/background.png", "scenes/village/actors/devil.webp"];
+  assert.deepEqual(artSource(files, "village", "background", "bg-key", url), { kind: "private", url: "/assets/private/scenes/village/background.png" });
+  assert.deepEqual(artSource(files, "village", "actors/devil", undefined, url), { kind: "private", url: "/assets/private/scenes/village/actors/devil.webp" });
+  assert.deepEqual(artSource(files, "village", "overlay", "art/over.png", url), { kind: "url", url: "art/over.png" });
+  assert.deepEqual(artSource(files, "forest", "background", "bg-key", url), { kind: "key", key: "bg-key" });
+  assert.equal(artSource(files, "forest", "overlay", undefined, url), null);
+  assert.ok(isUrl("/x/y.png") && isUrl("https://a.b/c") && isUrl("bg.jpg") && !isUrl("scene-forest-bg"));
 });
 
 test("placeholder art: playable rect looks walkable, the rest blocked, exits are paths; canopies overlap the bottom edge", () => {
@@ -131,9 +131,13 @@ test("placeholder art: playable rect looks walkable, the rest blocked, exits are
   const eg = sceneTiles(edge);
   assert.ok(!isBlockingId(eg.tiles[Math.floor(80 / 16) * eg.width + Math.floor(200 / 16)]), "a stall outside bounds stands in a clearing");
   assert.ok(isBlockingId(eg.tiles[Math.floor(10 / 16) * eg.width + Math.floor(10 / 16)]), "forest elsewhere");
-  const chapel = sceneById("chapel")!;
-  const door = chapel.zones!.find((z) => z.id === "door-south")!;
-  assert.ok(overlayCanopies(chapel).every((k) => k.trunk || k.x + k.r <= door.x || k.x - k.r >= door.x + door.w), "no canopy over an exit");
+  for (const id of ["village", "forest"]) {
+    const sc = sceneById(id)!;
+    for (const door of sc.zones!.filter((z) => z.kind === "exit")) {
+      const over = (k: { x: number; y: number; r: number }) => k.x + k.r > door.x && k.x - k.r < door.x + door.w && k.y + k.r > door.y && k.y - k.r < door.y + door.h;
+      assert.ok(overlayCanopies(sc).every((k) => k.trunk || k.y < sc.bounds.y + sc.bounds.h || !over(k)), `no bottom-row canopy over the exit ${door.id} of ${id}`);
+    }
+  }
 });
 
 test("worldLayout: zoom is an integer >= 1, default 2", () => {

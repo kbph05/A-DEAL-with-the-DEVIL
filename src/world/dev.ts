@@ -23,7 +23,6 @@ declare global {
 }
 
 const $ = <T extends HTMLElement>(id: string) => document.getElementById(id) as T;
-const picker = $<HTMLSelectElement>("scene");
 const outlinesBox = $<HTMLInputElement>("outlines");
 const stage = $<HTMLDivElement>("stage");
 const where = $<HTMLSpanElement>("where");
@@ -40,8 +39,6 @@ const state: NonNullable<Window["__world"]> = { scene: null, debug: null, events
 window.__world = state;
 let handle: SceneHandle | null = null;
 const loaded = new Map<string, SceneDef>(SCENES.map((s) => [s.id, s]));
-
-for (const s of SCENES) picker.add(new Option(`${s.id} (${s.size.w}×${s.size.h})`, s.id));
 
 function setQuery(key: string, value: string | null): void {
   const url = new URL(location.href);
@@ -70,12 +67,6 @@ function mount(def: SceneDef): void {
     onLeaveZone: (z) => { log("leave")(z); leaveZone(z); },
   });
   state.mounts++;
-}
-
-function show(id: string): void {
-  (document.activeElement as HTMLElement | null)?.blur(); // hand the keys back to the game
-  const def = loaded.get(id);
-  if (def) { setQuery("scene", id); mount(def); }
 }
 
 // ---------------------------------------------------------------------------------------------------------------
@@ -177,7 +168,6 @@ const tick = () => {
 };
 requestAnimationFrame(tick);
 
-picker.addEventListener("change", () => show(picker.value));
 outlinesBox.addEventListener("change", () => {
   handle?.setOutlines(outlinesBox.checked);
   setQuery("outlines", outlinesBox.checked ? "1" : null);
@@ -186,14 +176,12 @@ outlinesBox.addEventListener("change", () => {
 
 async function start(): Promise<void> {
   const want = q.get("scene") ?? SCENES[0].id;
-  if (loaded.has(want)) { picker.value = want; mount(loaded.get(want)!); return; }
+  if (loaded.has(want)) { mount(loaded.get(want)!); return; }
   try {
     const res = await fetch(want);
     if (!res.ok) throw new Error(`${res.status} ${res.statusText}`);
     const def = parseSceneDef(await res.json());
     loaded.set(def.id, def);
-    picker.add(new Option(`${def.id} (${want})`, def.id));
-    picker.value = def.id;
     mount(def);
   } catch (e) {
     err.style.display = "grid";

@@ -18,7 +18,7 @@ This is the designer's model (Big Chungus, asked for by kbph, 4 Oct):
 
 ## SceneDef
 
-A scene is plain JSON data (`SceneDef` in `src/world/scene.ts`). Coordinates are world pixels: (0, 0) is the background's top-left, and an actor's `x, y` is its feet.
+A scene is plain JSON data (`SceneDef` in `src/world/scene.ts`). The example below is only an example (a made-up "crossroads"), not one of the sample scenes. Coordinates are world pixels: (0, 0) is the background's top-left, and an actor's `x, y` is its feet.
 
 ```json
 {
@@ -60,7 +60,7 @@ A scene is plain JSON data (`SceneDef` in `src/world/scene.ts`). Coordinates are
 - actors stand inside `size` (they may be outside `bounds`: shopfronts on the edge);
 - enemy `spawns` lie inside `bounds`.
 
-**The samples** are in `src/world/scenes/`: `village.json` (960×540, the default: the first entry of `SCENES`; see "The village and shop zones" below), `crossroads.json` (960×540: the devil, a signpost, two exits and a shrine) `chapel.json` (1600×900, bigger than the view, so the camera scrolls and clamps) and `forest.json` (1280×560: the forest path the fights play on, with six enemy `spawns` and an exit at the far end; the world lab can walk it too). To add one, drop a JSON file there and list it in `scenes/index.ts`. The lab can also load any SceneDef JSON by URL (see below).
+**The samples** are in `src/world/scenes/`: `village.json` (960×540, the default: the first entry of `SCENES`; see "The village and shop zones" below), and `forest.json` (1280×560, wider than the view, so the camera scrolls and clamps: the forest path the fights play on, with six enemy `spawns` and an exit at the far end; the world lab can walk it too). There are only these two scenes. To add one, drop a JSON file there and list it in `scenes/index.ts`. The lab can also load any SceneDef JSON by URL (see below).
 
 ## The village and shop zones
 
@@ -141,7 +141,7 @@ Shared with the fight: `src/input/dir.ts` (keyboard and stick to a unit directio
 ```ts
 import { mountScene, sceneById } from "./world";
 const view = mountScene(el, {
-  scene: sceneById("crossroads"),               // any SceneDef; checked with parseSceneDef
+  scene: sceneById("forest"),                   // any SceneDef; checked with parseSceneDef
   onEnterZone(zone, scene) { /* zone.kind === "exit" → later: go to zone.node */ },
   onLeaveZone(zone, scene) { },
   speed: 80,                                     // optional, px/s
@@ -182,7 +182,6 @@ Other options:
 **The lab page:**
 
 - It opens on the **village** and runs a real engine game (`createGame(seed)` with the StubDevil) with the HUD (`mountHud`) over the scene. See "The village and shop zones".
-- **Scene** picks a sample scene. Switching destroys the game and mounts a new one, so it also exercises `destroy()`.
 - **Bounds and zones** draws the debug outlines:
   - the playable rectangle in yellow;
   - exits in red and triggers in blue, filled while you stand in them;
@@ -192,7 +191,7 @@ Other options:
 
 **Query string:**
 
-- `?scene=chapel` picks a sample scene. `?scene=/scenes/mine.json` loads a SceneDef JSON from a URL instead, for example a file you put in `public/`.
+- `?scene=forest` picks a sample scene (the lab has no scene picker: the village opens by default, and this is the only way to change scene). `?scene=/scenes/mine.json` loads a SceneDef JSON from a URL instead, for example a file you put in `public/`.
 - `&outlines=1` starts with the outlines on.
 - `&touch=1` / `&touch=0` forces the touch stick on or off.
 - `&speed=160` changes the walking speed; `&zoom=3` the zoom.
@@ -240,7 +239,7 @@ Real art replaces the placeholders automatically, with no code change. Put the f
   1. Add the files.
   2. Check `git status`: it must not list them.
   3. Restart the dev server, or rebuild. `vite.config.ts` lists that folder (and its subfolders) when it starts and bakes the paths in as `__PRIVATE_ASSETS__`. That way only files that exist are requested, and a clean checkout logs no 404s.
-- **Never commit real art.** Art the team owns and wants in the repo can go anywhere under `public/` and be referenced by URL in the SceneDef (`"background": "/scenes/crossroads.png"`).
+- **Never commit real art.** Art the team owns and wants in the repo can go anywhere under `public/` and be referenced by URL in the SceneDef (`"background": "/scenes/village.png"`).
 
 **The player sheet** (this is for licensed art that can't be redistributed; the team is considering **zerie's Tiny RPG Character Asset Pack**: 100×100 frames, no redistribution, so it must never be committed to this public repo):
 
