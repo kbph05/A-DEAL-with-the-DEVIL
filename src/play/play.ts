@@ -5,7 +5,8 @@
  * goes through the one shared `Session`; what is on screen is derived from `flow(view, local)` (flow.ts) on each render.
  */
 import "./play.css";
-import { HttpDevil, ONE_CHOICE, execute, setDevil, type Command, type GameEvent, type View } from "../game";
+import { HttpDevil, ONE_CHOICE, execute, isGibberish, setDevil, type Command, type GameEvent, type View } from "../game";
+import { offTopicKind } from "../game/devil";
 import { createSession } from "../game/session";
 import { runForestFight } from "../fight";
 import { mountHud } from "../hud/hud";
@@ -16,6 +17,8 @@ import { effectChips, curseText, eventText, kindLookup, lastStrike, outcomeEvent
 import { mountScene, sceneById, type SceneHandle, type SceneZone } from "../world";
 import { shopPrompt } from "../world/shopZone";
 import { CLOSE_DEVIL, LOCAL, OPEN_DEVIL, arrived, flow, setLocal, wantsOpener, wellChoice, wishToSend, type Flow, type Local } from "./flow";
+import { mountDevilArt } from "./devilArt";
+import { POSE_MS, devilPose } from "./devilPose";
 
 const params = new URLSearchParams(location.search);
 const TEST = import.meta.env.MODE === "test";
@@ -84,6 +87,7 @@ const devil = h("div", "play-layer play-devil");
 devil.setAttribute("role", "dialog");
 devil.setAttribute("aria-modal", "true");
 devil.setAttribute("aria-label", "The devil");
+const portrait = mountDevilArt(); // his silhouette above the card (devilArt.ts); kept across the card's re-renders
 const ending = h("div", "play-layer play-ending");
 const toast = h("div", "play-toast");
 toast.setAttribute("role", "status");
@@ -102,6 +106,36 @@ let autoFought: string | null = null; // the node whose fight was started on arr
 let wish = "";
 let toastTimer = 0;
 let current: Flow = flow(session.game().view(), local);
+
+// ---- the devil's portrait: which pose (devilPose.ts), from his overlay's state and the clock ------------------------
+const pose = {
+  /** When the overlay opened, or the player stopped typing: idle shifts count from here. */
+  since: 0,
+  /** When the offer on the table arrived (null: none yet at this overlay). */
+  offerAt: null as number | null,
+  laughUntil: 0,
+  /** The player is working in the wish box (clicked or typed in it); a box focused by the page alone doesn't count. */
+  engaged: false,
+  /** The wish just sent was gibberish, off-topic or a jailbreak: he scorns the player when he answers. */
+  scorn: false,
+};
+let poseTimer = 0;
+let leaving = 0; // he left laughing: the portrait lingers, fading, until this timer ends
+const reducedMotion = (): boolean => window.matchMedia?.("(prefers-reduced-motion: reduce)").matches === true;
+function updatePose(): void {
+  const reduce = reducedMotion();
+  portrait.set(devilPose({ now: performance.now(), since: pose.since, typing: pose.engaged || wish.trim() !== "", offerAt: pose.offerAt, laughUntil: pose.laughUntil, reducedMotion: reduce }), reduce);
+}
+function laughNow(): void { pose.laughUntil = performance.now() + POSE_MS.laugh; }
+function stopTyping(): void {
+  if (!pose.engaged) return;
+  pose.engaged = false;
+  pose.since = performance.now();
+}
+devil.addEventListener("pointerdown", (e) => { if (e.target instanceof HTMLInputElement) { pose.engaged = true; updatePose(); } });
+devil.addEventListener("keydown", (e) => { if (e.target instanceof HTMLInputElement && e.key !== "Tab" && e.key !== "Escape") { pose.engaged = true; updatePose(); } });
+devil.addEventListener("input", () => updatePose());
+devil.addEventListener("focusout", (e) => { if (e.target instanceof HTMLInputElement) { stopTyping(); updatePose(); } });
 
 function patch(p: Partial<Local>): void { local = setLocal(local, session.game().view().nodeId, p); render(); }
 
@@ -122,6 +156,7 @@ async function send(c: Command): Promise<void> {
   if (local.busy) return;
   const g = session.game();
   if (c.cmd === "deal") local = setLocal(local, g.view().nodeId, { busy: "devil" });
+  if (c.cmd === "deal") pose.scorn = !!c.text && (isGibberish(c.text) || offTopicKind(c.text) !== null);
   render();
   let events: GameEvent[] = [];
   try { events = (await execute(g, c)).events; } finally { local = { ...local, busy: null }; }
@@ -133,7 +168,12 @@ session.subscribe((events) => {
   if (events.some((e) => e.type === "started")) { log = []; local = LOCAL; autoFought = null; wish = ""; }
   const moved = events.find((e) => e.type === "moved");
   if (moved) { local = arrived(moved.to); wish = ""; }
-  for (const e of events) log.unshift(e);
+  for (const e of events) {
+    log.unshift(e);
+    if (e.type === "deal_offered") { pose.offerAt = performance.now(); if (pose.scorn) laughNow(); }
+    if (e.type === "devil_struck" || e.type === "deal_applied") laughNow(); // a strike, or a deal struck: he laughs
+    if (e.type === "deal_offered" || e.type === "devil_struck") pose.scorn = false;
+  }
   log = log.slice(0, 200);
   say(events);
   render();
@@ -276,13 +316,45 @@ function renderPanel(v: View, f: Flow): void {
   list.querySelector<HTMLButtonElement>("button:not(:disabled)")?.focus();
 }
 
+/** The overlay goes away. If he is laughing (a deal struck, a strike), his portrait lingers and fades over what comes next. */
+function closeDevil(): void {
+  if (devil.hidden || leaving) return;
+  const left = pose.laughUntil - performance.now();
+  if (left > 0) {
+    devil.classList.add("leaving");
+    devil.setAttribute("aria-hidden", "true");
+    devil.inert = true; // the card stays in place, hidden (play.css), so the portrait doesn't jump
+    delete devil.dataset.key;
+    leaving = window.setTimeout(() => { leaving = 0; closeDevil(); }, left);
+    return;
+  }
+  devil.hidden = true;
+  devil.classList.remove("leaving");
+  devil.removeAttribute("aria-hidden");
+  devil.inert = false;
+  clearInterval(poseTimer); poseTimer = 0;
+}
+
+function openDevil(v: View): void {
+  if (leaving) { clearTimeout(leaving); leaving = 0; devil.classList.remove("leaving"); devil.removeAttribute("aria-hidden"); devil.inert = false; }
+  if (!devil.hidden && poseTimer) return;
+  // Freshly up: idle counts from now. An offer that is already there (a well's opener) arrived just now as far as he cares.
+  pose.since = performance.now();
+  pose.engaged = false;
+  if (pose.offerAt === null || !v.offer) pose.offerAt = v.offer ? performance.now() : null;
+  devil.hidden = false;
+  updatePose();
+  if (!poseTimer) poseTimer = window.setInterval(updatePose, 200);
+}
+
 function renderDevil(v: View, f: Flow): void {
-  devil.hidden = !f.devil;
-  if (!f.devil) return;
+  if (!f.devil) { closeDevil(); return; }
+  openDevil(v);
   const active = document.activeElement;
   const typing = active instanceof HTMLInputElement && devil.contains(active);
   if (typing && local.busy === null && devil.dataset.key === JSON.stringify([v.nodeId, v.asksLeft, v.questionsLeft, !!v.offer])) return;
   devil.dataset.key = JSON.stringify([v.nodeId, v.asksLeft, v.questionsLeft, !!v.offer]);
+  stopTyping(); // the wish box is rebuilt below
   const card = h("div", "play-card");
   const canAsk = v.actions.some((c) => c.cmd === "deal");
   const busy = local.busy === "devil" || v.pending;
@@ -323,7 +395,8 @@ function renderDevil(v: View, f: Flow): void {
   if (v.offer && !busy) row.append(button("Accept", () => void send({ cmd: "accept" })), button("Refuse", () => void send({ cmd: "refuse" }), "quiet"));
   if (!v.offer && !busy) row.append(button("Walk away", () => patch(CLOSE_DEVIL), "quiet"));
   card.append(row);
-  devil.replaceChildren(card);
+  devil.replaceChildren(portrait.el, card);
+  updatePose();
   // Focus the wish box with a keyboard; on a touch screen that would pop the on-screen keyboard over the offer.
   const coarse = window.matchMedia?.("(pointer: coarse)").matches === true;
   (devil.querySelector<HTMLElement>(coarse ? "button:not(:disabled)" : "input:not(:disabled)") ?? devil.querySelector<HTMLElement>("button:not(:disabled)"))?.focus();

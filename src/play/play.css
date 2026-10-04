@@ -29,8 +29,26 @@ body { overflow: hidden; }
 .play-choices { display: grid; gap: 8px; }
 .play-choices button { display: flex; flex-direction: column; align-items: flex-start; text-align: left; }
 .play-choices button small { font-weight: 400; color: #f3dada; opacity: .85; }
-.play-devil { z-index: 40; display: flex; align-items: center; justify-content: center; background: radial-gradient(ellipse at 50% 35%, #3a0d0d 0%, #0a0303 75%); padding: 12px; box-sizing: border-box; }
-.play-devil .play-card { background: rgba(18, 6, 6, .94); border-color: #a33; }
+.play-devil { z-index: 40; display: flex; flex-direction: column; align-items: center; justify-content: center; background: radial-gradient(ellipse at 50% 35%, #3a0d0d 0%, #0a0303 75%); padding: 12px; box-sizing: border-box; }
+.play-devil .play-card { position: relative; z-index: 1; flex: 0 1 auto; min-height: 0; margin-top: -14px; background: rgba(18, 6, 6, .94); border-color: #a33; }
+/* His portrait (devilArt.ts, docs/play.md): the designer's black silhouettes, bottom-anchored on the card's top edge,
+   filling what the card leaves (about the top half on a laptop, a third on a phone). A layered ember rim glow makes the
+   black read on the dark red; the seven poses are stacked and cross-faded. Decorative, no pointer events. */
+.play-devil-art { position: relative; flex: 1 1 0; width: 100%; min-height: 72px; max-height: 58vh; pointer-events: none;
+  filter: drop-shadow(0 0 1px rgba(255, 140, 70, .9)) drop-shadow(0 0 5px rgba(230, 70, 30, .55)) drop-shadow(0 0 22px rgba(170, 25, 10, .45));
+  /* The pictures end in a straight cut below the shoulders: let it sink into the dark instead (behind the card's edge). */
+  -webkit-mask-image: linear-gradient(to bottom, #000 84%, transparent 100%); mask-image: linear-gradient(to bottom, #000 84%, transparent 100%); }
+.play-devil-art img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: contain; object-position: 50% 100%; opacity: 0; transition: opacity .2s ease-in-out; filter: brightness(0); user-select: none; -webkit-user-drag: none; }
+.play-devil-art img.on { opacity: 1; }
+.play-devil-art.instant img { transition: none; }
+/* He left laughing (a deal struck, a strike): his portrait lingers where it was over what comes next, then fades.
+   The card keeps its place, unseen and inert (play.ts). */
+.play-devil.leaving { pointer-events: none; animation: play-devil-leave 1.6s ease-in forwards; }
+.play-devil.leaving .play-card { visibility: hidden; }
+@keyframes play-devil-leave { 0%, 55% { opacity: 1; } 100% { opacity: 0; } }
+@media (prefers-reduced-motion: reduce) { .play-devil.leaving { animation: none; } }
+@media (max-aspect-ratio: 1/1) { .play-devil-art { max-height: 36vh; } }
+@media (min-aspect-ratio: 1/1) and (max-height: 540px) { .play-devil-art { max-height: 30vh; } }
 .play-devil .say { font: italic 17px Georgia, serif; color: #f2d2c0; margin: 8px 0 12px; min-height: 2.4em; }
 .play-devil .strike { color: #ff8a7a; font-weight: 600; margin: 0 0 8px; }
 .play-devil .chips { display: flex; flex-wrap: wrap; gap: 6px; margin: 0 0 10px; }

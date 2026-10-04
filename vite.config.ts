@@ -1,5 +1,5 @@
 import { existsSync, readdirSync } from "node:fs";
-import { sep } from "node:path";
+import { resolve, sep } from "node:path";
 import { defineConfig } from "vite";
 import { encryptedAssets } from "./tools/vite-plugin-encrypted-assets.ts";
 
@@ -23,10 +23,14 @@ const privateAssets = existsSync(privateDir)
   ? readdirSync(privateDir, { recursive: true, encoding: "utf8" }).map((f) => f.split(sep).join("/")).filter((f) => /\.(png|jpe?g|webp|json)$/i.test(f)).sort()
   : [];
 const define = { __PRIVATE_ASSETS__: JSON.stringify(privateAssets) };
+// The designer's art in assets/ (the devil's poses, the forest band) is imported by the code; keep each a hashed file in
+// the build instead of inlining the small ones (under 4 KB) as data URIs in the JS.
+const repoArt = resolve("assets") + sep;
+const assetsInlineLimit = (file: string): boolean | undefined => (file.startsWith(repoArt) ? false : undefined);
 const plugins = [encryptedAssets()];
 // Test builds have two Phaser pages (fight lab, world lab) sharing Phaser: give that shared chunk a clear name.
 const phaserChunk = { codeSplitting: { groups: [{ name: "phaser", test: /[\\/]node_modules[\\/]phaser[\\/]/ }] } };
 
 export default defineConfig(({ mode }) => (mode === "test"
-  ? { define, plugins, build: { chunkSizeWarningLimit: 1400, rolldownOptions: { input: { index: "index.html", fight: "fight.html", world: "world.html", hud: "hud.html", map: "map.html", play: "play.html" }, output: phaserChunk } } }
-  : { define, plugins, build: { chunkSizeWarningLimit: 1400 } }));
+  ? { define, plugins, build: { assetsInlineLimit, chunkSizeWarningLimit: 1400, rolldownOptions: { input: { index: "index.html", fight: "fight.html", world: "world.html", hud: "hud.html", map: "map.html", play: "play.html" }, output: phaserChunk } } }
+  : { define, plugins, build: { assetsInlineLimit, chunkSizeWarningLimit: 1400 } }));

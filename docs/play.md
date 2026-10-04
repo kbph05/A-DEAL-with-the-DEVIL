@@ -47,6 +47,17 @@ Each node kind has a screen:
 - a wish box with **Ask**, which becomes **Haggle** while an offer stands;
 - **Accept** / **Refuse** while an offer stands, and **Walk away** otherwise.
 
+**The devil's portrait** (Big Chungus's silhouettes, 4 Oct: `assets/devil_*.png`). He fills the space above the card, about the top half on a 1366×768 screen and a third on a 390×844 phone, with the card's top edge over his shoulders. The black silhouette reads on the dark red through a layered ember rim glow (CSS `drop-shadow`s on `.play-devil-art`). He is decorative: `aria-hidden`, no pointer events, never focused; focus lands on the card as before (the wish box with a keyboard, the first button on touch).
+
+- **Files:** the seven PNGs are imported through Vite (`src/play/devilArt.ts`), so builds ship them as hashed files (`vite.config.ts` keeps them from being inlined). They are stacked and cross-faded (200 ms).
+- **Poses** (`devilPose` in `src/play/devilPose.ts`, pure, tested in `devilPose.test.ts`). Priority, top first:
+  - `laugh`, for 1.6 s: you accept a deal, he strikes, or he answers gibberish, off-topic text or a jailbreak (your wish checked with the stub's own `isGibberish` and `offTopicKind`, whichever devil answers). When the overlay closes on a laugh (an accepted deal forces the map), his portrait lingers and fades over the map, inert and click-through.
+  - `head_tilt`: you are typing or haggling: the wish box has text, or you clicked or typed in it. The box the page focuses for you doesn't count, or he would never do anything else on a laptop.
+  - `lean_in`, for 2.2 s: an offer lands, the opening offer included.
+  - Idle: `normal`, and every 4 to 7 s a 1.3 s shift to `left`, `right` or `lean_left` in turn, then back to normal.
+- **Reduced motion** (`prefers-reduced-motion`): no idle shifts, and the swaps are instant; no fade when he leaves.
+- **No private override.** The old dealer placeholder and its `devil/dealer.png` hook went out with the revert in 8d890c9. To change the art, replace the PNGs in `assets/`, keeping the names.
+
 **Ask** runs the engine's devil round trip through `Game.deal(text)`: ask, await the devil, `devil_reply`. Nothing else can be pressed while he considers.
 
 **Results** of every command (a buy, a fight, a deal) show for a few seconds as a toast near the top, in the engine's own words (`describe`). The devil's offers and strikes show in his overlay instead.
@@ -82,6 +93,8 @@ A property test plays 150 random legal runs on the real engine. At every state i
 | --- | --- |
 | `flow.ts` | The controller. Pure. |
 | `flow.test.ts` | Its tests. |
+| `devilPose.ts`, `devilPose.test.ts` | Which devil pose shows, from the overlay's state and the clock. Pure, and its tests. |
+| `devilArt.ts` | The devil's portrait: the seven PNGs, stacked and cross-faded. |
 | `play.ts` | The page: mounts the layers, runs commands through the session, renders from `flow`. |
 | `play.css` | The page's styles. Portrait screens keep the prompt clear of the HUD's item column and put the map title and toast under the stats. Short landscape screens (a turned phone) put the map title under the stats on the left, off your node. |
 | `/play.html` | The entry. Test builds only (`vite.config.ts` lists it in mode `test`). |
