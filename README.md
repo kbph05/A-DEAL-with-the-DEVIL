@@ -1,3 +1,5 @@
+New here? Start with docs/OVERVIEW.md.
+
 # A DEAL with the DEVIL
 
 ## Build and run
