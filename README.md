@@ -2,6 +2,8 @@ New here? Start with docs/OVERVIEW.md.
 
 # A DEAL with the DEVIL
 
+**Play it: https://a-deal-with-the-devil.vercel.app** (the devil there is an LLM, via OpenRouter; see [docs/deploy-vercel.md](docs/deploy-vercel.md)).
+
 ## Build and run
 
 Needs **Node.js 20+** (`node -v` to check).
