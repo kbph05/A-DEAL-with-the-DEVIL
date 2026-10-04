@@ -7,6 +7,7 @@ One Vercel project serves the whole game: the static build (`npm run build` → 
 | `vercel.json` | Vite preset, `npm ci`, `npm run build` → `dist`, bakes `VITE_DEVIL_URL=/api/deal` into the build, and gives `api/deal.ts` up to 30 s (`maxDuration`). |
 | `api/deal.ts` | The function: `POST /api/deal {state, context, playerText}` → a Deal (contract: [devil-api.md](devil-api.md)). `OPTIONS` → 204, other methods → 405, bodies over 512 KB → 413, a bad body → 400. |
 | `server/devil-core.ts` | The devil itself, shared with `npm run devil:oai` (`scripts/oai-devil.ts` is now just its Node server). It does the same as that server: strikes rolled server-side, every offer priced, `sanitizeDeal`, and the StubDevil on any model error or timeout. |
+| `api/tsconfig.json` | The compiler settings Vercel uses for `api/` (the root tsconfig is `noEmit`-only). |
 | `api/_lib/devil.mjs` | **Generated.** The core bundled into one file with `devil_prompt.txt` inlined (`npm run build:api`). Vercel compiles `api/*.ts` one file at a time, and Node can't resolve the extensionless imports in `src/`, so the function imports this bundle. **After changing the devil (server/, src/game/, devil_prompt.txt), run `npm run build:api` and commit the result.** `npm test` fails while it's stale. |
 
 ## Environment variables
@@ -39,15 +40,14 @@ On `main`, `index.html` is still the old test UI. The play flow (`play.html`) be
 
 ## Option A: the CLI, from any machine with the repo
 
-This works from a laptop, or from the phone's Xed proot (it needs Node 20+ and the repo checked out on the branch you want live):
+This works from a laptop, or from the phone's Xed proot (it needs Node 20+ and the repo checked out on the branch you want live; no `npm ci` needed, Vercel builds remotely):
 
 ```sh
-npm ci
 npx vercel login                       # once: pick "Continue with GitHub" or email
 npx vercel link                        # once: create the project ("A DEAL with the DEVIL"), accept the detected settings
 npx vercel env add OAI_BASE_URL production   # paste: https://openrouter.ai/api/v1
 npx vercel env add OAI_MODEL production      # paste: google/gemini-2.5-flash
-npx vercel env add OAI_API_KEY production    # paste the OpenRouter key; answer yes to "sensitive"
+npx vercel env add OAI_API_KEY production    # paste the OpenRouter key
 npx vercel env add ASSET_KEY production      # paste the art key
 npx vercel --prod                      # build on Vercel and deploy; prints the URL
 ```
