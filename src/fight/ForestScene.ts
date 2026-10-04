@@ -2,10 +2,11 @@ import Phaser from "phaser";
 import { FloatingStick } from "../input/stick";
 import { privateFiles, privateUrl } from "../world/assets";
 import { facingOf, type Facing } from "../world/logic";
-import { addBand, bundledKey, preloadBand } from "../world/bandArt";
+import { addBand, bundledKey, preloadBand, setBandGamma } from "../world/bandArt";
 import { BG_DEPTH, actorDepth, artSource, isUrl, overlayDepth, privateSceneFile, type SceneDef } from "../world/scene";
 import { backgroundPlaceholder, overlayPlaceholder } from "../world/scenePlaceholders";
 import { HERO_COLS, HERO_ROWS, PLACEHOLDER_HERO, ensurePlaceholderTextures } from "../world/textures";
+import { FOREST_BG_GAMMA } from "./art";
 import { COL, bar, button, inCircle, lerpColor } from "./draw";
 import { ENEMY_ART_SIZE, enemyTextureKey, ensureEnemyTextures } from "./enemyArt";
 import { encounterSummary, type Encounter } from "./encounters";
@@ -25,6 +26,9 @@ export interface ForestView {
   /** Current depths: the player, each enemy (in `sim.enemies` order), the overlay. */
   depth: { player: number; enemies: number[]; overlay: number };
   /** "bundled": the team's band (src/world/bandArt.ts), which also drops the placeholder canopy (overlay "none"). */
+  /** The gamma baked into the bundled forest background now, and a way to change it live (the lab's slider). */
+  gamma: number;
+  setGamma: (gamma: number) => void;
   art: { background: "file" | "bundled" | "key" | "placeholder"; overlay: "file" | "key" | "placeholder" | "none" };
 }
 
@@ -37,6 +41,8 @@ export interface ForestSceneConfig {
   touch: boolean;
   onEnd: (result: FightResult) => void;
   onDebug?: (sim: FightSim, view: ForestView) => void;
+  /** Gamma for the bundled forest background (default `FOREST_BG_GAMMA`; the lab passes its slider's value). */
+  gamma?: number;
 }
 
 type KeyName = "W" | "A" | "S" | "D" | "UP" | "DOWN" | "LEFT" | "RIGHT" | "SPACE" | "SHIFT";
@@ -88,6 +94,7 @@ export class ForestScene extends Phaser.Scene {
     this.view = {
       frames: 0, width: 0, height: 0, portrait: false, zoom: 1, scroll: { x: 0, y: 0 },
       depth: { player: 0, enemies: [], overlay: overlayDepth(cfg.scene.size.h) },
+      gamma: cfg.gamma ?? FOREST_BG_GAMMA, setGamma: () => {}, // setGamma is wired up when the bundled band is drawn
       art: { background: "placeholder", overlay: cfg.scene.overlay ? "placeholder" : "none" },
     };
   }
@@ -131,7 +138,9 @@ export class ForestScene extends Phaser.Scene {
     const band = !privateSceneFile(privateFiles(), def.id, "background") && this.textures.exists(bundledKey(def.id)) && !this.failed.has(bundledKey(def.id));
     if (band) {
       this.view.art.background = "bundled";
-      world.push(addBand(this, def, BG_DEPTH));
+      const bg = addBand(this, def, BG_DEPTH, this.view.gamma);
+      this.view.setGamma = (g) => { setBandGamma(this, def, bg, g); this.view.gamma = g; };
+      world.push(bg);
     } else {
       const bg = this.resolve("background", def.background, (k) => backgroundPlaceholder(this, k, def));
       this.view.art.background = bg.art;

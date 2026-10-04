@@ -100,6 +100,8 @@ export interface RunForestFightOptions {
   force?: EnemyId;
   /** Called once with the encounter, before the fight starts (the lab's readout). */
   onEncounter?: (encounter: Encounter) => void;
+  /** Lab: gamma for the forest background. Default: `FOREST_BG_GAMMA` (src/fight/art.ts). */
+  gamma?: number;
 }
 
 /**
@@ -120,7 +122,7 @@ export function runForestFight(parent: HTMLElement, request: ForestRequest, opti
   return new Promise((resolve) => {
     let ended = false;
     const scene = new ForestScene({
-      input: clean, scene: def, world, encounter, touch, onDebug: options.onDebug,
+      input: clean, scene: def, world, encounter, touch, onDebug: options.onDebug, gamma: options.gamma,
       onEnd: (result) => {
         if (ended) return;
         ended = true;
