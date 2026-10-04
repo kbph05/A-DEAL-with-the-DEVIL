@@ -2,7 +2,8 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { initialState, legalActions, step, view, type Command, type GameState } from "../game";
 import { mulberry32 } from "../map/rng";
-import { CLOSE_DEVIL, LOCAL, OPEN_DEVIL, arrived, flow, setLocal, wantsOpener, type FlowView, type Local } from "./flow";
+import { CLOSE_DEVIL, LOCAL, OPEN_DEVIL, arrived, flow, setLocal, wantsOpener, wellChoice, type FlowView, type Local } from "./flow";
+import type { GameEvent } from "../game";
 
 const go: Command = { cmd: "go", n: 1 };
 /** A hand-made view: by default a quiet node with one exit and nothing else going on. */
@@ -173,4 +174,15 @@ test("wantsOpener: the overlay asks for the devil's opening offer as he appears 
   // a devil-free well, or a village: nothing to ask for
   const plain = view(initialState("ws-3"));
   assert.equal(plain.opening, false);
+});
+
+test("wellChoice: the blessing or the devil, since arriving at the well (log newest first)", () => {
+  const moved: GameEvent = { type: "moved", from: "a0n2", to: "a0n3", kind: "well", act: 0 };
+  const blessing: GameEvent = { type: "bought", item: "blessing", cost: 8, changes: { max_hp: 3 } };
+  const accepted: GameEvent = { type: "deal_applied", deal: { dialogue: "Sign.", effects: { soul: -1 } }, changes: { soul: -1 } };
+  assert.equal(wellChoice([moved]), null, "nothing chosen yet");
+  assert.equal(wellChoice([accepted, moved]), "devil", "his offer accepted: not the blessing");
+  assert.equal(wellChoice([{ type: "deal_refused" }, moved]), "devil", "refused: he has left");
+  assert.equal(wellChoice([blessing, { type: "deal_refused" }, moved]), "blessing", "refused his opener, then bought the blessing");
+  assert.equal(wellChoice([moved, accepted]), null, "a choice at an earlier node does not count");
 });

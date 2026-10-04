@@ -15,7 +15,7 @@ import { paintIcon, type IconKey } from "../mapscene/icons";
 import { effectChips, curseText, eventText, kindLookup, lastStrike, outcomeEvents, questionsText, rewriteText } from "../ui/logic";
 import { mountScene, sceneById, type SceneHandle, type SceneZone } from "../world";
 import { shopPrompt } from "../world/shopZone";
-import { CLOSE_DEVIL, LOCAL, OPEN_DEVIL, arrived, flow, setLocal, wantsOpener, type Flow, type Local } from "./flow";
+import { CLOSE_DEVIL, LOCAL, OPEN_DEVIL, arrived, flow, setLocal, wantsOpener, wellChoice, type Flow, type Local } from "./flow";
 
 const params = new URLSearchParams(location.search);
 const TEST = import.meta.env.MODE === "test";
@@ -36,6 +36,7 @@ function h<K extends keyof HTMLElementTagNameMap>(tag: K, cls?: string, text?: s
   if (text !== undefined) e.textContent = text;
   return e;
 }
+const capital = (t: string): string => t.charAt(0).toUpperCase() + t.slice(1);
 function button(text: string, onClick: () => void, cls = "", sub?: string): HTMLButtonElement {
   const b = h("button", cls);
   b.type = "button";
@@ -239,15 +240,17 @@ function renderPanel(v: View, f: Flow): void {
     list.append(rest, train, deal);
   } else if (f.screen === "well") {
     title.append(icon("well"), "A well");
-    card.append(title, h("p", "lead", v.devilPresent ? "Someone sits on the rim of the well, smiling." : "Cold water, and an old coin slot."));
+    const chose = wellChoice(log); // the blessing, or the devil's offer accepted or refused (then he has left)
+    card.append(title, h("p", "lead", v.devilPresent && chose !== "devil" ? "Someone sits on the rim of the well, smiling." : "Cold water, and an old coin slot."));
     const p = shopPrompt({ id: "well", kind: "shop", item: "blessing", label: "Well", x: 0, y: 0, w: 1, h: 1 }, v);
-    const buy = button(`Buy a blessing (${p.price}g)`, () => { if (p.command) void send(p.command); }, "", p.enabled ? p.desc : p.reason);
+    const locked = chose === "devil" && v.resolved ? capital(ONE_CHOICE.well.devil) : p.reason; // his offer accepted, not the blessing
+    const buy = button(`Buy a blessing (${p.price}g)`, () => { if (p.command) void send(p.command); }, "", p.enabled ? p.desc : locked);
     buy.disabled = !p.enabled;
     list.append(buy);
     if (f.prompts.includes("deal")) list.append(button("Deal", () => patch(OPEN_DEVIL), "", "Talk to the devil at the well"));
     else if (v.devilPresent) { // one choice per well: say why the devil is closed
-      const why = v.resolved ? ONE_CHOICE.well.spent : v.questionsLeft <= 0 ? "the devil has heard enough from you this run" : "the devil has gone";
-      const deal = button("Deal", () => undefined, "", why.charAt(0).toUpperCase() + why.slice(1));
+      const why = chose === "devil" ? "the devil has gone" : v.resolved ? ONE_CHOICE.well.spent : v.questionsLeft <= 0 ? "the devil has heard enough from you this run" : "the devil has gone";
+      const deal = button("Deal", () => undefined, "", capital(why));
       deal.disabled = true;
       list.append(deal);
     }
