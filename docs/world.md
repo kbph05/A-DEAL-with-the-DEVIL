@@ -14,7 +14,7 @@ This is the designer's model (Big Chungus, asked for by kbph, 4 Oct):
   2. the actors and the player, sorted by foot height every frame (the lower the feet, the further in front);
   3. the overlay;
   4. the lab's debug outlines.
-- **Zones** are rectangles that report when the player's feet enter and leave them. They replace door tiles: an `"exit"` zone is the hook for leading to a node of the act map later; a `"trigger"` is anything else.
+- **Zones** are rectangles that report when the player's feet enter and leave them. They replace door tiles: an `"exit"` zone is the hook for leading to a node of the act map later; a `"shop"` zone sells one engine ware (its `item`); a `"trigger"` is anything else.
 
 ## SceneDef
 
@@ -46,18 +46,72 @@ A scene is plain JSON data (`SceneDef` in `src/world/scene.ts`). Coordinates are
 | `background`, `overlay` | A Phaser texture key or an image URL (anything with a `/` or an image extension). `overlay` is optional. |
 | `bounds` | The playable rectangle. It must lie inside `size`. |
 | `spawn` | Where the feet start. It must lie inside `bounds`. |
-| `zones` | Optional. `id`, a rectangle, `kind` (`"exit"` or `"trigger"`, default trigger), an optional `label`, and `node`, a free-form link to an act-map node for later. |
-| `actors` | Optional. `id`, the feet position, an optional `texture` (key or URL) and `label`. |
+| `zones` | Optional. `id`, a rectangle, `kind` (`"exit"`, `"trigger"` or `"shop"`, default trigger), an optional `label`, `node`, a free-form link to an act-map node for later, and `item`, the engine item id a shop sells (`"heal"`, `"blade"`, `"blessing"`; required when `kind` is `"shop"`). |
+| `actors` | Optional. `id`, the feet position, an optional `texture` (key or URL) and `label`. With placeholder art the label is drawn as a small sign above the actor. |
 
 **Validation.** `sceneErrors(raw)` returns every problem as a readable message. `parseSceneDef(raw)` returns the scene or throws one `Error` listing them all. It checks:
 
 - all numbers are finite, and `size`, `bounds` and the zones have an area;
 - `bounds` lies inside `size`, and `spawn` lies inside `bounds`;
 - zone and actor ids are unique;
+- a shop zone has an `item`;
 - a zone touches `bounds` (otherwise it can never be entered);
 - actors stand inside `size`.
 
-**The samples** are in `src/world/scenes/`: `crossroads.json` (960×540: the devil, a signpost, two exits and a shrine) and `chapel.json` (1600×900, bigger than the view, so the camera scrolls and clamps). To add one, drop a JSON file there and list it in `scenes/index.ts`. The lab can also load any SceneDef JSON by URL (see below).
+**The samples** are in `src/world/scenes/`: `village.json` (960×540, the default: the first entry of `SCENES`; see "The village and shop zones" below), `crossroads.json` (960×540: the devil, a signpost, two exits and a shrine) and `chapel.json` (1600×900, bigger than the view, so the camera scrolls and clamps). To add one, drop a JSON file there and list it in `scenes/index.ts`. The lab can also load any SceneDef JSON by URL (see below).
+
+## The village and shop zones
+
+kbph (4 Oct): the village scene, the one the game starts with, contains the shops. Act 1 always starts on the village node, where the engine sells **heal** (10g, +12 HP) and **blade** (15g, +1 attack); **blessing** (8g, one of +3 max HP, +1 attack or +8 HP) is sold at **wells** only.
+
+`src/world/scenes/village.json`:
+
+- Three stalls, as actors `stall-healer`, `stall-smith` and `stall-shrine`, labelled "Healer", "Smith" and "Shrine".
+- In front of each, a zone `{ "kind": "shop", "item": "heal" | "blade" | "blessing", "label": ... }`.
+- Three cottages (`house-*` actors) along the top edge, an exit zone `leave` ("Leave the village") on the east edge, the usual canopy overlay.
+
+`src/world/shopZone.ts` is the glue, pure and tested:
+
+```ts
+shopPrompt(zone, game.view()) // → { title, price, desc, enabled, reason?, command? }
+```
+
+- `enabled` is true exactly when the engine's legal `actions` contain `{cmd:"buy", item: zone.item}`. Then `command` is that command.
+- Otherwise `reason` says why: "Not enough gold: need 15g, you have 10g", "Only sold at a well, not in the village", "Not at a shop (this is a fight node)", "The well has given what it will give", "The run is over", "The devil is speaking".
+- So at the village the Shrine stall is always disabled: the engine's rules (unchanged) sell blessings at wells. If the team wants it buyable here, that is an engine change (`legalActions` and `rejection`).
+- `exitPrompt(zone)` is "Leave the village (map: coming soon)".
+
+**In the world lab** (`dev.ts`): walk into a stall's zone and a prompt appears at the bottom: item, price, effect and a Buy button (E or Enter also buys). Buy sends the command with `game.step`, shows the engine's result text (`describe` of the events, e.g. "Bought blade for 15g: Attack +1."), and updates the HUD and the prompt. Leaving the zone hides it. The HUD's own item bar buys too, through the same path. A new run has 10 gold, so only the Healer is affordable; use `?gold=40` to try the Smith.
+
+**Wiring `buy` in the real game scene** (kbph): the same pieces, with the session's game instead of the lab's:
+
+```ts
+import { mountScene, sceneById } from "./world";
+import { shopPrompt, exitPrompt } from "./world/shopZone";
+import { mountHud } from "./hud/hud";
+import { hudModel } from "./hud/model";
+import { describe } from "./game";
+
+const hud = mountHud(stage, { onUseItem: (item) => item.command && send(item.command) });
+let here: SceneZone | null = null;
+const render = () => {
+  hud.update(hudModel(game.view()));
+  if (here?.kind === "shop") showPrompt(shopPrompt(here, game.view())); // your DOM: title, price, desc, Buy disabled with reason
+};
+const send = (cmd: Command) => { const r = game.step(cmd); showResult(r.events.map(describe).join(" ")); render(); };
+
+mountScene(stage, {
+  scene: sceneById("village"),
+  onEnterZone(zone) {
+    if (zone.kind === "shop") { here = zone; render(); }
+    if (zone.kind === "exit") { /* later: open the map, or game.step({ cmd: "go", n }) */ }
+  },
+  onLeaveZone(zone) { if (here?.id === zone.id) { here = null; hidePrompt(); } },
+});
+// Buy button, E or Enter: const p = shopPrompt(here, game.view()); if (p.enabled) send(p.command!);
+```
+
+Call `render()` after every engine command (moves, fights, deals), not only buys, so the prompt's enabled state and the HUD stay current. Don't pre-check gold yourself: `shopPrompt` reads the engine's own legal actions.
 
 ## Files
 
@@ -65,7 +119,8 @@ A scene is plain JSON data (`SceneDef` in `src/world/scene.ts`). Coordinates are
 | --- | --- |
 | `index.ts` | Public API: `mountScene(parent, options)`, and `mountWorld`, its old name. |
 | `scene.ts` | `SceneDef`, validation, the y-sort depth (`footY`, `actorDepth`, `overlayDepth`), `clampToBounds`, zones (`zonesAt`, `zoneChanges`, `ZoneTracker`) and art precedence (`artSource`). Pure. |
-| `scenes/` | The sample scenes (JSON) and `SCENES` / `sceneById`. |
+| `scenes/` | The sample scenes (JSON) and `SCENES` / `sceneById`. The first, the village, is the default. |
+| `shopZone.ts` | `shopPrompt(zone, view)`: what a shop zone's prompt shows and whether Buy is enabled, from the engine's legal actions; `exitPrompt(zone)`. Pure. |
 | `WorldScene.ts` | The Phaser scene: background, y-sorted actors and player, overlay, Arcade physics, cameras, keyboard and touch. |
 | `scenePlaceholders.ts` | Placeholder background, overlay and actor art, in the generated pixel-art style. The tile grid and canopy layout are pure. |
 | `logic.ts` | Walking speed and smoothing (`stepVelocity`), 4-way facing (`facingOf`), the screen layout (`worldLayout`). Pure. |
@@ -73,7 +128,7 @@ A scene is plain JSON data (`SceneDef` in `src/world/scene.ts`). Coordinates are
 | `assets.ts` | The private art hook for the player sheet (see "Art" below). |
 | `tiles.ts`, `gen.ts`, `tiled.ts` | The old tile model, kept as pure, tested code (see "The tile code" below). |
 | `dev.ts` + `/world.html` | The world lab. |
-| `scene.test.ts`, `world.test.ts` | Node tests (part of `npm test`). |
+| `scene.test.ts`, `shopZone.test.ts`, `world.test.ts` | Node tests (part of `npm test`). |
 
 Shared with the fight: `src/input/dir.ts` (keyboard and stick to a unit direction) and `src/input/stick.ts` (`FloatingStick`, the hand-written touch joystick).
 
@@ -122,13 +177,14 @@ Other options:
 
 **The lab page:**
 
+- It opens on the **village** and runs a real engine game (`createGame(seed)` with the StubDevil) with the HUD (`mountHud`) over the scene. See "The village and shop zones".
 - **Scene** picks a sample scene. Switching destroys the game and mounts a new one, so it also exercises `destroy()`.
 - **Bounds and zones** draws the debug outlines:
   - the playable rectangle in yellow;
   - exits in red and triggers in blue, filled while you stand in them;
   - the feet box in white.
 - The bar shows the feet, the foot y and the current zone, for example `feet (480, 443) · foot y 443 · zone none · facing down`. It also shows the last zone event, for example `Entered exit "Road north"`.
-- `window.__world` exposes `{ scene, debug, events, mounts }` for the console and smoke tests. `debug` is live. `events` lists `{ type: "enter" | "leave", zone, kind, frame }`.
+- `window.__world` exposes `{ scene, debug, events, mounts, game, prompt, result }` (`game` is the engine run, `prompt` the shop prompt on screen or null, `result` the last command's text) for the console and smoke tests. `debug` is live. `events` lists `{ type: "enter" | "leave", zone, kind, frame }`.
 
 **Query string:**
 
@@ -136,6 +192,7 @@ Other options:
 - `&outlines=1` starts with the outlines on.
 - `&touch=1` / `&touch=0` forces the touch stick on or off.
 - `&speed=160` changes the walking speed; `&zoom=3` the zoom.
+- `&seed=abc` sets the run seed; `&gold=40` starts the run with 40 gold (lab only, to try every stall).
 
 ## Controls
 
@@ -157,7 +214,8 @@ There are no image files in the repo, and nothing comes from generative models. 
   - Outside it is forest, walls and water.
   - Exit zones are dirt; triggers are stone floor.
 - **Overlay.** It is transparent except for tree canopies: a row along the bottom edge of the playable rectangle, with gaps over exits, and one big tree inside it whose trunk is on the background. Walk under them and the player is hidden.
-- **Actors.** A 16×24 robed pixel figure, coloured by actor id.
+- **Actors.** A 16×24 robed pixel figure, coloured by actor id. Ids starting `stall-` get a 40×36 market stall (striped awning, seller, counter) and ids starting `house-` a 64×56 cottage.
+- **Paths.** In a scene with shop zones, dirt paths run from the spawn along its row, then up or down to each shop and exit.
 - **Player.** The 16×16 hero sheet from `textures.ts`.
 
 ### Dropping in real art
@@ -203,5 +261,5 @@ The tile model is no longer the art model. The tilemap layer, tile collision, `o
 
 1. **Hook it into the run.** Each act-map node gets a scene. An exit zone's `node` (or its order) picks the successor, and `onEnterZone` with `kind: "exit"` calls the engine's `go`. Fight and boss nodes start `runFight` when you meet the enemy.
 2. **Solid actors and obstacles:** feet boxes for actors, and extra blocking rectangles inside `bounds` (a fountain, a table), if the designer wants them.
-3. **Interactables:** trigger zones plus an "interact" button (Space on desktop, a touch button) for the campfire, well, village stall and the devil's table.
+3. **Interactables:** trigger zones plus an "interact" button (Space on desktop, a touch button) for the campfire, well and the devil's table. The village stalls already do this (E or Enter, or the prompt's Buy button).
 4. **Real art:** the designer's scene textures and overlays in `scenes/<id>/`, and the actual Tiny RPG sheets (verify the spec).
