@@ -50,6 +50,8 @@ export interface WorldSceneConfig {
   onEnterZone?: (zone: SceneZone, scene: SceneDef) => void;
   onLeaveZone?: (zone: SceneZone, scene: SceneDef) => void;
   onDebug?: (debug: WorldDebug) => void;
+  /** Show the help line at the bottom (default true). */
+  help?: boolean;
 }
 
 type KeyName = "W" | "A" | "S" | "D" | "UP" | "DOWN" | "LEFT" | "RIGHT";
@@ -352,7 +354,7 @@ export class WorldScene extends Phaser.Scene {
 
   private drawUI(): void {
     this.ui.clear();
-    this.help.setVisible(!this.touchUI);
+    this.help.setVisible(this.cfg.help !== false && !this.touchUI);
     if (this.touchUI) this.stick.draw(this.ui);
   }
 }

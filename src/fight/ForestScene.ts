@@ -43,6 +43,8 @@ export interface ForestSceneConfig {
   onDebug?: (sim: FightSim, view: ForestView) => void;
   /** Gamma for the bundled forest background (default `FOREST_BG_GAMMA`; the lab passes its slider's value). */
   gamma?: number;
+  /** Show the controls line at the bottom (default true). */
+  help?: boolean;
 }
 
 type KeyName = "W" | "A" | "S" | "D" | "UP" | "DOWN" | "LEFT" | "RIGHT" | "SPACE" | "SHIFT";
@@ -441,7 +443,7 @@ export class ForestScene extends Phaser.Scene {
     this.texts.hp.setText(`You  ${p.hp} / ${p.maxHp}`);
     this.texts.foes.setText(`${s.enemies.length > 1 ? `${alive} / ${s.enemies.length} standing  ·  ` : ""}${s.enemyHpLeft} HP`);
     this.texts.clock.setText(`${(s.timeMs / 1000).toFixed(1)} s`);
-    this.texts.help.setVisible(!this.touchUI && !this.finished);
+    this.texts.help.setVisible(this.cfg.help !== false && !this.touchUI && !this.finished);
     this.texts.attack.setVisible(this.touchUI);
     this.texts.dash.setVisible(this.touchUI);
     if (this.touchUI) {

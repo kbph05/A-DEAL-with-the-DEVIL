@@ -33,6 +33,10 @@ export interface MountSceneOptions {
   outlines?: boolean;
   /** Dev/test hook: called once with a live, read-only view of the player. */
   onDebug?: (debug: WorldDebug) => void;
+  /** Show the "Walk: WASD / arrow keys" line at the bottom. Default true; the play page turns it off (its pause menu lists the controls). */
+  help?: boolean;
+  /** Called once with the Phaser.Game, right after it is created (the play page pauses it). */
+  onGame?: (game: Phaser.Game) => void;
 }
 
 export interface SceneHandle {
@@ -49,7 +53,7 @@ export function mountScene(parent: HTMLElement, options: MountSceneOptions = {})
   const touch = options.touch ?? (navigator.maxTouchPoints > 0 || "ontouchstart" in window);
   const scene = new WorldScene({
     scene: def, layout, touch, speed: options.speed, outlines: options.outlines,
-    onEnterZone: options.onEnterZone, onLeaveZone: options.onLeaveZone, onDebug: options.onDebug,
+    onEnterZone: options.onEnterZone, onLeaveZone: options.onLeaveZone, onDebug: options.onDebug, help: options.help,
   });
   const game = new Phaser.Game({
     type: Phaser.AUTO,
@@ -64,6 +68,7 @@ export function mountScene(parent: HTMLElement, options: MountSceneOptions = {})
     scale: { mode: Phaser.Scale.FIT, autoCenter: Phaser.Scale.CENTER_BOTH, width: layout.width, height: layout.height },
     scene: [scene],
   });
+  options.onGame?.(game);
   let destroyed = false;
   return {
     scene: def,
