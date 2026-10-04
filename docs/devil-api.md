@@ -4,12 +4,12 @@ The contract between the game (`src/game/httpDevil.ts`, `HttpDevil`) and the Gem
 
 ## Request
 
-`POST <url>` (default `http://localhost:8787/deal`), `Content-Type: application/json`. One request per ask: the player talked to the devil at a deal node.
+`POST <url>` (default `http://localhost:8787/deal`), `Content-Type: application/json`. One request per ask: the player talked to the devil at a deal node, **a campfire, or a well** (4 Oct: he also sits at every campfire, where a deal is the third choice beside resting and sharpening, and at about half the wells; same rules everywhere). `context.kind` says which.
 
 Body: `{ state, context, playerText }`
 
 - `state`: the player at the moment of asking: `hp`, `maxHp`, `gold`, `attack`, `soul` (1 = still theirs, 0 = sold/spent), `act` (0-based), `nodeId`, `log` (up to 100 short strings of past events, oldest first; grows over a run).
-- `context`: `seed` (run seed: stable per run, handy as a session key), `act`, `nodeId`, `askIndex` (how many times the devil has been asked this run, counting this ask and haggles: 1 on the first ask), `questionsLeft` (how many more questions the player may ask this run, after this one: 0 means this was the last; the game caps a run at 10 questions, `MAX_DEVIL_QUERIES`, so use it to taunt or wind down; additive field, older clients may omit it), `rewritable` (nodes the devil may rewrite: `{id, kind}`, ahead of the player, unvisited, never the boss), `curses` (already on the player: `{trigger, effect}`).
+- `context`: `seed` (run seed: stable per run, handy as a session key), `act`, `nodeId`, `kind` (where he is sitting: `"deal"` (his table), `"campfire"` or `"well"`; additive, older clients may omit it; use it to set the scene: "by the campfire...", "at the well..."), `askIndex` (how many times the devil has been asked this run, counting this ask and haggles: 1 on the first ask), `questionsLeft` (how many more questions the player may ask this run, after this one: 0 means this was the last; the game caps a run at 10 questions, `MAX_DEVIL_QUERIES`, so use it to taunt or wind down; additive field, older clients may omit it), `rewritable` (nodes the devil may rewrite: `{id, kind}`, ahead of the player, unvisited, never the boss), `curses` (already on the player: `{trigger, effect}`).
 - `playerText`: what the player typed, or `null` if nothing. Player-controlled and untrusted: treat as prompt-injection-prone input (see "Off-topic text and jailbreak attempts" below). The engine cuts it to 2000 UTF-16 code units (`MAX_PLAYER_TEXT` in `src/game/state-machine.ts`, never splitting an emoji, and any lone surrogate replaced with U+FFFD so the body is well-formed UTF-8) before storing or sending it; anything may still be in those 2000. A backend that cuts it shorter must not split a surrogate pair either: llama.cpp rejects the whole request with HTTP 400 when it does (seen in the red-team run).
 
 Example (real state from an earlier build, in which `createGame("demo")` opened on a deal node; `askIndex` set as the engine does at ask time). Act 1 now always opens on the village, so a real first request comes a few nodes in, with HP and gold changed by then; the shape is the same:
@@ -30,6 +30,7 @@ Example (real state from an earlier build, in which `createGame("demo")` opened 
     "seed": "demo",
     "act": 0,
     "nodeId": "a0n0",
+    "kind": "deal",
     "askIndex": 1,
     "questionsLeft": 9,
     "rewritable": [
@@ -94,7 +95,7 @@ What the engine does with it (`sanitizeDeal`, then the `devil_reply` step):
 - There is no accept/refuse step. The effects are applied immediately and the game emits a new additive event `devil_struck { dialogue, effects }`; `effects` is what actually landed (HP loss after clamping to the player's HP).
 - A forced deal is cut down to a strike: **only an HP loss is kept, at most 8 HP per strike** (`MAX_STRIKE_HP` in `src/game/deal.ts`). Healing, gold, attack, max HP, **soul**, `curse` and `rewrite` are stripped, however they were sent. `effects` may be empty: a pure rant is fine.
 - It may kill: the normal death check runs (the soul revives the player once, else the run is lost with cause "the devil's wrath"). Use sparingly; the game does not spare nearly-dead players.
-- The ask still counts: it uses one of the node's 3 asks and one of the run's 10 questions (`context.questionsLeft`). The node is **not** resolved: the player may ask again if asks and questions remain, or leave. An offer left on the table by an earlier haggle at the same node stays there.
+- The ask still counts, at a campfire or well just as at a deal node: it uses one of the node's 3 asks and one of the run's 10 questions (`context.questionsLeft`). The node is **not** resolved: the player may ask again if asks and questions remain, or leave. An offer left on the table by an earlier haggle at the same node stays there.
 - Be sparing. A strike on every odd message is no fun: reserve it for nonsense and real insults, and strike on a minority of such messages (the stub does it half the time on gibberish); otherwise rant and make a punitive offer, or simply refuse to play along in character.
 
 ## Gibberish and random comments: the devil should get angry
@@ -149,6 +150,8 @@ Not implemented yet; the client side is ready. The game keeps its state client-s
 - entering the devil stage (event `devil_stage_entered`; also a run that starts on a deal node, which no longer happens since act 1 opens on the village, but the hook still checks),
 - leaving it (`devil_stage_left`),
 - the end of the game (`won`, `lost`, `hell`).
+
+The devil stage means deal nodes only: a deal at a campfire or a well has no sync events (the request's `context.kind` tells a backend where it was asked).
 
 `Session.onSync(kind, state)` in `src/game/session.ts` fires at exactly those moments (default: does nothing); a backend client would hook in there. The deal request above is unchanged: in the engine it is the `awaiting.devil` value of a `deal` step, and the response is fed back as a `devil_reply` step.
 

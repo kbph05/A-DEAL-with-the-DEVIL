@@ -18,7 +18,8 @@ One JSON-serializable object with everything the engine needs to continue a run 
 | `acts` | acts generated so far (lazily, on arrival), with `visited` and the rewrite log `changes` |
 | `player` | `PlayerState` (hp, maxHp, gold, attack, soul, act, nodeId, log) |
 | `curses`, `enemy` | active curses; the current enemy, including its hidden `power` |
-| `resolved`, `offer`, `asks`, `totalAsks`, `dealsDecided` | node and devil bookkeeping |
+| `resolved`, `offer`, `asks`, `totalAsks`, `dealsDecided` | node and devil bookkeeping (`asks` counts asks at the current node, wherever the devil sits) |
+| `devilGone` | a well's deal is decided and the devil has left it (wells keep `resolved` for the blessing). Optional, reset on every move; absent elsewhere and in older saves |
 | `ending` | `null`, `"win"`, `"lose"` or `"hell"` |
 | `pending` | the devil request awaiting an answer, or `null` |
 | `pendingFight` | the realtime fight awaiting its result (a `FightRequest`); absent or `null` otherwise. Optional, so older saves stay valid |
@@ -29,9 +30,20 @@ One JSON-serializable object with everything the engine needs to continue a run 
 
 `step(state, command) → { ok, state, events, actions, awaiting? }` is pure and synchronous. It never mutates its input, does no I/O, and reads no clock or `Math.random`.
 
-- **Commands:** the existing `Command` objects (`{"cmd":"go","n":1}`, `fight`, `rest`, `train` (campfire: one or the other with `rest`), `buy` with an `item`, `deal` with optional `text`, `accept`, `refuse`, `look`), plus `{"cmd":"devil_reply","deal":...}`, `{"cmd":"fight","realtime":true}` and `{"cmd":"fight_result",...}` (the realtime fight, below).
+- **Commands:** the existing `Command` objects (`{"cmd":"go","n":1}`, `fight`, `rest`, `train`, `buy` with an `item`, `deal` with optional `text`, `accept`, `refuse`, `look`), plus `{"cmd":"devil_reply","deal":...}`, `{"cmd":"fight","realtime":true}` and `{"cmd":"fight_result",...}` (the realtime fight, below).
 - **Rejection:** a rejected command returns `ok: false`, the input state itself (unchanged), and exactly one `rejected` event. The reasons are the same strings as before. Hostile input is rejected too, never thrown on: a `null` or non-object command, a `Symbol`, `BigInt`, circular or throwing value in any field (`src/game/devilRedteam.test.ts`).
 - **`look`:** always accepted, including after the run ends and while the devil is pending. It changes nothing.
+
+## Where the devil sits (4 Oct)
+
+`deal` is legal wherever the devil is (`devilPresent(state)` in `gameState.ts`), with the same rules everywhere: `MAX_ASKS` per node, `MAX_DEVIL_QUERIES` per run, the anger and strike rules, `accept` and `refuse`. The request's `context.kind` says where (`deal`, `campfire`, `well`).
+
+- **Deal nodes:** as before.
+- **Campfires:** `rest`, `train` and `deal` are one choice of three. After `rest` or `train`, `deal` is rejected ("the embers are spent"). The **first `deal` ask** is the choice: once `asks > 0`, `rest` and `train` are rejected ("you chose the devil at this fire"), whatever follows (haggles, a strike, accept, refuse, leaving). `accept`/`refuse` set `resolved` as at a deal node.
+- **Wells:** the devil is there with `WELL_DEVIL_CHANCE` (0.5), decided by `devilAtWell(seed, nodeId)`: a fresh `mulberry32(hashSeed("well-devil:<seed>:<nodeId>"))` draw, stored nowhere, so `state.rng` and the map streams are untouched and every seed's other outcomes stay put. Entering such a well emits `devil_appears { nodeId, kind }` right after `moved`; elsewhere `deal` is rejected ("the devil does not sit here"). The blessing is independent: `accept`/`refuse` there set `devilGone` instead of `resolved`, so either can come first.
+- **The map:** deal nodes are a third as likely (`DEAL_NODE_RATE` in `src/map/mapgen.ts`); every other mapgen rule is unchanged.
+
+The `devil_stage_entered`/`devil_stage_left` sync events stay on deal nodes only.
 
 ## actions
 
@@ -41,7 +53,7 @@ Every step result carries `actions`: the exact legal next commands, computed by 
 2. `rest`
 3. `train`
 4. affordable `buy`s
-5. `deal` (while asks remain at this node and questions remain this run)
+5. `deal` (where the devil sits, while asks remain at this node and questions remain this run)
 6. `accept` and `refuse` (when an offer stands)
 7. `go n` (one per exit)
 
@@ -62,10 +74,11 @@ Special cases:
 - `map`: the current act's `MapView`
 - `actions`
 
-`Observation` gains two fields:
+`Observation` gains these fields:
 
 - `curses`
-- `asksLeft`: the haggles left at this deal node
+- `asksLeft`: the asks left at this node (0 unless the devil is here and his business is open)
+- `devilPresent`: the devil sits at this node (every deal node and campfire, the wells where he turned up); static per node
 - `questionsLeft`: the questions the devil will still hear this run, at any deal node (`MAX_DEVIL_QUERIES = 10`, exported from `gameState.ts`, minus `state.totalAsks`)
 
 It leaves out the dice state, enemy power, past acts and the raw pending request. `Game.observe()`, `Game.map()` and `Game.view()` delegate to it.
@@ -86,7 +99,7 @@ The devil is outside the engine; it may be a network call.
 
 Details, the sanitizing rules and the UI flow are in docs/fight.md ("Engine hookup").
 
-1. `step(s, {"cmd":"fight","realtime":true})` returns `awaiting: { fight: request }` and records the request in `state.pendingFight`. It emits no events and rolls no dice. The request is `{ player: {hp, maxHp, attack}, enemy: {name, hp, maxHp, power, boss}, seed }`, where `seed` is `` `${seed}:${nodeId}:${bout}` ``.
+1. `step(s, {"cmd":"fight","realtime":true})` returns `awaiting: { fight: request }` and records the request in `state.pendingFight`. It emits no events and rolls no dice. The request is `{ player: {hp, maxHp, attack}, enemy: {name, hp, maxHp, power, boss}, seed, where }`, where `seed` is `` `${seed}:${nodeId}:${bout}` `` and `where` (optional, additive) is `{ act, acts, layer, layers, kind }`: where the fight sits on the map, so it can get harder up the tree.
 2. Play the fight (`runFight` in src/fight) and wait.
 3. `step(s, {"cmd":"fight_result","won","hpLeft","timeMs","hitsTaken","damageDealt","enemyHpLeft"})` runs `sanitizeFightResult` against the request and applies the result through the round's events:
    - `fought` (with the optional `bout: { timeMs, hits, enemy, outcome }`, present only for realtime fights; `describe` then reads "After 12.4 s of fighting you dealt 10 and took 5 (2 hits).")

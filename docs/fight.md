@@ -109,6 +109,7 @@ interface FightResult {
 
 1. **Start.** `{"cmd":"fight","realtime":true}` (only while an enemy blocks the way) returns `awaiting: { fight: FightRequest }` and stores it in `state.pendingFight`. It emits no events and rolls no dice.
    - `FightRequest` is `{ player: {hp, maxHp, attack}, enemy: {name, hp, maxHp, power, boss}, seed }`. It has the same shape as the fight's `FightInput`, so the UI passes it straight to `runFight`.
+   - `where` (optional, additive, 4 Oct) is `{ act, acts, layer, layers, kind }`: the fight's act of `acts` (0-based), its node's layer of the act's `layers` (0 = entry, `layers - 1` = the boss) and the node kind (`fight` or `boss`), so the fight can scale up the map (kbph: few, easy mobs at the bottom, more and harder near the top). `sanitizeFightResult` ignores it; requests saved before it existed lack it.
    - `seed` is `` `${state.seed}:${nodeId}:${n}` ``, where `n` counts the bouts against this enemy (`enemy.bouts`: 1, then 2 after a revival...). A saved state replays the same arena and dice.
 2. **While it is pending:**
    - `actions` is a single `fight_result`, listed as "nothing happened": `{won:false, hpLeft: <player hp>, timeMs:0, hitsTaken:0, damageDealt:0, enemyHpLeft: <enemy hp>}`. It is always safe to send, which makes it the abort.

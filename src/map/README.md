@@ -12,7 +12,10 @@ Linking (`linkLayers`): each old node links to one new node (sorted picks, so ta
 left without a parent is adopted by an old node whose edge crosses none. Edges never cross when each layer is drawn in
 slot order (planar by construction); there are no extra cross-links.
 
-- `generateAct(runSeed, actIndex /*0..2*/, modifiers?, { alternate = true }?) => Act`
+Kinds: each slot draws among its polarity's kinds, uniformly except that `deal` comes up `DEAL_NODE_RATE` (1/3) as often
+(4 Oct: the devil also deals at campfires and some wells). One `rng()` per draw, so the shape never depends on it.
+
+- `generateAct(runSeed, actIndex /*0..2*/, modifiers?, { alternate = true, dealRate = DEAL_NODE_RATE }?) => Act` (`dealRate: 1` = the old odds, the same maps exactly)
 - `rewriteNode(act, nodeId, newKind) => { ok: true, act } | { ok: false, reason }`: immutable, never throws;
   rejects visited nodes, entry, exit, boss/final, unknown kinds and no-op swaps. The devil MAY break good/bad alternation: the result carries `change` (`{nodeId, from, to, polarityFlip}`) and the act keeps a `changes` log, so the UI can tell the player what moved.
 - `markVisited(act, nodeId) => Act`

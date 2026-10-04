@@ -1,6 +1,6 @@
 # A DEAL with the DEVIL: feature sheet
 
-What is **already in the game**, as the code does it today (snapshot of `main` on 3 Oct 2026 plus the stateless-engine refactor and the rules-round-1 changes: start at the shop, campfire Rest or Train, wider planar maps with committed lanes; 74 passing tests). Written for gameplay design: every number below was read from source, with the file in brackets. Anything marked **(first guess)** is a placeholder value nobody has balanced yet. Where the code and `requirements.md` disagree, see section 12.
+What is **already in the game**, as the code does it today (snapshot of `main` on 3 Oct 2026 plus the stateless-engine refactor and the rules-round-1 changes: start at the shop, campfire Rest or Train, wider planar maps with committed lanes; then the devil-anywhere round of 4 Oct: a deal at every campfire and at some wells, deal nodes a third as likely). Written for gameplay design: every number below was read from source, with the file in brackets. Anything marked **(first guess)** is a placeholder value nobody has balanced yet. Where the code and `requirements.md` disagree, see section 12.
 
 Contents: 1 Overview, 2 Run structure and map, 3 Player, 4 Nodes, 5 Combat, 6 The devil, 7 Curses, 8 Soul and endings, 9 Events, 10 Interfaces, 11 Balance snapshot, 12 Gaps and known issues.
 
@@ -8,7 +8,7 @@ Contents: 1 Overview, 2 Run structure and map, 3 Player, 4 Nodes, 5 Combat, 6 Th
 
 ## 1. Overview
 
-A run is a walk through **3 acts**, each a small branching map ending in a boss, followed by one last "final" door. You start with 30 HP, 10 gold, attack 3 and your soul. At each node you do what the node allows: fight, rest or train at a campfire, shop, drink from a well, or sit down with the devil and haggle over a deal. The devil's deals are bad-faith: they pay now and cost later (curses), and can **rewrite nodes ahead of you on the map**. You **lose** if HP hits 0 (unless your soul pays for one revival), and at the final door you **win** if you still own your soul, or go to **hell** if you sold or spent it.
+A run is a walk through **3 acts**, each a small branching map ending in a boss, followed by one last "final" door. You start with 30 HP, 10 gold, attack 3 and your soul. At each node you do what the node allows: fight, rest, train or deal with the devil at a campfire, shop, drink from a well (where the devil sometimes waits too), or sit down at the devil's table and haggle over a deal. The devil's deals are bad-faith: they pay now and cost later (curses), and can **rewrite nodes ahead of you on the map**. You **lose** if HP hits 0 (unless your soul pays for one revival), and at the final door you **win** if you still own your soul, or go to **hell** if you sold or spent it.
 
 Everything is a headless, stateless engine: one JSON `GameState` and a pure `step(state, command)` reducer (`src/game/state-machine.ts`, wrapped as the `Game` class in `src/game/run.ts`; see `docs/engine.md`) that returns plain event data. There is no canvas or art yet. Today you can play it four ways: in a terminal (`npm run play`, text or `--json`), in a plain-DOM test page (`npm run dev`), from the browser console (F12, test builds), or let a bot play (`autoplay`, `simulate`). The devil is a canned `StubDevil` by default, or an HTTP backend (the Gemini proxy) behind the same interface.
 
@@ -35,7 +35,7 @@ Source: `src/map/mapgen.ts`, `src/map/types.ts`, `src/map/rng.ts`, `src/map/READ
 
 - The exit of each act is always a `boss`. Acts 1 and 2: leaving the exit offers "stairs" to the next act's entry. Act 3: the exit offers "gate" to `final`.
 - You cannot leave the exit node while its boss is alive (movement is blocked during any fight).
-- **Act 1 always opens on a village** (the shop; `START_KIND` in `src/map/mapgen.ts`, kbph 3 Oct): you start with 10 gold at the stall, never at the devil's table. Like the exit boss, this ignores `banKinds`/`forceKinds`. The generator still draws the entry kind and then overrides it, so the rest of act 1 is the same as before the rule. Acts 2 and 3 open on a random **good** kind (deal, village, campfire or well), never a fight, so you can still start a later act on a deal node.
+- **Act 1 always opens on a village** (the shop; `START_KIND` in `src/map/mapgen.ts`, kbph 3 Oct): you start with 10 gold at the stall, never at the devil's table. Like the exit boss, this ignores `banKinds`/`forceKinds`. The generator still draws the entry kind and then overrides it, so the rest of act 1 is the same as before the rule. Acts 2 and 3 open on a random **good** kind (deal, village, campfire or well; deal at a third of the usual odds, 2.5), never a fight, so you can still start a later act on a deal node.
 
 ### 2.3 Lazy generation
 
@@ -51,7 +51,7 @@ Act 1 is generated when the game is created. Acts 2 and 3 are generated at the m
 
 - Kinds: **good** = `deal`, `village`, `campfire`, `well`. **Bad** = `fight`, `boss`. Plus `final`.
 - With alternation on (the default for engine runs), layer polarity is fixed: **even layers are good, odd layers are bad**. Entry (layer 0) is good, the exit boss (odd layer 5 or 7) is bad. No edge ever joins two nodes of the same polarity.
-- In practice this means every act is: good entry, then a layer of fights, then a layer of good nodes, again (and with 8 layers once more), then the boss: 2 or 3 fights plus the boss on every path, as before. The odd layers can only roll `fight` (the only non-boss bad kind), the even layers roll uniformly among the 4 good kinds. **You cannot route around fights** (every path crosses every fights layer), but you can choose which good node to visit between them.
+- In practice this means every act is: good entry, then a layer of fights, then a layer of good nodes, again (and with 8 layers once more), then the boss: 2 or 3 fights plus the boss on every path, as before. The odd layers can only roll `fight` (the only non-boss bad kind), the even layers roll among the 4 good kinds, uniformly except that **deal is a third as likely** (`DEAL_NODE_RATE = 1/3` in `src/map/mapgen.ts`, kbph and Big Chungus 4 Oct): 1 in 12 good nodes instead of 1 in 4, the other three 11 in 36 each. The devil now also deals at every campfire and at about half the wells (4.3, 4.4), so he is no rarer overall. `GenOptions.dealRate` overrides it (1 = the old odds, the same maps exactly); the shape never depends on it. **You cannot route around fights** (every path crosses every fights layer), but you can choose which good node to visit between them.
 - Normal nodes never roll `boss`; bosses exist only at act exits (3 per run).
 - Generated acts always alternate. `act.alternate` becomes false only if a devil rewrite flips a node's polarity (2.7). The generator also supports `alternate: false` (any kinds anywhere, 6 to 8 layers); the engine never uses it, only the map tests do.
 
@@ -118,12 +118,13 @@ What happens on **entering any node**, in order: the `moved` event, then **`on_e
 
 - Entry: nothing automatic; the devil is sitting at a table. You must call `deal(text?)` to ask him for an offer.
 - Actions: `deal(text?)` (ask or haggle), `accept()`, `refuse()`, or just leave with `go(n)` (you may walk away with an offer on the table; it vanishes and the node is simply wasted).
-- Haggling: up to **3 asks per deal node** (`MAX_ASKS = 3`; the counter resets per node). Each ask replaces the offer on the table with a new one. After 3, asking is rejected ("he is done haggling") and you must accept, refuse or leave. There is also a **run-wide cap of 10 questions** (`MAX_DEVIL_QUERIES = 10`): every `deal` that reaches the devil counts, first asks and haggles alike, across all deal nodes. When they are spent, `deal` is not a legal action and is rejected ("The devil has heard enough from you this run."); an offer already on the table can still be accepted or refused. `Observation`/`View` and the devil context carry `questionsLeft`.
+- Haggling: up to **3 asks per deal node** (`MAX_ASKS = 3`; the counter resets per node). Each ask replaces the offer on the table with a new one. After 3, asking is rejected ("he is done haggling") and you must accept, refuse or leave. There is also a **run-wide cap of 10 questions** (`MAX_DEVIL_QUERIES = 10`): every `deal` that reaches the devil counts, first asks and haggles alike, at every node where he sits (deal nodes, campfires, wells). When they are spent, `deal` is not a legal action and is rejected ("The devil has heard enough from you this run."); an offer already on the table can still be accepted or refused. `Observation`/`View` and the devil context carry `questionsLeft`.
 - Free text: you can type something to the devil on each ask. The StubDevil keyword-matches it; the Gemini devil receives it as `playerText` (see 6).
 - `accept()`: applies the effects, adds the curse if any (max 5), applies the rewrite if any, then checks death/revival (see 6.6 for the order). Marks the node resolved.
 - `refuse()`: nothing happens (`deal_refused`). Marks resolved.
 - Once decided, the node is resolved: no more asks.
-- You cannot ask while an enemy is present, while a previous ask is still pending, or at a non-deal node. Movement is blocked while the devil is "still speaking" (pending).
+- The same rules hold wherever else he sits (a campfire, 4.3; a well where he turned up, 4.4): 3 asks per node, the run-wide cap, anger and strikes, accept and refuse. `Observation.devilPresent` says whether he is at your node; `asksLeft` how many asks you have left there.
+- You cannot ask while an enemy is present, while a previous ask is still pending, or where the devil is not ("the devil does not sit here"). Movement is blocked while the devil is "still speaking" (pending).
 - Cost: free. Rewards and penalties are whatever the deal says.
 
 ### 4.2 Village
@@ -139,14 +140,16 @@ What happens on **entering any node**, in order: the `moved` event, then **`on_e
 
 ### 4.3 Campfire
 
-- **Rest or Train, choose one** (legilles, 3 Oct). Free, once per campfire: either action spends the fire, and any second `rest`/`train` is rejected ("the embers are spent").
+- **Rest, Sharpen Weapon (`train`) or a Deal with the devil: choose one** (legilles 3 Oct; the deal added by kbph and Big Chungus 4 Oct). Free, once per campfire: the first of them spends the fire. After `rest` or `train`, the other two are rejected ("the embers are spent"). The **first `deal` ask** is the choice: from then on `rest` and `train` are rejected ("you chose the devil at this fire"), whatever follows: haggling, a strike, accepting, refusing, or walking away.
   - `rest()` heals **ceil(maxHp x 0.4)** (30 max HP gives 12). Emits `healed` (only if HP actually rose).
   - `train()` gives **+1 attack for the rest of the run** (`TRAIN_ATTACK = 1`, `src/game/gameState.ts`) and no healing. Emits `trained { amount, attack }` and logs "trained by the fire: attack N". Rejected at the attack cap of 12 ("your attack is already at its peak (12)"), so it is then not in `actions` and only `rest` is offered.
+  - `deal(text?)` works exactly as at a deal node (4.1): up to 3 asks here, they count toward the 10 per run, gibberish, off-topic and jailbreak text make him angry (6.4b), strikes apply (6.4c), and `accept()`/`refuse()` resolve the fire. The devil's context says `kind: "campfire"`.
 - No cooking, no other options.
 
 ### 4.4 Well
 
 - Action: `buy("blessing")` for **8g**, once per well. The blessing is rolled (uniform) from three: **+3 max HP**, **+1 attack**, **+8 HP**. You do not get to choose and are told only after paying. Spend is checked after the "already used" check, so a failed buy costs nothing.
+- **The devil sometimes waits here** (kbph and Big Chungus, 4 Oct): with chance `WELL_DEVIL_CHANCE = 0.5` (`src/game/gameState.ts`), fixed per run seed and well by `devilAtWell(seed, nodeId)`, its own hashed roll, so the dice and the map are untouched. Entering such a well emits `devil_appears { nodeId, kind }` right after `moved`, and `deal` is legal there with the deal-node rules (4.1; context `kind: "well"`). Elsewhere `deal` is rejected ("the devil does not sit here"). The blessing and the deal are independent: either can come first, and deciding the deal (accept or refuse) sends the devil away (`GameState.devilGone`) without using up the blessing.
 
 ### 4.5 Fight
 
@@ -240,6 +243,7 @@ The request has `state` (full player state: hp, maxHp, gold, attack, soul, act, 
 | --- | --- |
 | `seed` | run seed (stable per run; usable as a session key) |
 | `act`, `nodeId` | where the player is |
+| `kind` | the kind of node he sits at: `deal`, `campfire` or `well` (additive, 4 Oct) |
 | `askIndex` | how many times the devil has been asked this run, counting this ask and haggles (1 on first ask) |
 | `questionsLeft` | questions the player may still ask this run, after this one (`MAX_DEVIL_QUERIES - askIndex`; 0 = the last) |
 | `rewritable` | `{id, kind}` of nodes the devil may rewrite: reachable **ahead** of the player in this act, unvisited, not the act exit boss |
@@ -249,7 +253,7 @@ The devil does **not** see: the full map shape (edges), future acts, the player'
 
 ### 6.3 StubDevil: the canned offers
 
-Deterministic in (seed, ask sequence). 8 offers. Each ask: take the offers that are currently **eligible**, exclude the one shown last (so a haggle always changes the offer, unless it is the only eligible one), then pick by weight: **5** if the player's text matches the offer's keyword regex, otherwise **1**.
+Deterministic in (seed, ask index): pure in the request, seeded by `devil:${seed}:${askIndex}`. 8 offers. Each ask: take the offers that are currently **eligible**; if the player's text matches any of their keyword regexes, keep **only** those (steering is absolute), otherwise keep all; then pick uniformly. There is no "not the same as last time" rule: with no text, consecutive offers repeat about 20% of the time. (Corrected 4 Oct from the code; this section used to describe a 5:1 weighting and an exclude-last rule that the code does not have. See the balance report: steering plus the fine-print trick is a strong exploit.)
 
 | id | Keyword hint | Eligible when | Effects (gives / takes) | Curse | Rewrite |
 | --- | --- | --- | --- | --- | --- |
@@ -258,7 +262,7 @@ Deterministic in (seed, ask sequence). 8 offers. Each ask: take the offers that 
 | mend | heal, hp, life, mend, hurt | hp < maxHp | hp +15 | next_node: gold -12 | none |
 | soul | soul, forever, eternal | soul is yours | **soul -1 (sells it)**, gold +60, max_hp +10, attack +1 | none | none |
 | bleed | blood, bleed, pain | hp > 8 | hp -5, gold +40 | none | none |
-| fineprint | luck, safe, strong, fortune | always | max_hp +8 | on_fight: attack -1 | none |
+| fineprint | luck, safe, fortune, protect | always | max_hp +8 | on_fight: attack -1 | none |
 | movefurniture | road, map, path, ahead, future | a rewritable good node exists | gold +30, attack +1 | none | a random rewritable **good** node becomes **fight** |
 | hearth | rest, camp, road, ahead, safe | hp > 8 and a rewritable fight exists | hp -8 | none | a random rewritable **fight** becomes **campfire** |
 
@@ -294,7 +298,7 @@ Besides an offer, a devil (the stub, or the Gemini one) may answer with `forced:
 ### 6.5 Asking, haggling, sanitizing
 
 - `deal(text?)` is **async** (the backend is a network call). In the engine it is a round trip: `step(deal)` records the request in `state.pending` and returns `awaiting`, and the devil's answer comes back as `step(devil_reply)` (see `docs/engine.md`). While waiting, `pending` is true and every command except `look` and `devil_reply` is rejected ("the devil is still speaking").
-- Sequence: reject if wrong node / already resolved / pending / enemy present / 3 asks used; otherwise ask the devil (any thrown error becomes "no reply"), sanitize, store as the current offer, emit `deal_offered` (a forced reply is applied at once and emits `devil_struck` instead, 6.4c). Since nothing else can happen while the devil thinks, the reply always lands on the node it was asked at.
+- Sequence: reject if the devil is not at this node / already decided (or, at a campfire, the fire spent on rest or train) / pending / enemy present / 10 questions used / 3 asks used; otherwise ask the devil (any thrown error becomes "no reply"), sanitize, store as the current offer, emit `deal_offered` (a forced reply is applied at once and emits `devil_struck` instead, 6.4c). Since nothing else can happen while the devil thinks, the reply always lands on the node it was asked at.
 - **`sanitizeDeal`** (`src/game/deal.ts`) turns anything into a safe Deal. Never throws.
   - Not an object (string, null, array, number): replaced by the **silent devil**: dialogue "The devil only smiles. He has nothing to say to you today.", no effects.
   - `dialogue`: must be a non-empty string, trimmed and cut to **600 chars** (never half an emoji), else `"..."`.
@@ -396,6 +400,7 @@ Source: `src/game/events.ts`. Every command returns `Result = { ok, events, stat
 | `rejected { reason }` | any invalid command |
 | `devil_stage_entered { nodeId }` | right after `moved` onto a deal node (a backend sync point; see `docs/engine.md`) |
 | `devil_stage_left { nodeId }` | right before `moved` off a deal node |
+| `devil_appears { nodeId, kind }` | right after `moved` onto a well where the devil sits (4.4); `deal` is legal there. Campfires always have him, so they emit nothing; the `devil_stage_*` sync events stay on deal nodes only |
 
 Exits are described by `Exit { n, kind }`, where `kind` is the next node's kind, or `"stairs"` / `"gate"` at an act exit. The player can see the kind of every next node in advance (no fog), and the full current-act map via `map()`.
 
@@ -412,7 +417,7 @@ The engine is a **pure reducer**: the whole run is one plain JSON object, `GameS
 - **`actions`:** the exact list of legal next commands (`legalActions(state)`); `look` is always legal and not listed. With an enemy present it lists both `fight` and `{cmd:"fight",realtime:true}`. While a realtime fight is pending it lists only a "nothing happened" `fight_result`.
 - **The realtime fight round trip:** `fight` with `realtime: true` returns `awaiting: { fight: request }` (kept in `state.pendingFight`). The next command must be `fight_result`, which is sanitized (5.5, docs/fight.md). `look` still works; everything else is rejected.
 - **The devil round trip:** `deal` returns `awaiting: { devil: { state, context, playerText } }`, the same body `HttpDevil` sends. The next command must be `devil_reply` with the devil's answer, which is sanitized into the offer. `look` still works while waiting; everything else is rejected.
-- **`view(state)`:** the player-safe projection: what `observe()` and `map()` show, plus `curses`, `asksLeft`, `questionsLeft`, `seed` and `actions`, without the dice state or enemy power.
+- **`view(state)`:** the player-safe projection: what `observe()` and `map()` show, plus `curses`, `asksLeft`, `questionsLeft`, `devilPresent` (the devil sits at this node: deal nodes, campfires, wells where he turned up), `seed` and `actions`, without the dice state or enemy power. The devil request's `context` carries the node `kind`; a realtime `FightRequest` carries `where { act, acts, layer, layers, kind }` (docs/fight.md).
 
 `createGame(seed?, devil?)` returns a `Game`, a thin wrapper holding a `GameState` and a `Devil`. `restoreGame(state, devil?)` continues a saved state. Its commands all return `Result` and `step` the held state; `deal` returns a `Promise<Result>` and performs the devil round trip:
 
@@ -430,7 +435,7 @@ The engine is a **pure reducer**: the whole run is one plain JSON object, `GameS
 
 **Queries:**
 
-- `observe()` returns an `Observation`: state snapshot, nodeId, kind, act, current enemy, exits, current offer, `resolved`, `pending`, `dealsDecided`, ending, `curses`, `asksLeft` and `questionsLeft`.
+- `observe()` returns an `Observation`: state snapshot, nodeId, kind, act, current enemy, exits, current offer, `resolved`, `pending`, `dealsDecided`, ending, `curses`, `asksLeft`, `questionsLeft` and `devilPresent`.
 - `map()` returns a `MapView`: layers of nodes with `kind`, `visited`, `current`, `rewritten`, `next`; the `final` node; the rewrite `changes` list.
 - `view()` returns both of those, plus `seed` and `actions`.
 - `context()` returns the devil's `DevilContext` (pure).
@@ -459,7 +464,7 @@ A deliberately plain DOM page over the same `Session` (one `Game` plus an event 
 
 - **Game** (the player's view; the only region in the final build):
   - **Situation:** "Act N · Kind", the node's description, an HP bar, gold, attack and soul, curses as chips, and an enemy card with an HP bar and a Boss tag (`src/ui/situation.ts`).
-  - **Your choices** (`src/ui/choices.ts`, `src/ui/dag.ts`): two parts. **Action panels** come in four visually distinct kinds, each a labelled region with an icon and a title (colour is never the only signal); only the ones that fit the node show (`panelKinds` in `src/ui/logic.ts`): **😈 The Devil's table** (deal nodes; dark purple): the wish box with **Ask the devil / Haggle** "Haggles left: N" (from `asksLeft`) and "Questions left this run: N" (from `questionsLeft`; at 0 the button is disabled, with the reason "The devil has heard enough from you this run." on screen and as its tooltip), the offer card (dialogue, effect chips, curse and rewrite callouts, **Accept / Refuse**); after the deal it shows "Deal struck" or "You walked away" (read from the log) and the buttons are gone. **🛒 Shop — buy as many as you like** (village only; amber): price-tag cards (name, effect, price, **Buy**, "need N more gold" when short); buying never closes the shop. **Choose one** (campfire and well; neutral radio cards): the engine allows one action there. A campfire shows two cards, **Rest** (heal up to N HP) and **Train** (+1 Attack, for the rest of the run; marked short with a reason at the attack cap); after either, the one you took reads "Chosen" and the other "Closed" (which one was taken is read from the log, `fireChoice`), both are disabled, and the panel says the rest is closed. The well's blessing is a choice, not a shop. **⚔️ Fight** (red), while an enemy blocks the way, holds **Fight! (realtime)** (or **Resume the fight (realtime)** if one is pending). It steps the realtime `fight`, hides the choices, and plays the realtime fight on a stage in their place. The stage is sized to the card: landscape on wide screens, portrait with touch controls on phones. The fight module and Phaser load lazily on the first fight. The panel then steps `fight_result`, and the Outcome shows the fight's events. While the fight runs, everything else is disabled (the dev tools column is `inert`). In test builds, a small **Auto-resolve (quick)** button plays the old round-based fight until the enemy falls, you revive, or the run ends. It is also offered after the realtime fight fails to load. Button enabling still comes from the engine's `actions` (`availableActions`). **Where to next** is the current act's map as a DAG, entry at the bottom, boss above it, and the stairs (or, on the last act, the final door) on top; edges are SVG lines. Each node is a box with an icon and kind, styled by state: *current* (ring), *visited* (dimmed), *rewritten* (★ and highlight), *next* (bright real `<button>`, aria-label like "Go to fight a0n2, then deal or campfire"), *far* (muted, not clickable). Clicking a next node sends `{cmd:"go", n}`; it is enabled only if that command is in the engine's `actions` list (`view().actions`), and the action-panel buttons (fight, rest, train, affordable buys, ask/haggle) are enabled by that list too: `n` is the node's index in the current node's `next` plus one, and the boss's single exit (stairs/gate) is `n = 1` (`exitNumber` in `src/ui/logic.ts`; `dagModel` builds the rows, edges, states and labels). While an enemy blocks the way, an offer is on the table, or the devil is thinking, the next nodes stay visible but disabled, with a reason line under the map ("Finish the fight first."). Having to accept or refuse an offer before leaving is a UI rule only; the engine itself would still allow `go`. The map is part of the Game column, so it ships in the final build. On narrow screens the DAG scales to the width, nodes wrap per layer, and every button is at least 44px.
+  - **Your choices** (`src/ui/choices.ts`, `src/ui/dag.ts`): two parts. **Action panels** come in four visually distinct kinds, each a labelled region with an icon and a title (colour is never the only signal); only the ones that fit the node show (`panelKinds` in `src/ui/logic.ts`): **😈 The Devil's table** (deal nodes; dark purple): the wish box with **Ask the devil / Haggle** "Haggles left: N" (from `asksLeft`) and "Questions left this run: N" (from `questionsLeft`; at 0 the button is disabled, with the reason "The devil has heard enough from you this run." on screen and as its tooltip), the offer card (dialogue, effect chips, curse and rewrite callouts, **Accept / Refuse**); after the deal it shows "Deal struck" or "You walked away" (read from the log) and the buttons are gone. **🛒 Shop — buy as many as you like** (village only; amber): price-tag cards (name, effect, price, **Buy**, "need N more gold" when short); buying never closes the shop. **Choose one** (campfire and well; neutral radio cards): the engine allows one action there. A campfire shows three cards, **Rest** (heal up to N HP), **Sharpen Weapon** (+1 Attack, for the rest of the run; marked short with a reason at the attack cap) and **Deal with the devil** (asks him with no wish; short once the run's questions are spent), with the Devil's table beside them for a wish, haggling and accept/refuse; after any one (the first ask counts), the one you took reads "Chosen" and the others "Closed" (read from the log, `fireChoice`), all are disabled, and the panel says the rest is closed. The well's blessing is a choice, not a shop; a well where the devil sits also shows the Devil's table until his deal is decided. **⚔️ Fight** (red), while an enemy blocks the way, holds **Fight! (realtime)** (or **Resume the fight (realtime)** if one is pending). It steps the realtime `fight`, hides the choices, and plays the realtime fight on a stage in their place. The stage is sized to the card: landscape on wide screens, portrait with touch controls on phones. The fight module and Phaser load lazily on the first fight. The panel then steps `fight_result`, and the Outcome shows the fight's events. While the fight runs, everything else is disabled (the dev tools column is `inert`). In test builds, a small **Auto-resolve (quick)** button plays the old round-based fight until the enemy falls, you revive, or the run ends. It is also offered after the realtime fight fails to load. Button enabling still comes from the engine's `actions` (`availableActions`). **Where to next** is the current act's map as a DAG, entry at the bottom, boss above it, and the stairs (or, on the last act, the final door) on top; edges are SVG lines. Each node is a box with an icon and kind, styled by state: *current* (ring), *visited* (dimmed), *rewritten* (★ and highlight), *next* (bright real `<button>`, aria-label like "Go to fight a0n2, then deal or campfire"), *far* (muted, not clickable). Clicking a next node sends `{cmd:"go", n}`; it is enabled only if that command is in the engine's `actions` list (`view().actions`), and the action-panel buttons (fight, rest, train, affordable buys, ask/haggle) are enabled by that list too: `n` is the node's index in the current node's `next` plus one, and the boss's single exit (stairs/gate) is `n = 1` (`exitNumber` in `src/ui/logic.ts`; `dagModel` builds the rows, edges, states and labels). While an enemy blocks the way, an offer is on the table, or the devil is thinking, the next nodes stay visible but disabled, with a reason line under the map ("Finish the fight first."). Having to accept or refuse an offer before leaving is a UI rule only; the engine itself would still allow `go`. The map is part of the Game column, so it ships in the final build. On narrow screens the DAG scales to the width, nodes wrap per layer, and every button is at least 44px.
   - **Outcome:** a narration box (`aria-live`) with only the latest move's events, engine rejections included, replaced each move (`src/ui/outcome.ts`).
   - **History:** the full event log, collapsed, newest first, 200 max. **End banner** with New game (random seed).
 - **Run & dev tools** (test builds only, muted column on the right, or below on narrow screens): seed and New game, **Raw state** (pretty JSON of `observe()` and `map()`), then:
@@ -473,7 +478,7 @@ A deliberately plain DOM page over the same `Session` (one `Game` plus an event 
 
 - A **policy** is a function from an `Observation` to a `Command | null`. `null` gives up.
 - `autoplay(seed?, policy = botPolicy, maxSteps = 1000, devil?)` plays one run and returns `{ seed, outcome, steps, events }` where outcome is `win | lose | hell | timeout`; each command counts as one step. `simulate(n = 100, policy, maxSteps, prefix = "sim")` runs seeds `sim-0 ... sim-(n-1)` and returns outcome counts plus `total`.
-- **Default bot (`botPolicy`):** fights whenever an enemy is present; at an unspent campfire **trains if HP >= 70% of max** (and attack is below 12), **else rests** (a simple rule, not tuned); at a village buys `heal` if HP is at least 12 below max and gold >= 10, else `blade` if gold >= 15 (loops until neither applies); drinks the well if gold >= 8; at a deal node asks (no text), then **alternates refuse, accept, refuse, accept...** across all deals in the run (refuse first); otherwise takes exit 1.
+- **Default bot (`botPolicy`):** fights whenever an enemy is present; at an unspent campfire **trains if HP >= 70% of max** (and attack is below 12), **else rests** (a simple rule, not tuned); at a village buys `heal` if HP is at least 12 below max and gold >= 10, else `blade` if gold >= 15 (loops until neither applies); drinks the well if gold >= 8; at a deal node asks (no text), then **alternates refuse, accept, refuse, accept...** across all deals in the run (refuse first); at a well where the devil sits it drinks first, then asks him the same way; at a campfire it takes the deal only when training is capped (attack 12) and HP is at least 90% (so rest and train would do little); it only asks while `asksLeft` and `questionsLeft` allow; otherwise takes exit 1.
 
 ### 10.6 Build modes (`package.json`, `src/main.ts`, `README.md`)
 
@@ -488,20 +493,21 @@ A deliberately plain DOM page over the same `Session` (one `Game` plus an event 
 
 In test builds, `VITE_DEVIL_URL` only sets the default URL shown in the Devil lab; the lab starts in Stub mode unless you picked HTTP before. `npm run build` and `build:test` run `tsc` first, so a type error fails the build.
 
-### 10.7 Tests (119 in `npm test`, all passing, network-free except the HttpDevil test which starts the mock on a local port)
+### 10.7 Tests (203 in `npm test`, all passing, network-free except the HttpDevil test which starts the mock on a local port)
 
 | File | Tests | Covers |
 | --- | --- | --- |
-| `src/map/mapgen.test.ts` | 17 | act 1 always starting on the village, the width walk (entry and exit 1, middle MIN_WIDTH to MAX_WIDTH, each step plus or minus 1 unless a clamp holds it, even layer count when alternating), `linkLayers` directly (one first-pass edge per old node with non-decreasing targets, then exactly one parent per missed new node, planar), lanes (widths 2 and 3 occurring, never 4; 6 and 8 layers; average out-degree <= 1.35 and forked middle nodes <= 28% over 3000 acts), planarity in slot order and at most m + n - 1 edges per layer pair (checked for every act in every test), 12 to 14 node counts and all three sizes occurring, structure (single root and leaf, reachability, boss exit, alternation on and off), determinism, unique ids across acts, rewrite rules and rejections, polarity flips and change log, modifiers (force/ban, silly input), 1000 random seeds never breaking invariants |
+| `src/map/mapgen.test.ts` | 18 | act 1 always starting on the village, the width walk (entry and exit 1, middle MIN_WIDTH to MAX_WIDTH, each step plus or minus 1 unless a clamp holds it, even layer count when alternating), `linkLayers` directly (one first-pass edge per old node with non-decreasing targets, then exactly one parent per missed new node, planar), lanes (widths 2 and 3 occurring, never 4; 6 and 8 layers; average out-degree <= 1.35 and forked middle nodes <= 28% over 3000 acts), planarity in slot order and at most m + n - 1 edges per layer pair (checked for every act in every test), 12 to 14 node counts and all three sizes occurring, structure (single root and leaf, reachability, boss exit, alternation on and off), determinism, unique ids across acts, rewrite rules and rejections, polarity flips and change log, modifiers (force/ban, silly input), 1000 random seeds never breaking invariants, deal nodes a third as likely (ratio 0.30 to 0.37 over 4500 acts, alternating and not) with identical shapes |
 | `src/game/deal.test.ts` | 9 | `sanitizeDeal` clamps and junk, a hostile devil never crashing the engine, rewrite applied and rewrite failure reporting, curses firing once, revival once, soul sold and fatal in one deal not reviving, StubDevil validity and determinism |
-| `src/game/autoplay.test.ts` | 6 | 200 seeds always end win, lose or hell with no stalls, stats always in range, determinism, `simulate` tallies, a do-nothing policy times out, hell when winning soulless vs win with soul |
+| `src/game/devilAnywhere.test.ts` | 8 | the campfire's three-way choice in all 3 x 2 orders, the first ask spending it (haggle, strike, accept, refuse), the context `kind`, the well devil deterministic and at about 50% over 6000 rolls, `devil_appears` and `deal` exactly when the roll says so (dice stream untouched), blessing and deal independent in both orders, the run-wide question cap across deal nodes, campfires and wells, StubDevil strikes and spite offers at a campfire, a fatal strike |
+| `src/game/autoplay.test.ts` | 7 | 200 seeds always end win, lose or hell with no stalls, stats always in range, determinism, `simulate` tallies, a do-nothing policy times out, hell when winning soulless vs win with soul, where and when the bot deals (wells, deal nodes, a capped campfire; never past the caps, never with text) |
 | `src/game/httpDevil.test.ts` | 5 | HttpDevil against the mock backend (request body, sanitizable reply), a full bot run with chaos on, chaos replies either reject or sanitize, refused connection and timeout never throw, non-JSON server |
-| `src/ui/logic.test.ts` | 22 | button availability from `observe()` and from the engine's `actions`, event colour classes, `diffDeal`, labels and chips, the DAG model and exit numbers, `planarOrder` (every generated act lays out with 0 crossings in the generator's own order), panel kinds, shop and choose cards (campfire Rest/Train, `fireChoice`), against the real engine |
+| `src/ui/logic.test.ts` | 22 | button availability from `observe()` and from the engine's `actions`, event colour classes, `diffDeal`, labels and chips, the DAG model and exit numbers, `planarOrder` (every generated act lays out with 0 crossings in the generator's own order), panel kinds (the Devil's table beside the choices at campfires and devil wells), shop and choose cards (campfire Rest/Sharpen/Deal, `fireChoice`), against the real engine |
 | `src/game/equivalence.test.ts` | 3 | 500 bot seeds and 200 chaos seeds (random valid and invalid commands) reproduce, command for command, the results, events and final states recorded with the pre-refactor engine (`src/game/__fixtures__/`) |
 | `src/world/shopZone.test.ts` | 3 | the village has one shop zone per engine ware plus an exit; `shopPrompt` is enabled exactly when the engine lists the buy (and the buy then spends the gold), and disabled with the reason otherwise (gold, ware sold elsewhere, spent well, not a shop, run over, devil speaking) |
 | `src/world/scene.test.ts` | 9 | SceneDef validation (bounds inside size, spawn inside bounds, finite numbers, unique ids, reachable zones, shop zones need an `item`), the village as the default scene, stall and cottage placeholders, the y-sort depth (`footY`, `actorDepth`, overlay above all), `clampToBounds`, zone enter/leave once each (none for the spawn zone), art precedence (private file > URL/key > placeholder), the placeholder tile grid and canopies |
 | `src/game/contract.test.ts` | 2 | the JSON contract is additive only: path-to-type snapshots (`contract.json`, the frozen pre-refactor baseline, and `contract-current.json`, with the new fields) of Command, PlayerState, Observation, MapView, Result, every GameEvent, the devil request, REPL `--json` lines (also `--state`, `--manual-devil`) |
-| `src/game/fightResult.test.ts` | 7 | the realtime fight round trip (awaiting shape, no dice, only `fight_result`/`look` while pending), a real FightSim bot fight won and an idle one lost, revival keeping the enemy for a new bout with a new seed, clamping of forged results (win with the enemy standing, hpLeft above start, overkill, junk), `on_hit` curses once and before the death check, boss heal, purity and determinism |
+| `src/game/fightResult.test.ts` | 9 | the realtime fight round trip (awaiting shape, no dice, only `fight_result`/`look` while pending), a real FightSim bot fight won and an idle one lost, revival keeping the enemy for a new bout with a new seed, clamping of forged results (win with the enemy standing, hpLeft above start, overkill, junk), `on_hit` curses once and before the death check, boss heal, purity and determinism, `FightRequest.where` (act, layer, kind) for every fight and boss node |
 | `src/game/engine.test.ts` | 11 | `step` purity (deep-frozen input), legal-actions property, act 1 opening on the village, campfire rest xor train (and the attack cap), the devil round trip, GameState JSON save and restore mid-run, devil-stage events, `Session.onSync`, `view` |
 
 Not covered by tests: the DOM UI rendering, the console, REPL text mode, combat numbers, shop numbers, balance (the REPL `--json` shape is covered by the contract test).
@@ -510,23 +516,20 @@ Not covered by tests: the DOM UI rendering, the console, REPL text mode, combat 
 
 ## 11. Balance snapshot
 
-Throwaway script (not committed), default `botPolicy`, `simulate(500)` with seeds `sim-0 ... sim-499`, StubDevil, on this branch (rules round 1: act 1 starts at the village, campfire Rest or Train with the bot training at HP >= 70%, maps up to 4 wide with planar lanes):
+Throwaway script (not committed), default `botPolicy`, `simulate` with seeds `sim-0 ...`, StubDevil, on `main` after the devil-anywhere round (4 Oct: a deal at every campfire and at about half the wells, deal nodes a third as likely, the bot updated as in 10.5). 1000 runs (`sim-0 ... sim-999`):
 
-| Outcome | Runs | Share |
+| Outcome | Before (085894c) | After |
 | --- | --- | --- |
-| win (soul kept) | 113 | 22.6% |
-| hell (reached final, soul gone) | 196 | 39.2% |
-| lose (died) | 191 | 38.2% |
-| timeout | 0 | 0% |
+| win (soul kept) | 342 (34.2%) | **555 (55.5%)** |
+| hell (reached final, soul gone) | 380 (38.0%) | 359 (35.9%) |
+| lose (died) | 278 (27.8%) | **86 (8.6%)** |
+| timeout | 0 | 0 |
 
-- Average steps (commands) per run: **46.0** overall (lose 44.8, hell 47.3, win 45.8).
-- Reached the final door: 309 of 500 (61.8%).
-- **Revival fired in 359 of 500 runs (72%).** Hell is 63% of runs that reach the final door.
-- Campfires: the bot trained 440 times and rested 316 times (rests counted by `healed` events, so rests at full HP are missed).
-- Deaths by act: act 1 **0**, act 2 **24**, act 3 **167** (of 191). Killers: the act-3 boss **156**, the act-2 boss **24**, the rest regular enemies. The **bosses** (the act-3 boss most of all) are still the real wall.
-- Deals: 749 offers in 500 runs; the bot accepted 252 (28 of which sold the soul) and refused 497. 35 rewrites landed (none failed), 111 curses added and all fired.
+- Average steps (commands) per run: 63.7 before, 65.3 after.
+- Revival fired in 546 of 1000 runs before, 328 after.
+- Offers the bot heard: 2264, all at deal nodes, before; 2143 after: 710 at deal nodes, 1423 at wells, 10 at campfires (the bot only deals at a fire once attack is capped). It accepted 893 before, 825 after; curses added 375 before, 319 after.
 
-What each change did (same script, same seeds):
+What each change did (same script, `simulate(500)`, seeds `sim-0 ... sim-499`):
 
 | Build | win | lose | hell | avg steps |
 | --- | --- | --- | --- | --- |
@@ -536,50 +539,12 @@ What each change did (same script, same seeds):
 | + wider planar maps (lanes) | 113 (22.6%) | 191 (38.2%) | 196 (39.2%) | 46.0 |
 | `main` (3e159a0: 12-14 node acts, and everything since) | 181 (36.2%) | 134 (26.8%) | 185 (37.0%) | 64.1 |
 | + designer's width walk and linking (4 Oct) | 185 (37.0%) | 130 (26.0%) | 185 (37.0%) | 63.9 |
+| + devil at campfires and wells, bot deals there (deal-node odds unchanged) | 181 (36.2%) | 132 (26.4%) | 187 (37.4%) | 65.6 |
+| + deal nodes a third as likely (4 Oct) | **281 (56.2%)** | **45 (9.0%)** | 174 (34.8%) | 65.4 |
 
-Starting at the shop instead of a random good node costs the bot a little: it loses the early deal or campfire some seeds used to open on, and 10 gold buys nothing it wants at full HP. Training is the big swing: +1 attack per fire compounds through every later fight and both late bosses. The map change mostly reshuffles which nodes the bot (which always takes exit 1, the leftmost lane) walks through, so its effect here is small and close to seed noise. The same holds for the designer's walk (4 Oct): every path still crosses 2 or 3 fight layers plus the boss, as before, and the shift (+4 win, -4 lose) is seed noise. The strategy variants measured on `main` (refuse every deal: win 34 / lose 275 / hell 191; accept every deal: win 70 / lose 221 / hell 209) have not been re-run.
-
-Caveats: this is one bot and one stub devil. The Gemini devil will change everything about deals. All combat and shop numbers are first guesses, and the bot's 70% training rule is a sensible default, not a tuned one.
-
---- | --- | --- |
-| win (soul kept) | 102 | 20.4% |
-| hell (reached final, soul gone) | 201 | 40.2% |
-| lose (died) | 197 | 39.4% |
-| timeout | 0 | 0% |
-
-- Average steps (commands) per run: **46.1** overall (lose 45.0, hell 47.4, win 45.7).
-- Reached the final door: 303 of 500 (60.6%).
-- **Revival fired in 364 of 500 runs (73%).** Hell is 66% of runs that reach the final door.
-- Campfires: the bot trained 434 times and rested 303 times (rests counted by `healed` events, so rests at full HP are missed).
-- Deaths by act: act 1 **0**, act 2 **23**, act 3 **174** (of 197). Killers: the act-3 boss **159**, the act-2 boss **22**, the rest regular enemies. The **bosses** (the act-3 boss most of all) are still the real wall.
-- Deals: 742 offers in 500 runs; the bot accepted 248 (34 of which sold the soul) and refused 494. 40 rewrites landed (none failed), 107 curses added and all fired.
-
-What each change did (same script, same seeds):
-
-| Build | win | lose | hell | avg steps |
-| --- | --- | --- | --- | --- |
-| `main` (3d43eac) | 46 (9.2%) | 249 (49.8%) | 205 (41.0%) | 48.1 |
-| + act 1 starts at the village | 36 (7.2%) | 275 (55.0%) | 189 (37.8%) | 47.1 |
-| + campfire Rest or Train | **102 (20.4%)** | 197 (39.4%) | 201 (40.2%) | 46.1 |
-
-Starting at the shop instead of a random good node costs the bot a little: it loses the early deal or campfire some seeds used to open on, and 10 gold buys nothing it wants at full HP. Training is the big swing: +1 attack per fire compounds through every later fight and both late bosses. The strategy variants measured on `main` (refuse every deal: win 34 / lose 275 / hell 191; accept every deal: win 70 / lose 221 / hell 209) have not been re-run.
+Starting at the shop instead of a random good node costs the bot a little; training is the big swing (+1 attack per fire compounds through every later fight and both late bosses). The map width changes mostly reshuffle which nodes the bot (which always takes exit 1, the leftmost lane) walks through, close to seed noise. The devil-anywhere rules alone are noise for this bot (it alternates accepting and refusing unsteered deals wherever it meets them). **The jump comes from the map:** two in three former deal nodes are now a village, campfire or well, and for this bot those are worth far more than an unsteered deal (the 4 Oct balance report found that skipping deal nodes already raised its win rate by 7 points). If the target for a plain player is about 50% clean wins, this round overshoots for the bot; the levers are in that report (bosses, gold, blade price). The strategy variants measured on an older `main` (refuse every deal: win 34 / lose 275 / hell 191; accept every deal: win 70 / lose 221 / hell 209) have not been re-run; on the 4 Oct build before this round the balance report measured accept-all at 32.8% wins against 33.9% for ignoring deals (more runs finish, but as hell), so "taking the stub's deals helps" no longer holds.
 
 Caveats: this is one bot and one stub devil. The Gemini devil will change everything about deals. All combat and shop numbers are first guesses, and the bot's 70% training rule is a sensible default, not a tuned one.
-
---- | --- | --- |
-| win (soul kept) | 43 | 8.6% |
-| hell (reached final, soul gone) | 209 | 41.8% |
-| lose (died) | 248 | 49.6% |
-| timeout | 0 | 0% |
-
-- Average steps (commands) per run: **48.0** overall (lose 46.6, hell 49.3, win 49.3).
-- Reached the final door: 252 of 500 (50.4%).
-- **Revival fired in 415 of 500 runs (83%).** Hell is 83% of runs that reach the final door.
-- Deaths by act: act 1 **0**, act 2 **32**, act 3 **216** (of 248). Killers: the act-3 boss **200**, the act-2 boss **30**, the rest regular enemies. So the **bosses** (and the act-3 boss most of all) are the real wall; regular fights almost never kill.
-- Deals: 864 offers in 500 runs; the bot accepted 309 (42 of which sold the soul) and refused 555. 45 rewrites landed (all polarity flips, no failed rewrites), 121 curses added and all fired.
-- Strategy variants (also 500 runs each, same bot otherwise): refuse every deal gives win 34 / lose 275 / hell 191; ignore the devil entirely gives the same numbers as refuse-all; accept every deal gives **win 70 / lose 221 / hell 209**. So taking the stub's deals helps survival, and the free-stat deals outweigh their curses.
-
-Caveats: this is one bot and one stub devil. The Gemini devil will change everything about deals. All combat and shop numbers are first guesses.
 
 ---
 
