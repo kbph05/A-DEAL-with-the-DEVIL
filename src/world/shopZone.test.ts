@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { WARES, initialState, step, view, type GameState } from "../game";
 import { exitPrompt, shopPrompt } from "./shopZone";
 import { sceneById } from "./scenes";
-import type { SceneZone } from "./scene";
+import { pointIn, type SceneZone } from "./scene";
 
 const village = sceneById("village")!;
 const zone = (item: string): SceneZone => village.zones!.find((z) => z.kind === "shop" && z.item === item)!;
@@ -17,6 +17,24 @@ test("village: three stalls, one shop zone per engine ware, and an exit", () => 
   const exit = village.zones!.find((z) => z.kind === "exit")!;
   assert.equal(exit.label, "Leave the village");
   assert.equal(exitPrompt(exit), "Leave the village (map: coming soon)");
+});
+
+test("village: the stalls form an evenly spaced row on the top edge, outside bounds; each buy zone is in front of its stall", () => {
+  const b = village.bounds;
+  const stalls = village.actors!.filter((a) => a.id.startsWith("stall-")).sort((p, q) => p.x - q.x);
+  assert.equal(stalls.length, 3);
+  const gaps = stalls.slice(1).map((a, i) => a.x - stalls[i].x);
+  assert.ok(gaps.every((g) => g === gaps[0]), "even spacing");
+  for (const a of stalls) {
+    assert.ok(a.y < b.y && !pointIn(a, b), `${a.id} stands just above the bounds' top edge, not in the walkable area`);
+    assert.equal(a.y, stalls[0].y, "one line");
+    const z = village.zones!.find((q) => q.kind === "shop" && q.label === a.label)!;
+    assert.equal(z.y, b.y, `${z.id} touches the bounds' top edge`);
+    assert.ok(z.x >= b.x && z.x + z.w <= b.x + b.w && z.y + z.h <= b.y + b.h, `${z.id} lies inside bounds`);
+    assert.ok(Math.abs(z.x + z.w / 2 - a.x) <= 1, `${z.id} is centred on its stall`);
+  }
+  assert.ok(pointIn(village.spawn, b));
+  assert.ok(village.actors!.every((a) => a.y < b.y || !a.id.startsWith("house-")), "cottages are on the edge too");
 });
 
 test("shopPrompt: enabled exactly when the engine lists the buy, and Buy sends it", () => {

@@ -49,6 +49,8 @@ test("SceneDef: bounds inside size, spawn inside bounds, finite numbers", () => 
   has(scene({ zones: [{ id: "a", x: 60, y: 110, w: 10, h: 10 }, { id: "a", x: 70, y: 110, w: 10, h: 10 }] }), /used twice/);
   has(scene({ actors: [{ id: "x", x: 500, y: 10 }] }), /outside size/);
   has(scene({ actors: [{ id: "x", x: 5 }] }), /finite x and y/);
+  // Actors may stand outside bounds (shopfronts on the edge); zones and the spawn may not.
+  assert.deepEqual(sceneErrors(scene({ actors: [{ id: "stall", x: 200, y: 98 }, { id: "far", x: 10, y: 10 }] })), []);
   has(scene({ zones: {} }), /zones must be an array/);
   assert.deepEqual(sceneErrors(null), ["the scene is not an object"]);
   assert.throws(() => parseSceneDef(scene({ spawn: { x: 0, y: 0 } })), /Bad scene "t": spawn/);
@@ -125,6 +127,10 @@ test("placeholder art: playable rect looks walkable, the rest blocked, exits are
   const bottom = def.bounds.y + def.bounds.h;
   assert.ok(c.some((k) => !k.trunk && k.y - k.r < bottom && k.y > bottom - k.r), "a canopy row hangs over the bottom edge");
   assert.ok(c.some((k) => k.trunk && pointIn(k, def.bounds)), "a big tree inside the playable rect");
+  const edge = parseSceneDef(scene({ actors: [{ id: "stall-x", x: 200, y: 98 }] })) as SceneDef;
+  const eg = sceneTiles(edge);
+  assert.ok(!isBlockingId(eg.tiles[Math.floor(80 / 16) * eg.width + Math.floor(200 / 16)]), "a stall outside bounds stands in a clearing");
+  assert.ok(isBlockingId(eg.tiles[Math.floor(10 / 16) * eg.width + Math.floor(10 / 16)]), "forest elsewhere");
   const chapel = sceneById("chapel")!;
   const door = chapel.zones!.find((z) => z.id === "door-south")!;
   assert.ok(overlayCanopies(chapel).every((k) => k.trunk || k.x + k.r <= door.x || k.x - k.r >= door.x + door.w), "no canopy over an exit");

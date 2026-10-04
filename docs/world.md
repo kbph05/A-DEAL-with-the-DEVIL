@@ -56,7 +56,7 @@ A scene is plain JSON data (`SceneDef` in `src/world/scene.ts`). Coordinates are
 - zone and actor ids are unique;
 - a shop zone has an `item`;
 - a zone touches `bounds` (otherwise it can never be entered);
-- actors stand inside `size`.
+- actors stand inside `size` (they may be outside `bounds`: shopfronts on the edge).
 
 **The samples** are in `src/world/scenes/`: `village.json` (960×540, the default: the first entry of `SCENES`; see "The village and shop zones" below), `crossroads.json` (960×540: the devil, a signpost, two exits and a shrine) and `chapel.json` (1600×900, bigger than the view, so the camera scrolls and clamps). To add one, drop a JSON file there and list it in `scenes/index.ts`. The lab can also load any SceneDef JSON by URL (see below).
 
@@ -66,9 +66,11 @@ kbph (4 Oct): the village scene, the one the game starts with, contains the shop
 
 `src/world/scenes/village.json`:
 
-- Three stalls, as actors `stall-healer`, `stall-smith` and `stall-shrine`, labelled "Healer", "Smith" and "Shrine".
-- In front of each, a zone `{ "kind": "shop", "item": "heal" | "blade" | "blessing", "label": ... }`.
-- Three cottages (`house-*` actors) along the top edge, an exit zone `leave` ("Leave the village") on the east edge, the usual canopy overlay.
+- **Shops are on the edge, in a line** (kbph, 4 Oct: "shops shall be on edges, like a line; outside of walkable area so you can't walk through them"). Three stalls, as actors `stall-healer`, `stall-smith` and `stall-shrine` (labelled "Healer", "Smith" and "Shrine"), stand in an evenly spaced row (x = 280, 480, 680) with their feet just above the top edge of `bounds` (y = 148; the rectangle starts at 150), so the stalls are outside it and can't be walked into or through. Two cottages (`house-west`, `house-east`) flank the row.
+- In front of each stall, inside `bounds` and touching its top edge, a zone `{ "kind": "shop", "item": "heal" | "blade" | "blessing", "label": ... }`. Walk up to the edge in front of a stall and its prompt opens.
+- An exit zone `leave` ("Leave the village") on the east edge, the spawn in the middle (480, 390), the usual canopy overlay.
+- Actors outside `bounds` are allowed by the validator (it only checks them against `size`). Zones must still touch `bounds`, and the spawn must lie inside it.
+- The placeholder background gives a stall or cottage that stands outside `bounds` a small grass clearing (`sceneTiles`), instead of leaving it in the forest.
 
 `src/world/shopZone.ts` is the glue, pure and tested:
 
@@ -164,7 +166,7 @@ Other options:
   - The player's depth key is the bottom of its feet box. With the placeholder hero that is the sprite's bottom. The private sheet's feet sit higher in its frame, so its origin is set to the feet.
   - The overlay is at `10 + 2 × size.h + 1`, above any actor.
 - **Bounds.** The Arcade world bounds are `scene.bounds`, and the player has `setCollideWorldBounds(true)`. The body is the small feet box, so the feet stop at the rectangle's edge while the head can overlap what is above it. `clampToBounds` puts a spawn that is too close to an edge back inside.
-- **Actors** don't collide (yet): you can walk behind and in front of them, and through them.
+- **Actors** don't collide (yet): you can walk behind and in front of them, and through them. The village shops are kept solid by standing outside `bounds`, not by a collision box.
 - **Camera.** It follows the player and is clamped to the texture size. A scene smaller than the view is centred.
 
 ## Running it

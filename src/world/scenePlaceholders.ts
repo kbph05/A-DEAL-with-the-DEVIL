@@ -36,6 +36,13 @@ export function sceneTiles(def: SceneDef): { width: number; height: number; tile
       legs.push({ x: cx - S, y: Math.min(sy, cy) - S, w: 2 * S, h: Math.abs(cy - sy) + 2 * S });
     }
   }
+  // Stalls and cottages whose feet are outside bounds: their footprint plus a margin.
+  const clearings = (def.actors ?? [])
+    .filter((a) => actorShape(a.id) !== "figure" && !pointIn(a, def.bounds))
+    .map((a) => {
+      const sz = actorShape(a.id) === "stall" ? STALL_SIZE : HOUSE_SIZE;
+      return { x: a.x - sz.w / 2 - S, y: a.y - sz.h - S, w: sz.w + 2 * S, h: sz.h + S + 1 };
+    });
   const onPath = (c: { x: number; y: number }) => pointIn(c, def.bounds) && legs.some((r) => pointIn(c, r));
   for (let y = 0; y < height; y++) {
     for (let x = 0; x < width; x++) {
@@ -44,6 +51,8 @@ export function sceneTiles(def: SceneDef): { width: number; height: number; tile
       if (pointIn(c, def.bounds)) id = isBlockingId(id) || id === T.DOOR ? T.GRASS : id;
       else id = id === T.WALL || id === T.WATER ? id : T.TREE;
       if (onPath(c)) id = T.PATH;
+      // A building outside the playable rect (a shopfront on the edge) stands in a small clearing, not in the forest.
+      if (clearings.some((r) => pointIn(c, r))) id = T.GRASS;
       const zone = (def.zones ?? []).find((z) => pointIn(c, z));
       if (zone) id = zone.kind === "exit" ? T.PATH : T.FLOOR;
       tiles.push(id);
