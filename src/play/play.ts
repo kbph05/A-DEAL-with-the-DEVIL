@@ -15,6 +15,7 @@ import { paintIcon, type IconKey } from "../mapscene/icons";
 import { effectChips, curseText, lastStrike, outcomeEvents, questionsText } from "../ui/logic";
 import { mountScene, sceneById, type SceneHandle, type SceneZone } from "../world";
 import { shopPrompt } from "../world/shopZone";
+import { mountDealer } from "./dealer";
 import { CLOSE_DEVIL, LOCAL, OPEN_DEVIL, arrived, flow, setLocal, wantsOpener, type Flow, type Local } from "./flow";
 
 const params = new URLSearchParams(location.search);
@@ -74,6 +75,9 @@ const devil = h("div", "play-layer play-devil");
 devil.setAttribute("role", "dialog");
 devil.setAttribute("aria-modal", "true");
 devil.setAttribute("aria-label", "The devil");
+const dealer = mountDealer(devil); // decorative: the devil behind his table (dealer.ts)
+const seat = h("div", "play-seat"); // the dialogue, offer and buttons, "on the table" below him
+devil.append(seat);
 const ending = h("div", "play-layer play-ending");
 const toast = h("div", "play-toast");
 toast.setAttribute("role", "status");
@@ -263,7 +267,8 @@ function renderPanel(v: View, f: Flow): void {
 
 function renderDevil(v: View, f: Flow): void {
   devil.hidden = !f.devil;
-  if (!f.devil) return;
+  if (!f.devil) { dealer.stop(); return; }
+  dealer.start();
   const active = document.activeElement;
   const typing = active instanceof HTMLInputElement && devil.contains(active);
   if (typing && local.busy === null && devil.dataset.key === JSON.stringify([v.nodeId, v.asksLeft, v.questionsLeft, !!v.offer])) return;
@@ -302,7 +307,7 @@ function renderDevil(v: View, f: Flow): void {
   if (v.offer && !busy) row.append(button("Accept", () => void send({ cmd: "accept" })), button("Refuse", () => void send({ cmd: "refuse" }), "quiet"));
   if (!v.offer && !busy) row.append(button("Walk away", () => patch(CLOSE_DEVIL), "quiet"));
   card.append(row);
-  devil.replaceChildren(card);
+  seat.replaceChildren(card);
   // Focus the wish box with a keyboard; on a touch screen that would pop the on-screen keyboard over the offer.
   const coarse = window.matchMedia?.("(pointer: coarse)").matches === true;
   (devil.querySelector<HTMLElement>(coarse ? "button:not(:disabled)" : "input:not(:disabled)") ?? devil.querySelector<HTMLElement>("button:not(:disabled)"))?.focus();
