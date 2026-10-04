@@ -1,9 +1,9 @@
 /** Outcome (the narration of the last move only) and History (everything, collapsed). */
-import { describe, type GameEvent } from "../game";
+import type { GameEvent } from "../game";
 import { h } from "./dom";
-import { eventClass } from "./logic";
+import { eventClass, eventText } from "./logic";
 
-const line = (e: GameEvent) => h("p", { class: `entry ${eventClass(e)}`, text: describe(e) });
+const line = (e: GameEvent) => h("p", { class: `entry ${eventClass(e)}`, text: eventText(e) });
 
 export function renderOutcome(el: HTMLElement, events: GameEvent[]): void {
   el.replaceChildren(...(events.length ? events.map(line) : [h("p", { class: "muted", text: "Nothing has happened yet." })]));

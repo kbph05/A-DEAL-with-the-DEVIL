@@ -131,7 +131,7 @@ export function mountUI(root: HTMLElement, session: Session, opts: UIOptions = {
       again.onclick = () => session.newGame();
       banner.append(h("b", { text: END[o.ending][0] }), " ", END[o.ending][1], " ", again);
     }
-    renderSituation(sit.body, o, blurbOf(looked, describe(looked)), looked.curses);
+    renderSituation(sit.body, o, blurbOf(looked, describe(looked)), looked.curses, fighting);
     ch.body.hidden = fighting; stage.hidden = !fighting;
     for (const el of layout.children) if (el !== game) (el as HTMLElement).inert = fighting; // the dev tools wait too
     if (!fighting) choices.render(v, A, busy, dealEnd(log), fireChoice(log), lastStrike(log));

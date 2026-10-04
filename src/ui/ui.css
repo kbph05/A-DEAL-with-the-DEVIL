@@ -148,7 +148,7 @@ button.node.next:disabled { opacity: .7; box-shadow: none; background: #241a1a; 
 .ev-devil { color: #d8b8f8; } .ev-curse { background: #3a1030; color: #ffc4f0; } .ev-rewrite { background: #3a2a10; color: #ffd070; font-weight: bold; }
 
 .history { border: 1px solid var(--line); border-radius: 10px; padding: 8px 14px; background: #160c0c; }
-.history summary { cursor: pointer; min-height: 32px; line-height: 32px; color: var(--muted); }
+.history summary { cursor: pointer; min-height: 44px; line-height: 44px; color: var(--muted); }
 .log { max-height: 420px; overflow-y: auto; font-size: 14px; } .log .entry { border-bottom: 1px solid #241616; font-family: system-ui, sans-serif; }
 
 .banner { display: none; padding: 14px; border-radius: 10px; font-size: 18px; border: 2px solid; }

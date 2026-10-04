@@ -3,7 +3,7 @@ import type { MapView, Observation } from "../game";
 import assert from "node:assert/strict";
 import { createGame, describe } from "../game";
 import type { Command, GameEvent } from "../game";
-import { availableActions, blurbOf, chooseCards, fireChoice, type FireChoice, dealEnd, devilPhase, askBlockReason, haggleText, questionsText, panelKinds, shopItems, buyLabel, curseText, effectChips, eventClass, afterKinds, dagModel, exitNumber, fightLabel, lockReason, moveLock, nodeState, nodeTitle, outcomeEvents, pct, STAIRS_ID, topId } from "./logic";
+import { availableActions, blurbOf, chooseCards, fireChoice, type FireChoice, dealEnd, devilPhase, askBlockReason, haggleText, questionsText, panelKinds, shopItems, buyLabel, curseText, effectChips, eventClass, afterKinds, dagModel, exitNumber, fightLabel, lockReason, moveLock, nodeState, nodeTitle, eventText, outcomeEvents, pct, STAIRS_ID, topId } from "./logic";
 import { diffDeal } from "./dealDiff";
 import { lastStrike, STRIKE_HEAD } from "./logic";
 import { sanitizeDeal } from "../game/deal";
@@ -413,4 +413,21 @@ test("diffDeal explains how a forced strike was cut down", () => {
   assert.ok(notes.some((c) => c.path === "effects.hp" && /at most 8/.test(c.note)));
   assert.ok(notes.some((c) => c.path === "effects.gold") && notes.some((c) => c.path === "curse"));
   assert.ok(!notes.some((c) => c.path === "forced"), "forced is a known field");
+});
+
+test("eventText: the Outcome speaks to the player, with no console commands or node ids", () => {
+  const deal = { dialogue: "A bargain.", effects: { gold: 10, hp: -3 }, curse: { trigger: "on_hit" as const, effect: { hp: -2 } }, rewrite: { nodeId: "a0n3", to: "fight" as const } };
+  const offer = eventText({ type: "deal_offered", deal });
+  assert.ok(offer.includes("A bargain.") && offer.includes("+10 Gold, −3 HP") && offer.includes("when you are hit: −2 HP") && offer.includes("Accept or refuse?"), offer);
+  assert.ok(!/\(\)|->/.test(offer), offer);
+  const text = [
+    eventText({ type: "moved", from: "a0n1", to: "final", kind: "final", act: 2 }),
+    eventText({ type: "devil_struck", dialogue: "Insolent.", effects: { hp: -3 } }),
+    eventText({ type: "curse_added", curse: deal.curse }),
+    eventText({ type: "curse_fired", trigger: "on_hit", effect: { hp: -2 }, changes: { hp: -2 } }),
+  ].join("\n");
+  assert.ok(!/\(\)|->|final \(final\)|you take: HP/.test(text), text);
+  assert.ok(text.includes("You take −3 HP") && text.includes("You reach the final door."), text);
+  const g = createGame("demo"), l = g.look().events[0];
+  assert.equal(eventText(l), describe(l), "other events keep describe()'s wording");
 });

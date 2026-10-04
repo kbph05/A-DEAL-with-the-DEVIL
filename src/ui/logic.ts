@@ -1,5 +1,5 @@
 /** Pure helpers for the test UI: which buttons make sense, and how to style events. No DOM here, so tests can import it. */
-import { isSyncMarker, type Command, type Deal, type GameEvent, type MapView, type Observation } from "../game";
+import { describe, isSyncMarker, type Command, type Deal, type GameEvent, type MapView, type Observation } from "../game";
 import type { EnemyView } from "../game/events";
 import { TRAIN_ATTACK, WARES } from "../game/gameState";
 import { STAT_RANGE } from "../game/state";
@@ -261,6 +261,37 @@ export function blurbOf(looked: Extract<GameEvent, { type: "looked" }>, text: st
   const first = text.split("\n")[0] ?? "";
   const i = first.indexOf(`(${looked.kind}): `);
   return i >= 0 ? first.slice(i + looked.kind.length + 4) : first;
+}
+
+/** Stat changes in words, e.g. "+10 Gold, −3 HP". */
+const deltaText = (d: Record<string, number | undefined>): string => effectChips(d).map((c) => c.text).join(", ") || "nothing";
+
+const GO_TEXT: Record<Kind, string> = {
+  campfire: "You come to a campfire.", village: "You come to a village.", well: "You come to a well.", deal: "You come to the devil's table.",
+  fight: "You press on towards a fight.", boss: "You face the way down, and what guards it.", final: "You reach the final door.",
+};
+
+/**
+ * What the Outcome and History panels say about an event. `describe()` is console text (it mentions commands such as
+ * accept() and node ids); the UI words the few events where that leaks, and falls back to `describe()` for the rest.
+ */
+export function eventText(e: GameEvent): string {
+  switch (e.type) {
+    case "moved": return GO_TEXT[e.kind];
+    case "deal_offered": {
+      const d = e.deal;
+      return [`The devil: "${d.dialogue}"`, `  He gives: ${deltaText(d.effects)}`,
+        ...(d.curse ? [`  The price, a curse: ${curseText(d.curse)}`] : []),
+        ...(d.rewrite ? [`  He will change the road ahead: ${d.rewrite.nodeId} becomes a ${d.rewrite.to}`] : []),
+        "  Accept or refuse?"].join("\n");
+    }
+    case "devil_struck": return [`The devil strikes: "${e.dialogue}"`, `  You take ${deltaText(e.effects)}`].join("\n");
+    case "deal_applied": return `Deal struck: ${deltaText(e.changes)}.`;
+    case "curse_added": return `A curse settles on you: ${curseText(e.curse)}.`;
+    case "curse_fired": return `The curse fires (${curseText({ trigger: e.trigger, effect: e.effect })}): ${deltaText(e.changes)}.`;
+    case "bought": return `Bought ${e.item} for ${e.cost}g: ${deltaText(e.changes)}.`;
+    default: return describe(e);
+  }
 }
 
 /** Events worth showing as "what just happened": everything except the `looked` chatter and the sync markers. */

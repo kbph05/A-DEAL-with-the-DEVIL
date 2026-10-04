@@ -24,7 +24,7 @@ export interface FightHooks { realtime(): void; quick(): void; showQuick(): bool
 /** `send` runs a command; the wish input is read at click time, so it stays current. */
 export function mountChoices(el: HTMLElement, send: (c: Command) => void, fight?: FightHooks): Choices {
   const wish = h("input", { id: "wish", class: "wish" });
-  wish.placeholder = "e.g. a sharper sword, and I'm not afraid of a curse";
+  wish.placeholder = "e.g. a sharper sword";
   wish.autocomplete = "off";
   const wishLabel = h("label", { text: "Tell the devil what you want (optional)" });
   wishLabel.htmlFor = "wish";

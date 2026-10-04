@@ -4,7 +4,7 @@ import type { Curse } from "../game";
 import { bar, chip, h } from "./dom";
 import { curseText, nodeTitle, pct } from "./logic";
 
-export function renderSituation(el: HTMLElement, o: Observation, blurb: string, curses: Curse[]): void {
+export function renderSituation(el: HTMLElement, o: Observation, blurb: string, curses: Curse[], fighting = false): void {
   const s = o.state;
   const stat = (k: string, v: string | number, cls = "") => h("div", { class: `stat ${cls}` }, h("small", { text: k }), h("b", { text: String(v) }));
   const curseRow = h("div", { class: "chips", aria: { label: "Active curses" } });
@@ -19,6 +19,8 @@ export function renderSituation(el: HTMLElement, o: Observation, blurb: string, 
   );
   if (o.enemy) {
     const e = o.enemy;
-    el.append(h("div", { class: "enemy-card" }, h("div", { class: "enemy-name" }, h("b", { text: e.name }), e.boss ? chip("Boss", "bad") : ""), bar(e.hp, e.maxHp, pct(e.hp, e.maxHp), "Enemy HP", "foe")));
+    // The engine's HP is only updated when the realtime fight reports; the arena has the live bar, so don't show a stale one.
+    el.append(h("div", { class: "enemy-card" }, h("div", { class: "enemy-name" }, h("b", { text: e.name }), e.boss ? chip("Boss", "bad") : ""),
+      fighting ? h("p", { class: "muted", text: "Fighting now. Its health is in the arena." }) : bar(e.hp, e.maxHp, pct(e.hp, e.maxHp), "Enemy HP", "foe")));
   }
 }
