@@ -52,6 +52,8 @@ export interface ForestSceneConfig {
   gamma?: number;
   /** Show the controls line at the bottom (default true). */
   help?: boolean;
+  /** Show the fight clock (the "3.6 s" readout). Default false: kbph (4 Oct) dropped it from the game; the fight lab shows it. */
+  clock?: boolean;
 }
 
 type KeyName = "W" | "A" | "S" | "D" | "UP" | "DOWN" | "LEFT" | "RIGHT" | "SPACE" | "SHIFT";
@@ -519,7 +521,7 @@ export class ForestScene extends Phaser.Scene {
     const alive = s.alive.length;
     this.texts.hp.setText(`You  ${p.hp} / ${p.maxHp}`);
     this.texts.foes.setText(`${s.enemies.length > 1 ? `${alive} / ${s.enemies.length} standing  ·  ` : ""}${s.enemyHpLeft} HP`);
-    this.texts.clock.setText(`${(s.timeMs / 1000).toFixed(1)} s`);
+    this.texts.clock.setText(this.cfg.clock ? `${(s.timeMs / 1000).toFixed(1)} s` : "");
     this.texts.help.setVisible(this.cfg.help !== false && !this.touchUI && !this.finished);
     this.texts.attack.setVisible(this.touchUI);
     this.texts.dash.setVisible(this.touchUI);

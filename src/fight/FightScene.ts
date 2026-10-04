@@ -11,6 +11,8 @@ export interface FightSceneConfig {
   touch: boolean;
   onEnd: (result: FightResult) => void;
   onDebug?: (sim: FightSim) => void;
+  /** Show the fight clock (the "3.6 s" readout). Default false: kbph (4 Oct) dropped it from the game; the fight lab shows it. */
+  clock?: boolean;
 }
 
 type KeyName = "W" | "A" | "S" | "D" | "UP" | "DOWN" | "LEFT" | "RIGHT" | "SPACE" | "SHIFT";
@@ -259,7 +261,7 @@ export class FightScene extends Phaser.Scene {
     bar(g, ox, 63, 300, 4, 1 - p.dashCdMs / PLAYER.dashCdMs, 0x6fb7ff); // dash cooldown
     this.texts.hp.setText(`You  ${p.hp} / ${p.maxHp}`);
     this.texts.foe.setText(`${e.boss ? "BOSS  " : ""}${e.name}  ${e.hp} / ${e.maxHp}`);
-    this.texts.clock.setText(`${(s.timeMs / 1000).toFixed(1)} s`);
+    this.texts.clock.setText(this.cfg.clock ? `${(s.timeMs / 1000).toFixed(1)} s` : "");
     this.texts.help.setVisible(!this.touchUI);
 
     // Touch controls.
