@@ -324,6 +324,16 @@ export function haggleText(asksLeft: number, hasOffer: boolean): string {
   return asksLeft > 0 ? `Haggles left: ${asksLeft}` : "Haggles left: 0. Accept or refuse.";
 }
 
+/** "Questions left this run: 7": the run-wide cap on asking the devil (MAX_DEVIL_QUERIES), shown beside the haggles. */
+export const questionsText = (questionsLeft: number): string => `Questions left this run: ${questionsLeft}`;
+
+/** Why the Ask/Haggle button is off, in words (null while it works). The run-wide limit outranks the per-node haggle limit. */
+export function askBlockReason(o: Pick<Observation, "questionsLeft" | "asksLeft">): string | null {
+  if (o.questionsLeft <= 0) return "The devil has heard enough from you this run.";
+  if (o.asksLeft <= 0) return "He is done haggling here: accept or refuse.";
+  return null;
+}
+
 const WARE_EFFECT: Record<Ware, string> = { heal: "Restore 12 HP", blade: "+1 Attack", blessing: "A random blessing: +3 Max HP, +1 Attack or +8 HP" };
 const WARE_ICON: Record<Ware, string> = { heal: "❤️", blade: "🗡️", blessing: "✨" };
 

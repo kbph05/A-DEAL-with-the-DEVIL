@@ -136,7 +136,7 @@ test("selling the soul in a deal and dying in the same breath does not revive", 
 
 test("StubDevil: pure (same request, same offer), valid Deals, includes a soul trade and a rewrite", async () => {
   const ctx: DevilContext = {
-    seed: "s", act: 0, nodeId: "a0n0", askIndex: 1, curses: [],
+    seed: "s", act: 0, nodeId: "a0n0", askIndex: 1, questionsLeft: 9, curses: [],
     rewritable: [{ id: "a0n1", kind: "village" }, { id: "a0n2", kind: "fight" }],
   };
   const s = newPlayer("a0n0");

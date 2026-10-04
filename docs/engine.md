@@ -40,7 +40,7 @@ Every step result carries `actions`: the exact legal next commands, computed by 
 2. `rest`
 3. `train`
 4. affordable `buy`s
-5. `deal` (while asks remain)
+5. `deal` (while asks remain at this node and questions remain this run)
 6. `accept` and `refuse` (when an offer stands)
 7. `go n` (one per exit)
 
@@ -64,6 +64,7 @@ Three special cases:
 
 - `curses`
 - `asksLeft`: the haggles left at this deal node
+- `questionsLeft`: the questions the devil will still hear this run, at any deal node (`MAX_DEVIL_QUERIES = 10`, exported from `gameState.ts`, minus `state.totalAsks`)
 
 It leaves out the dice state, enemy power, past acts and the raw pending request. `Game.observe()`, `Game.map()` and `Game.view()` delegate to it.
 
@@ -74,6 +75,8 @@ The devil is outside the engine; it may be a network call.
 1. `step(s, {"cmd":"deal","text":"..."})` returns `awaiting: { devil: request }` and records the request in `state.pending`. The request has the exact body shape `HttpDevil` POSTs (docs/devil-api.md): `{ state, context, playerText }`.
 2. Send the request to any devil and wait.
 3. `step(s, {"cmd":"devil_reply","deal": answer})` runs `sanitizeDeal` on the answer, puts the offer on the table and emits `deal_offered`. Junk, `null` and missing answers become the devil's silence. Any other command (except `look`) is rejected with "the devil is still speaking" until the reply arrives.
+
+**Run-wide query cap.** Every `deal` that reaches the devil (first asks and haggles, at any node) counts toward `MAX_DEVIL_QUERIES` (10), tracked by the existing `state.totalAsks` (no new state field). When it is spent, `deal` drops out of `actions` and is rejected with "The devil has heard enough from you this run."; an offer already on the table can still be accepted or refused. The separate per-node limit (`MAX_ASKS = 3`) still applies. The devil is told in `context.questionsLeft` (questions left after this one).
 
 `Game.deal(text)` does all three steps, catching devil errors exactly as before. In the REPL, `--manual-devil` stops after step 1 so you can type the reply yourself.
 

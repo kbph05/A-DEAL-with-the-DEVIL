@@ -6,7 +6,7 @@ import type { Kind, MapNode, RewriteChange } from "../map";
 import { legalActions } from "./actions";
 import type { Curse, Deal } from "./devil";
 import type { EnemyView, Ending, Exit } from "./events";
-import { MAX_ASKS, currentAct, currentNode, enemyView, exitsOf, type Command, type GameState } from "./gameState";
+import { MAX_ASKS, currentAct, currentNode, enemyView, exitsOf, questionsLeft, type Command, type GameState } from "./gameState";
 import { snapshot, type PlayerState } from "./state";
 
 export interface MapViewNode { id: string; kind: Kind; visited: boolean; current: boolean; rewritten: boolean; next: string[] }
@@ -21,6 +21,8 @@ export interface Observation {
   curses: Curse[];
   /** How many more times `deal` may be asked here (0 unless on an undecided deal node). */
   asksLeft: number;
+  /** How many more questions (asks and haggles) the devil will hear this run, at any deal node (MAX_DEVIL_QUERIES minus asks so far). */
+  questionsLeft: number;
 }
 
 /** Everything the player may see in one object: the observation, the current act's map, and the legal commands. */
@@ -34,6 +36,7 @@ export function observation(s: GameState): Observation {
     pending: s.pending !== null, dealsDecided: s.dealsDecided, ending: s.ending,
     curses: s.curses.map((c) => ({ ...c, effect: { ...c.effect } })),
     asksLeft: kind === "deal" && !s.resolved && !s.ending ? Math.max(0, MAX_ASKS - s.asks) : 0,
+    questionsLeft: questionsLeft(s),
   };
 }
 

@@ -8,7 +8,7 @@ import { fmtDeltas } from "../game/events";
 import { chip, h } from "./dom";
 import { mountDag } from "./dag";
 import {
-  chooseCards, curseText, dagModel, DEVIL_END_TEXT, devilPhase, effectChips, fightLabel, haggleText, lockReason, PANEL_TITLE, panelKinds, shopItems,
+  chooseCards, curseText, dagModel, DEVIL_END_TEXT, devilPhase, effectChips, fightLabel, askBlockReason, haggleText, lockReason, questionsText, PANEL_TITLE, panelKinds, shopItems,
   type Actions, type ChooseCard, type DealEnd, type FireChoice, type PanelKind, type ShopItem,
 } from "./logic";
 
@@ -56,9 +56,15 @@ export function mountChoices(el: HTMLElement, send: (c: Command) => void): Choic
       card.append(h("div", { class: "row" }, btn("Accept", { cmd: "accept" }, A.locked, "choice primary accept"), btn("Refuse", { cmd: "refuse" }, A.locked, "choice primary refuse")));
       kids.push(card);
     }
-    if (A.ask) kids.push(h("div", { class: "ask" }, wishLabel, h("div", { class: "row" }, wish,
-      btn(A.ask.again ? "Haggle" : "Ask the devil", () => ({ cmd: "deal", text: wish.value }), A.locked || !A.ask.enabled, "choice devil-ask")),
-      h("p", { class: "haggles", text: haggleText(o.asksLeft, A.offer !== null) })));
+    if (A.ask) {
+      const block = askBlockReason(o);
+      const ask = btn(A.ask.again ? "Haggle" : "Ask the devil", () => ({ cmd: "deal", text: wish.value }), A.locked || !A.ask.enabled || block !== null, "choice devil-ask");
+      if (block !== null) ask.title = block;
+      kids.push(h("div", { class: "ask" }, wishLabel, h("div", { class: "row" }, wish, ask),
+        h("p", { class: "haggles", text: haggleText(Math.min(o.asksLeft, o.questionsLeft), A.offer !== null) }),
+        h("p", { class: "haggles questions", text: questionsText(o.questionsLeft) }),
+        ...(block !== null ? [h("p", { class: "callout ev-reject", text: block })] : [])));
+    }
     return panel("devil", ...kids);
   }
 

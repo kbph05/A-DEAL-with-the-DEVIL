@@ -15,7 +15,7 @@ import { sanitizeDeal } from "./deal";
 import type { Curse } from "./devil";
 import type { Deltas, GameEvent } from "./events";
 import {
-  BOSSES, FOES, MAX_ASKS, MAX_CURSES, TRAIN_ATTACK, WARES, currentAct, currentNode, devilContext, enemyView, exitsOf,
+  BOSSES, FOES, MAX_ASKS, MAX_CURSES, MAX_DEVIL_QUERIES, TRAIN_ATTACK, WARES, currentAct, currentNode, devilContext, enemyView, exitsOf,
   type Command, type Enemy, type GameState, type StepResult,
 } from "./gameState";
 import { STAT_RANGE, addGold, applyEffects, heal, hurt, note, settle, snapshot, spend } from "./state";
@@ -59,6 +59,7 @@ export function rejection(s: GameState, cmd: Command): string | null {
       if (currentNode(s).kind !== "deal") return "the devil does not sit here";
       if (s.resolved) return "the devil has already gone";
       if (s.enemy) return "not while something is trying to kill you";
+      if (s.totalAsks >= MAX_DEVIL_QUERIES) return "The devil has heard enough from you this run.";
       return s.asks >= MAX_ASKS ? "he is done haggling: accept() or refuse()" : null;
     }
     case "accept": case "refuse": return over ?? (s.offer ? null : "no offer on the table; deal()");

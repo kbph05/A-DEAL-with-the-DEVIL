@@ -3,7 +3,7 @@ import type { MapView, Observation } from "../game";
 import assert from "node:assert/strict";
 import { createGame, describe } from "../game";
 import type { Command, GameEvent } from "../game";
-import { availableActions, blurbOf, chooseCards, fireChoice, type FireChoice, dealEnd, devilPhase, haggleText, panelKinds, shopItems, buyLabel, curseText, effectChips, eventClass, afterKinds, dagModel, exitNumber, fightLabel, lockReason, moveLock, nodeState, nodeTitle, outcomeEvents, pct, STAIRS_ID, topId } from "./logic";
+import { availableActions, blurbOf, chooseCards, fireChoice, type FireChoice, dealEnd, devilPhase, askBlockReason, haggleText, questionsText, panelKinds, shopItems, buyLabel, curseText, effectChips, eventClass, afterKinds, dagModel, exitNumber, fightLabel, lockReason, moveLock, nodeState, nodeTitle, outcomeEvents, pct, STAIRS_ID, topId } from "./logic";
 import { diffDeal } from "./dealDiff";
 import { sanitizeDeal } from "../game/deal";
 
@@ -286,6 +286,14 @@ test("devil phase and how a deal ended come from the engine flags plus the log",
   assert.equal(haggleText(2, true), "Haggles left: 2");
   assert.match(haggleText(0, true), /Haggles left: 0/);
   assert.match(haggleText(3, false), /3 times/);
+  assert.equal(questionsText(7), "Questions left this run: 7");
+});
+
+test("askBlockReason: the run-wide limit outranks the per-node haggle limit; null while asking works", () => {
+  assert.equal(askBlockReason({ questionsLeft: 4, asksLeft: 2 }), null);
+  assert.match(askBlockReason({ questionsLeft: 4, asksLeft: 0 })!, /done haggling/);
+  assert.equal(askBlockReason({ questionsLeft: 0, asksLeft: 2 }), "The devil has heard enough from you this run.");
+  assert.equal(askBlockReason({ questionsLeft: 0, asksLeft: 0 }), "The devil has heard enough from you this run.");
 });
 
 test("shop lists price tags at the village only; the well's blessing is a single-use choice", () => {

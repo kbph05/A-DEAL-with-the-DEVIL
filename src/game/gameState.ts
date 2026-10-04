@@ -10,6 +10,15 @@ import { newPlayer, normalize, type PlayerState } from "./state";
 
 export const MAX_CURSES = 5;
 export const MAX_ASKS = 3;
+/**
+ * Run-wide cap on questions to the devil: every `deal` command that reaches him counts (first asks and haggles alike,
+ * across all deal nodes), whatever he answers. Once `state.totalAsks` reaches it, `deal` is no longer a legal action and
+ * is rejected ("The devil has heard enough from you this run."); an offer already on the table can still be accepted or
+ * refused. Exposed as `questionsLeft` (Observation, View and DevilContext).
+ */
+export const MAX_DEVIL_QUERIES = 10;
+/** Questions the player may still put to the devil this run. */
+export const questionsLeft = (s: Pick<GameState, "totalAsks">): number => Math.max(0, MAX_DEVIL_QUERIES - s.totalAsks);
 /** Attack gained by training at a campfire (the alternative to resting there). */
 export const TRAIN_ATTACK = 1;
 export const WARES = { heal: { cost: 10 }, blade: { cost: 15 }, blessing: { cost: 8 } } as const;
@@ -48,7 +57,7 @@ export interface GameState {
   offer: Deal | null;
   /** Asks at the current deal node (max MAX_ASKS). */
   asks: number;
-  /** Asks this run (the devil's `askIndex`). */
+  /** Asks this run (the devil's `askIndex`; capped at MAX_DEVIL_QUERIES). */
   totalAsks: number;
   dealsDecided: number;
   ending: Ending | null;
@@ -103,7 +112,7 @@ export function devilContext(s: GameState): DevilContext {
     stack.push(...(a.nodes.find((n) => n.id === id)?.next ?? []));
   }
   const rewritable = a.nodes.filter((n) => seen.has(n.id) && n.id !== a.exit && !a.visited.includes(n.id)).map((n) => ({ id: n.id, kind: n.kind }));
-  return { seed: s.seed, act: a.index, nodeId: s.player.nodeId, askIndex: s.totalAsks, rewritable, curses: s.curses.map((c) => ({ ...c })) };
+  return { seed: s.seed, act: a.index, nodeId: s.player.nodeId, askIndex: s.totalAsks, questionsLeft: questionsLeft(s), rewritable, curses: s.curses.map((c) => ({ ...c })) };
 }
 
 /** Is `state` a valid-looking GameState? (Shallow check for restoring saved runs.) */
