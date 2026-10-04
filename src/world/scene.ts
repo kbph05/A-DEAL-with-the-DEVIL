@@ -5,6 +5,7 @@
  * top-left, and an actor's (x, y) is its feet.
  */
 import type { Vec } from "../input/dir";
+import { NPC_KINDS, isNpcKind, type NpcKind } from "./npc";
 
 export interface Rect { x: number; y: number; w: number; h: number }
 
@@ -30,6 +31,18 @@ export interface SceneActor {
   /** Texture key or image URL. Missing or not loadable: a labelled placeholder box. */
   texture?: string;
   label?: string;
+  /**
+   * A vendor: "healer" or "smith". It gets a small generated figure (npc.ts), or assets/npc/<kind>.png if the designer
+   * adds one (docs/world.md). It idles with a one-pixel bob.
+   */
+  npc?: NpcKind;
+  /**
+   * For an npc standing behind a counter: the world y of the counter's top edge. The figure is hidden below it, so it
+   * reads as standing behind the counter (`y` is where the feet would be, a little below it).
+   */
+  counterY?: number;
+  /** For an npc: the id of the zone that makes it hop when the player enters (its shop). */
+  zone?: string;
 }
 
 /** One scene, JSON-friendly. `background` and `overlay` are a texture key or an image URL. */
@@ -74,7 +87,8 @@ function rectErrors(v: unknown, what: string): string[] {
 /**
  * Everything wrong with a scene definition, as readable messages (empty: it's valid). Checks: finite numbers,
  * a positive size, bounds inside the size, spawn inside the bounds, zones and actors well-formed with unique ids,
- * zones touching the bounds (else unreachable), actors inside the size, enemy spawns inside the bounds.
+ * zones touching the bounds (else unreachable), actors inside the size (an `npc` one of the known vendors, its `counterY`
+ * not below its feet, its `zone` a zone of the scene), enemy spawns inside the bounds.
  */
 export function sceneErrors(raw: unknown): string[] {
   if (!isObj(raw)) return ["the scene is not an object"];
@@ -130,6 +144,16 @@ export function sceneErrors(raw: unknown): string[] {
     if (!fin(a.x) || !fin(a.y)) e.push(`${at} needs finite x and y`);
     else if (sizeOk && !pointIn(a as unknown as Vec, sizeRect)) e.push(`${at} stands outside size`);
     for (const k of ["texture", "label"]) if (a[k] !== undefined && typeof a[k] !== "string") e.push(`${at}.${k} must be a string`);
+    if (a.npc !== undefined && !isNpcKind(a.npc)) e.push(`${at}.npc must be one of ${NPC_KINDS.map((k) => `"${k}"`).join(", ")}`);
+    if (a.counterY !== undefined) {
+      if (!fin(a.counterY)) e.push(`${at}.counterY must be a finite number`);
+      else if (fin(a.y) && a.counterY > a.y) e.push(`${at}.counterY (${a.counterY}) must not lie below the feet (y ${a.y})`);
+    }
+    if (a.zone !== undefined) {
+      if (!str(a.zone)) e.push(`${at}.zone must be a zone id`);
+      else if (Array.isArray(raw.zones) && !raw.zones.some((z) => isObj(z) && z.id === a.zone)) e.push(`${at}.zone "${a.zone}" is not a zone of this scene`);
+    }
+    if ((a.counterY !== undefined || a.zone !== undefined) && a.npc === undefined) e.push(`${at}: counterY and zone are for npc actors`);
   });
   return e;
 }

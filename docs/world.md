@@ -47,7 +47,7 @@ A scene is plain JSON data (`SceneDef` in `src/world/scene.ts`). The example bel
 | `bounds` | The playable rectangle. It must lie inside `size`. |
 | `spawn` | Where the feet start. It must lie inside `bounds`. |
 | `zones` | Optional. `id`, a rectangle, `kind` (`"exit"`, `"trigger"` or `"shop"`, default trigger), an optional `label`, `node`, a free-form link to an act-map node for later, and `item`, the engine item id a shop sells (`"heal"`, `"blade"`, `"blessing"`; required when `kind` is `"shop"`). |
-| `actors` | Optional. `id`, the feet position, an optional `texture` (key or URL) and `label`. With placeholder art the label is drawn as a small sign above the actor. |
+| `actors` | Optional. `id`, the feet position, an optional `texture` (key or URL) and `label`. With placeholder art the label is drawn as a small sign above the actor. A vendor adds `npc` (`"healer"` or `"smith"`), and optionally `counterY` and `zone` (see "Vendors"). |
 | `spawns` | Optional, for fight scenes. Feet positions `{ x, y }` inside `bounds` where enemies may stand. The forest fight places its encounter on them, nearest the spawn first (docs/fight.md, "Forest mode"). Other scenes ignore them; the lab's outlines draw them as pink rings. |
 
 **Validation.** `sceneErrors(raw)` returns every problem as a readable message. `parseSceneDef(raw)` returns the scene or throws one `Error` listing them all. It checks:
@@ -58,6 +58,7 @@ A scene is plain JSON data (`SceneDef` in `src/world/scene.ts`). The example bel
 - a shop zone has an `item`;
 - a zone touches `bounds` (otherwise it can never be entered);
 - actors stand inside `size` (they may be outside `bounds`: shopfronts on the edge);
+- an actor's `npc` is `"healer"` or `"smith"`; its `counterY` is a number not below its feet; its `zone` names a zone of the scene; `counterY` and `zone` need an `npc`;
 - enemy `spawns` lie inside `bounds`.
 
 **The samples** are in `src/world/scenes/`: `village.json` (768×512, the designer's 384×256 `assets/village.png` at exactly 2×, the default: the first entry of `SCENES`; see "The village and shop zones" below), and `forest.json` (1280×560, wider than the view, so the camera scrolls and clamps: the forest path the fights play on, drawn on the designer's band (see "Art"), with its bounds on the band's dirt path, six enemy `spawns` and an exit at the far end; the world lab can walk it too). There are only these two scenes. To add one, drop a JSON file there and list it in `scenes/index.ts`. The lab can also load any SceneDef JSON by URL (see below).
@@ -68,7 +69,7 @@ kbph (4 Oct): the village scene, the one the game starts with, contains the shop
 
 `src/world/scenes/village.json`:
 
-- **The art is the designer's** (Big Chungus, `assets/village.png`, 384×256, imported through Vite in `bandArt.ts` like `forest.png`; the scene is sized 768×512 so it lays as one copy at exactly 2×, nearest-neighbour). It replaces the generated placeholder background, overlay and stalls: the def has no `overlay` and no `actors`, because the shopfronts are in the picture. The picture, left to right along the top: a plain house, the shop (a coin and a shelf in its window), a fenced pen, and the healer (a red cross), then a path, grass and a stream along the bottom.
+- **The art is the designer's** (Big Chungus, `assets/village.png`, 384×256, imported through Vite in `bandArt.ts` like `forest.png`; the scene is sized 768×512 so it lays as one copy at exactly 2×, nearest-neighbour). It replaces the generated placeholder background, overlay and stalls: the def has no `overlay` and no stalls, because the shopfronts are in the picture; its only actors are the two vendors standing in the shop windows (see "Vendors"). The picture, left to right along the top: a plain house, the shop (a coin and a shelf in its window), a fenced pen, and the healer (a red cross), then a path, grass and a stream along the bottom.
 - **Shops stay on the edge, outside the walkable area** (kbph, 4 Oct). `bounds` is the grass and path strip under the buildings (y = 180, below their front edge at 176; it stops above the stream). The buildings are above it, so they can't be walked into or through.
 - In front of each shop, inside `bounds` and touching its top edge, a zone `{ "kind": "shop", "item": "blade" | "heal", "label": ... }`: `shop-blade` ("Smith", under the shop) and `shop-heal` ("Healer", under the cross). The picture's "shop" is the Smith. There is **no Shrine** here: the art has none, and blessings are sold at wells (see the well panel in docs/play.md).
 - An exit zone `leave` ("Leave the village") on the east edge, the spawn in the middle (384, 240).
@@ -117,6 +118,20 @@ mountScene(stage, {
 
 Call `render()` after every engine command (moves, fights, deals), not only buys, so the prompt's enabled state and the HUD stay current. Don't pre-check gold yourself: `shopPrompt` reads the engine's own legal actions.
 
+## Vendors
+
+kbph (4 Oct): "put vendors at the stores so they're not empty". The village has two vendor NPCs, actors in `village.json` with an `npc`:
+
+```json
+{ "id": "smith",  "npc": "smith",  "x": 301, "y": 150, "counterY": 142, "zone": "shop-blade" },
+{ "id": "healer", "npc": "healer", "x": 630, "y": 156, "counterY": 148, "zone": "shop-heal" }
+```
+
+- **The figures** are generated (`src/world/npc.ts`, `npcRects`; drawn by `npcPlaceholder` in `scenePlaceholders.ts`), 16×24 source pixels in the same style as the other generated art: the Healer in a cream hood and robe with a red cross on the chest; the Smith with a dark shirt, a brown leather apron and a hammer. They are drawn at `NPC_SCALE` = 2 (one source pixel is 2 world pixels, like the background; TODO: switch to the global `PIXEL_SCALE` once it lands).
+- **Behind the counter.** `x, y` is where the feet would be; `counterY` is the world y of the counter's top edge in the picture (the light ledge under each window: 142 for the Smith, 148 for the Healer). The figure is cropped there, so the ledge covers it from the waist down. Their feet are above `bounds`, so the y-sort (`10 + feet y`) always puts the player in front, and they can't be walked into.
+- **Idle and hop.** Each vendor bobs up one source pixel (2 px) for 0.8 s every 2.4 s, the two out of step. When the player's feet enter the vendor's `zone` it hops a few pixels. Both stand still under `prefers-reduced-motion: reduce`. `npcOffset` in `npc.ts` is the pure timing.
+- **Art override.** If `assets/npc/healer.png` or `assets/npc/smith.png` exists, it is used instead of the generated figure (precedence: a private `scenes/village/actors/<id>` file, the actor's `texture`, then `assets/npc/<npc>.png`, then the generated figure). Vite bundles them with `import.meta.glob` (`npcArt.ts`), so a missing file is fine and needs no setting. Draw it at any size, standing, feet at the bottom centre; it is drawn at `NPC_SCALE` and cropped at `counterY` like the generated one. Restart the dev server after adding a file. The lab's `window.__world.debug.art.actors` says `"bundled"` for an override.
+
 ## Files
 
 | File | What it is |
@@ -126,6 +141,7 @@ Call `render()` after every engine command (moves, fights, deals), not only buys
 | `scenes/` | The sample scenes (JSON) and `SCENES` / `sceneById`. The first, the village, is the default. |
 | `shopZone.ts` | `shopPrompt(zone, view)`: what a shop zone's prompt shows and whether Buy is enabled, from the engine's legal actions; `exitPrompt(zone)`. Pure. |
 | `WorldScene.ts` | The Phaser scene: background, y-sorted actors and player, overlay, Arcade physics, cameras, keyboard and touch. |
+| `npc.ts`, `npcArt.ts` | The vendors: kinds, generated art as rects, counter crop and idle/hop timing (pure, tested in `npc.test.ts`); and the bundled `assets/npc/*.png` override (Vite-only). |
 | `scenePlaceholders.ts` | Placeholder background, overlay and actor art, in the generated pixel-art style. The tile grid and canopy layout are pure. |
 | `logic.ts` | Walking speed and smoothing (`stepVelocity`), 4-way facing (`facingOf`), the screen layout (`worldLayout`). Pure. |
 | `textures.ts` | The generated pixel art: the 16×16 tileset and the hero sheet. |

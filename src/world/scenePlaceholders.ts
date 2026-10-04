@@ -5,6 +5,7 @@
  *   walls and water; exits are dirt, triggers stone floor. Big trees get their trunks here.
  * - the overlay: transparent except tree canopies (a row along the bottom edge and the big trees), drawn above
  *   actors, so the player walks under them.
+ * - vendors (actors with `npc`): a 16×24 figure, a hooded healer or an aproned smith (npc.ts);
  * - actors: a 16×24 pixel figure, coloured by id; or, by id prefix, a market stall ("stall-…", 40×36) or a
  *   cottage ("house-…", 64×56).
  * The tile grid and canopy layout are pure (tested); only the drawing needs a canvas. Real art in
@@ -14,6 +15,7 @@ import type Phaser from "phaser";
 import { hashSeed, mulberry32 } from "../map/rng";
 import { generateWorld } from "./gen";
 import { pointIn, type SceneDef } from "./scene";
+import { NPC_SIZE, npcRects, type NpcKind } from "./npc";
 import { PLACEHOLDER_TILES, ensurePlaceholderTextures } from "./textures";
 import { T, TILE_SIZE, isBlockingId, tileAt } from "./tiles";
 
@@ -237,5 +239,13 @@ export function actorPlaceholder(scene: Phaser.Scene, key: string, id: string): 
   p(11, 3, 1, 5, "#2a1d14");
   p(6, 5, 1, 1, "#1a1010"); // eyes
   p(9, 5, 1, 1, "#1a1010");
+  tex.refresh();
+}
+
+/** A vendor's generated figure (npc.ts: 16×24, no shadow: it stands behind a counter), under `key` (made once). */
+export function npcPlaceholder(scene: Phaser.Scene, key: string, kind: NpcKind): void {
+  if (scene.textures.exists(key)) return;
+  const { tex, ctx } = canvasTexture(scene, key, NPC_SIZE.w, NPC_SIZE.h);
+  for (const r of npcRects(kind)) { ctx.fillStyle = r.c; ctx.fillRect(r.x, r.y, r.w, r.h); }
   tex.refresh();
 }

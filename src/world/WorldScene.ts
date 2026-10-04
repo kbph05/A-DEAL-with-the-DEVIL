@@ -8,7 +8,9 @@ import {
   type Rect, type SceneActor, type SceneDef, type SceneZone,
 } from "./scene";
 import { addBand, bundledKey, preloadBand } from "./bandArt";
-import { actorPlaceholder, backgroundPlaceholder, overlayPlaceholder } from "./scenePlaceholders";
+import { actorPlaceholder, backgroundPlaceholder, npcPlaceholder, overlayPlaceholder } from "./scenePlaceholders";
+import { NPC_SCALE, counterRows, npcOffset } from "./npc";
+import { npcArtKey, npcArtUrl } from "./npcArt";
 import { HERO_COLS, HERO_ROWS, HERO_SIZE, PLACEHOLDER_HERO, ensurePlaceholderTextures } from "./textures";
 import { buildCharacter, preloadCharacters, type CharacterArt } from "../render/spriteArt";
 import { fitScale, roleArt } from "../render/sprites";
@@ -71,7 +73,9 @@ export class WorldScene extends Phaser.Scene {
   private cfg: WorldSceneConfig;
   private def: SceneDef;
   private player!: Phaser.Types.Physics.Arcade.SpriteWithDynamicBody;
-  private actors: { def: SceneActor; sprite: Phaser.GameObjects.Image }[] = [];
+  private actors: { def: SceneActor; sprite: Phaser.GameObjects.Image; hopAt: number | null }[] = [];
+  /** prefers-reduced-motion: vendors hold still (no bob, no hop). */
+  private reducedMotion = typeof window !== "undefined" && typeof window.matchMedia === "function" ? window.matchMedia("(prefers-reduced-motion: reduce)") : null;
   private keys!: Record<KeyName, Phaser.Input.Keyboard.Key>;
   private stick: FloatingStick;
   private touchUI: boolean;
@@ -123,6 +127,11 @@ export class WorldScene extends Phaser.Scene {
     if (have.has(P.idle.file) && have.has(P.walk.file)) {
       this.load.spritesheet(KEY.idle, privateUrl(P.idle.file), { frameWidth: P.frameWidth, frameHeight: P.frameHeight });
       this.load.spritesheet(KEY.walk, privateUrl(P.walk.file), { frameWidth: P.frameWidth, frameHeight: P.frameHeight });
+    }
+    // Vendors with bundled override art (assets/npc/<kind>.png, npcArt.ts).
+    for (const a of this.def.actors ?? []) {
+      const url = a.npc ? npcArtUrl(a.npc) : undefined;
+      if (a.npc && url) this.load.image(npcArtKey(a.npc), url);
     }
     for (const [name, value] of this.parts()) {
       const src = artSource(files, this.def.id, name, value, privateUrl);
@@ -182,10 +191,16 @@ export class WorldScene extends Phaser.Scene {
 
     // Actors: feet at (x, y), origin bottom centre; y-sorted every frame.
     for (const a of def.actors ?? []) {
-      const r = this.resolve(`actors/${a.id}`, a.texture, `scene-ph:actor:${a.id}`, (k) => actorPlaceholder(this, k, a.id));
+      const npc = a.npc;
+      const r = this.resolve(`actors/${a.id}`, a.texture, npc ? `scene-ph:npc:${npc}` : `scene-ph:actor:${a.id}`,
+        (k) => (npc ? npcPlaceholder(this, k, npc) : actorPlaceholder(this, k, a.id)));
+      // A vendor: a private file or the def's texture first, then assets/npc/<kind>.png, then the generated figure.
+      if (npc && r.art === "placeholder" && this.loaded(npcArtKey(npc))) { r.key = npcArtKey(npc); r.art = "bundled"; }
       art.actors[a.id] = r.art;
       const sprite = this.add.image(a.x, a.y, r.key).setOrigin(0.5, 1);
-      this.actors.push({ def: a, sprite });
+      // A vendor is drawn at NPC_SCALE (one source pixel is that many world pixels), and cut off at the counter.
+      if (npc) sprite.setScale(NPC_SCALE);
+      this.actors.push({ def: a, sprite, hopAt: null });
       world.push(sprite);
       // Placeholder actors carry their label as a small sign above them (real art draws its own).
       if (a.label && r.art === "placeholder") {
@@ -225,6 +240,7 @@ export class WorldScene extends Phaser.Scene {
     }
     this.outlines = this.add.graphics().setDepth(this.debug.depth.overlay + 1).setVisible(this.cfg.outlines === true);
     world.push(this.outlines);
+    this.animateNpcs(0);
     this.sortDepths();
 
     // Cameras: the zoomed world camera follows, clamped to the texture; the UI camera is 1:1 over the canvas.
@@ -348,7 +364,21 @@ export class WorldScene extends Phaser.Scene {
     }
   }
 
-  update(_time: number, delta: number): void {
+  /** Vendors: idle bob and hop (npc.ts), the figure cut off at its counter. Moves the sprite, not its feet (`def.y`). */
+  private animateNpcs(now: number): void {
+    const reduced = this.reducedMotion?.matches === true;
+    this.actors.forEach((a, i) => {
+      if (!a.def.npc) return;
+      const y = a.def.y + npcOffset(now, i * 1100, a.hopAt, reduced);
+      a.sprite.setY(y);
+      if (a.def.counterY !== undefined) {
+        const rows = counterRows(y, a.def.counterY, a.sprite.frame.height, NPC_SCALE);
+        a.sprite.setCrop(0, 0, a.sprite.frame.width, rows);
+      }
+    });
+  }
+
+  update(time: number, delta: number): void {
     const dt = Math.min(delta, 50) / 1000;
     const k = this.keys;
     const typing = isTyping();
@@ -375,7 +405,11 @@ export class WorldScene extends Phaser.Scene {
     const { entered, left } = this.zones.update(feet);
     d.zones = [...this.zones.current];
     for (const z of left) this.cfg.onLeaveZone?.(z, this.def);
-    for (const z of entered) this.cfg.onEnterZone?.(z, this.def);
+    for (const z of entered) {
+      for (const a of this.actors) if (a.def.npc && a.def.zone === z.id) a.hopAt = time;
+      this.cfg.onEnterZone?.(z, this.def);
+    }
+    this.animateNpcs(time);
     d.frames++;
     if (this.cfg.outlines) this.drawOutlines();
     this.drawUI();

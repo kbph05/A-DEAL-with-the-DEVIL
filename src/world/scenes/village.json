@@ -8,5 +8,9 @@
     { "id": "shop-blade", "x": 236, "y": 180, "w": 128, "h": 32, "kind": "shop", "item": "blade", "label": "Smith" },
     { "id": "shop-heal", "x": 548, "y": 180, "w": 120, "h": 32, "kind": "shop", "item": "heal", "label": "Healer" },
     { "id": "leave", "x": 724, "y": 180, "w": 20, "h": 116, "kind": "exit", "label": "Leave the village" }
+  ],
+  "actors": [
+    { "id": "smith", "npc": "smith", "x": 301, "y": 150, "counterY": 142, "zone": "shop-blade" },
+    { "id": "healer", "npc": "healer", "x": 630, "y": 156, "counterY": 148, "zone": "shop-heal" }
   ]
 }

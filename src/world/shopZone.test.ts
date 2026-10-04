@@ -24,7 +24,7 @@ test("village: the Healer and the Smith (the designer's two shopfronts), and an 
 test("village: the shopfronts are drawn in assets/village.png (2x), above the walkable strip; each buy zone is in front of its shop", () => {
   const b = village.bounds;
   assert.deepEqual(village.size, { w: 768, h: 512 }, "the 384x256 picture at exactly 2x");
-  assert.ok(!village.actors || village.actors.length === 0, "no generated stalls drawn over the art");
+  assert.ok((village.actors ?? []).every((x) => x.npc !== undefined), "no generated stalls or houses drawn over the art: only the vendors (npc.test.ts)");
   // Shopfront spans in picture pixels (x ranges, from the image), times 2: the Smith's 112-188 and the Healer's 270-338.
   const front = { Smith: [224, 376], Healer: [540, 676] } as const;
   const BUILDING_FRONT_Y = 176; // the buildings' bottom edge, 88 px x 2
