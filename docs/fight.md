@@ -179,7 +179,7 @@ TODO (Big Chungus): the bosses' own designs. Speeds and sizes are fight units (t
 
 `encounterFor(request)` (`encounters.ts`) is pure and seeded by `request.seed` (its own hash namespace, so it doesn't shift the fight's dice).
 
-**Progress** is how far up the run the fight is: `(act - 1 + layer / layers) / acts`, from the request's optional `where` (`{ act, acts, layer, layers, kind }`, act 1-based, layer 0-based; the engine is adding it to `FightRequest`). Layer 0 is the bottom of the act's map. Later acts start harder because they start higher: the bottom of act 2 is 0.33. Without `where` (an older engine) the act comes from the enemy's power, at the middle of the act (a boss: at the top).
+**Progress** is how far up the run the fight is: `(act + layer / layers) / acts`, from the request's `where` (`FightRequest.where`, `{ act, acts, layer, layers, kind }`; act and layer are 0-based, as the engine sends them). Layer 0 is the bottom of the act's map, `layers - 1` its boss. Later acts start harder because they start higher: the bottom of act 2 is 0.33. Without `where` (an older engine) the act comes from the enemy's power, at the middle of the act (a boss: at the top).
 
 **Count and mix** come from the band the progress falls in (`ENCOUNTER_BANDS`, tunable):
 

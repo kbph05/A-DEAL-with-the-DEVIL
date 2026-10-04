@@ -77,7 +77,7 @@ function input(fixedSeed?: string): ForestRequest {
     enemy: { name: enemyName(), hp, maxHp: hp, power: n(epow), boss: boss.checked },
     seed: fixedSeed ?? (seed.value || Math.random().toString(36).slice(2, 8)),
   };
-  if (mode.value === "forest") req.where = { act: Number(act.value) + 1, acts: ACTS, layer: Number(layer.value), layers: LAYERS, kind: boss.checked ? "boss" : "fight" };
+  if (mode.value === "forest") req.where = { act: Number(act.value), acts: ACTS, layer: Number(layer.value), layers: LAYERS, kind: boss.checked ? "boss" : "fight" };
   return req;
 }
 

@@ -16,7 +16,7 @@ function req(act: number, layer: number, seed: string, boss = false): ForestRequ
   return {
     player: { hp: 30 + 3 * a, maxHp: 30 + 3 * a, attack: 3 + a },
     enemy: { name: boss ? "the Gatekeeper" : "cave rat", hp, maxHp: hp, power: (boss ? 3 : 2) + a, boss },
-    seed, where: { act, acts: 3, layer, layers: 7, kind: boss ? "boss" : "fight" },
+    seed, where: { act: a, acts: 3, layer, layers: 7, kind: boss ? "boss" : "fight" },
   };
 }
 const sim = (r: ForestRequest) => new FightSim(r, forestWorld(forest, encounterFor(r)));

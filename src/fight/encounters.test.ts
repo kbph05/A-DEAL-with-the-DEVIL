@@ -14,7 +14,7 @@ function req(act: number, layer: number, opts: { seed?: string; boss?: boolean; 
     player: { hp: 30, maxHp: 30, attack: 3 },
     enemy: { name: boss ? "the Gatekeeper" : "cave rat", hp, maxHp: opts.maxHp ?? hp, power: (boss ? 3 : 2) + a, boss },
     seed: opts.seed ?? "s",
-    where: { act, acts: 3, layer, layers: opts.layers ?? 7, kind: boss ? "boss" : "fight" },
+    where: { act: act - 1, acts: 3, layer, layers: opts.layers ?? 7, kind: boss ? "boss" : "fight" }, // the engine's act is 0-based
   };
 }
 /** The request at a progress `p` (0..1), via act and a fine layer grid. */
@@ -25,7 +25,7 @@ function at(p: number, seed: string, hp = 40): ForestRequest {
 }
 const nonSlime = (ids: EnemyId[]) => ids.filter((id) => id !== "slime").length / ids.length;
 
-test("progress is (act - 1 + layer / layers) / acts, clamped; without `where` it comes from the enemy's power", () => {
+test("progress is (act + layer / layers) / acts (0-based act, as the engine sends it), clamped; without `where` it comes from the enemy's power", () => {
   assert.equal(progressOf(req(1, 0)), 0);
   assert.ok(Math.abs(progressOf(req(2, 0)) - 1 / 3) < 1e-12, "act 2 starts a third of the way up");
   assert.ok(Math.abs(progressOf(req(3, 6)) - (2 + 6 / 7) / 3) < 1e-12);

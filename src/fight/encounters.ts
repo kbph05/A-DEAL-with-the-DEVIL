@@ -2,7 +2,8 @@
  * Encounters (kbph, Big Chungus): who you meet on a forest path, and how hard they are. Pure and seeded:
  * `encounterFor(request)` turns the engine's fight request into a group of roster enemies (enemies.ts).
  *
- * - **Progress** is how far up the run the fight is: `(act - 1 + layer / layers) / acts`, 0 at the bottom of act 1,
+ * - **Progress** is how far up the run the fight is: `(act + layer / layers) / acts` from the request's `where` (the
+ *   engine's act is 0-based), 0 at the bottom of act 1,
  *   near 1 at the top of the last act. Later acts start harder because they start higher.
  * - **Count and composition** come from the band the progress falls in (`ENCOUNTER_BANDS`): 1 to 2 slimes at the
  *   bottom, demons mixed in through the middle, 3 to 5 with archers near the top. The seed picks within the band.
@@ -16,14 +17,15 @@
  */
 import { hashSeed, mulberry32 } from "../map/rng";
 import { ENEMIES, baseParams, enemyPower, enemyTier, type EnemyId, type EnemyParams } from "./enemies";
+import type { FightRequest } from "../game/fightResult";
 import { sanitizeInput, type FightInput } from "./logic";
 
 /**
- * Where the fight is on the run's map. The engine adds this to `FightRequest` as an optional `where` (act 1-based,
- * `acts` in the run, the node's `layer` 0-based of `layers` in that act, the node `kind`). Declared here too so the
- * fight compiles against an engine that doesn't send it yet.
+ * Where the fight is on the run's map: the engine's optional `FightRequest.where` (src/game/fightResult.ts): `act`
+ * of `acts` (0-based), the node's `layer` of the act's `layers` (0 = the entry, `layers - 1` = the boss), the node
+ * `kind`. Optional: older saved requests lack it.
  */
-export interface FightWhere { act: number; acts: number; layer: number; layers: number; kind: string }
+export type FightWhere = NonNullable<FightRequest["where"]>;
 /** The fight request (`FightRequest` from src/game/fightResult.ts), with the optional `where`. */
 export type ForestRequest = FightInput & { where?: FightWhere };
 
@@ -64,11 +66,11 @@ export const FALLBACK = { acts: 3, regularLayer: 0.5, bossLayer: 6 / 7 } as cons
 
 const clamp01 = (v: number): number => (Number.isFinite(v) ? Math.min(1, Math.max(0, v)) : 0);
 
-/** Progress 0..1 up the run: `(act - 1 + layer / layers) / acts`. */
+/** Progress 0..1 up the run: `(act + layer / layers) / acts`, with the engine's 0-based act. */
 export function progressOf(req: ForestRequest): number {
   const w = req.where;
   if (w && [w.act, w.acts, w.layer, w.layers].every((n) => typeof n === "number" && Number.isFinite(n)) && w.acts > 0) {
-    return clamp01((w.act - 1 + clamp01(w.layers > 0 ? w.layer / w.layers : 0)) / w.acts);
+    return clamp01((w.act + clamp01(w.layers > 0 ? w.layer / w.layers : 0)) / w.acts);
   }
   const boss = req.enemy?.boss === true;
   const act = enemyTier(Number(req.enemy?.power) || 0, boss) + 1;
@@ -78,7 +80,7 @@ export function progressOf(req: ForestRequest): number {
 /** The act (1-based) and the run's act count, from `where` or the fallback. */
 function actOf(req: ForestRequest): { act: number; acts: number } {
   const w = req.where;
-  if (w && Number.isFinite(w.act) && Number.isFinite(w.acts) && w.acts > 0) return { act: Math.round(w.act), acts: Math.round(w.acts) };
+  if (w && Number.isFinite(w.act) && Number.isFinite(w.acts) && w.acts > 0) return { act: Math.round(w.act) + 1, acts: Math.round(w.acts) };
   return { act: enemyTier(Number(req.enemy?.power) || 0, req.enemy?.boss === true) + 1, acts: FALLBACK.acts };
 }
 
