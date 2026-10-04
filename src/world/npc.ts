@@ -6,6 +6,8 @@
  * Art override: assets/npc/<kind>.png, bundled by Vite (npcArt.ts, docs/world.md).
  */
 
+import { PIXEL_SCALE } from "../render/pixelScale";
+
 export const NPC_KINDS = ["healer", "smith"] as const;
 export type NpcKind = (typeof NPC_KINDS)[number];
 export const isNpcKind = (v: unknown): v is NpcKind => typeof v === "string" && (NPC_KINDS as readonly string[]).includes(v);
@@ -13,10 +15,9 @@ export const isNpcKind = (v: unknown): v is NpcKind => typeof v === "string" && 
 /** The generated figure's size, source pixels. */
 export const NPC_SIZE = { w: 16, h: 24 };
 /**
- * World pixels per source pixel for sprites and backgrounds: the village background is drawn at exactly 2×.
- * TODO: switch to the global PIXEL_SCALE when it lands (another agent is adding it to src/world and src/render).
+ * World pixels per source pixel for the vendors: the global PIXEL_SCALE (src/render/pixelScale.ts), the backgrounds' scale.
  */
-export const NPC_SCALE = 2;
+export const NPC_SCALE = PIXEL_SCALE;
 
 export interface NpcRect { x: number; y: number; w: number; h: number; c: string }
 
