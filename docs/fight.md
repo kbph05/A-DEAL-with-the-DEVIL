@@ -220,6 +220,7 @@ Measured with a bot that walks at the nearest enemy swinging and never dodges (2
 ### On the path
 
 - **The scene** is `src/world/scenes/forest.json` (1280×560): a dirt path through grass, bounds that keep you on or near it (112 px tall), canopy rows over both edges, an exit zone at the far end, and six `spawns` along the path (docs/world.md).
+- **Archers keep to the path band** (`pathBand` in `forest.ts`): the bounds less the 18 px strips under the canopy rows, and 12 px more at the top for an archer's head. They spawn in it, and backing off from you stops at its edge (`SimWorld.band`), so they never stand in the tree line. Everyone else, you included, uses the full bounds.
 - **Units:** the scene is in world pixels, the sim in fight units, at 3 units per pixel (`UNITS_PER_PX`). That makes the sim's player about the size and pace of the world's hero.
 - **Placement** (`forestWorld`): one or two enemies stand apart, met one at a time. Three or more come as two packs, the first one bigger, each on a spawn point with the members around it, the first pack on the nearest spawn.
 - **Aggro (the choice):** an enemy wakes when the gap between you and it drops below its aggro range: slime 230, demon 260, archer 380, bosses 300 units (about 75 to 125 px). There is no timeout: an enemy you haven't reached waits. When one wakes, the idle ones within 240 units of it wake too (`PACK_RANGE`), so a pack fights together. Hitting an enemy wakes it. Stepping into the exit zone wakes everyone left, so you can't slip past.
