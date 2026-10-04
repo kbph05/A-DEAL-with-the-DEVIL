@@ -62,16 +62,20 @@ export function note(s: PlayerState, text: string): void {
   if (s.log.length > LOG_CAP) s.log.splice(0, s.log.length - LOG_CAP);
 }
 
+/** HP after the soul pays for another life: REVIVE_SHARE of max HP, rounded up, at least 1. */
+export const reviveHp = (maxHp: number): number => Math.max(1, Math.ceil(maxHp * REVIVE_SHARE));
+
 /**
- * HP <= 0 loses, except the soul revives you once (soul -> 0, back to REVIVE_SHARE of max HP). Call after anything that
- * lowers hp. "revived" and "dead" are the only results that change the state.
+ * HP <= 0 loses, except the soul revives you once (soul -> 0, back to REVIVE_SHARE of max HP). The engine no longer calls
+ * this for a death with the soul (it pauses at death's door instead: state-machine.ts `settleHp`); kept for callers
+ * outside the engine. "revived" and "dead" are the only results that change the state.
  */
 export function settle(s: PlayerState): "alive" | "revived" | "dead" {
   normalize(s);
   if (s.hp > 0) return "alive";
   if (s.soul === 1) {
     s.soul = 0;
-    s.hp = Math.max(1, Math.ceil(s.maxHp * REVIVE_SHARE));
+    s.hp = reviveHp(s.maxHp);
     return "revived";
   }
   s.hp = 0;

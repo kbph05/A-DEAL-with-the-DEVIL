@@ -94,9 +94,12 @@ test("engine: a lethal strike goes through the normal death check: soul revives 
   const s0 = onDeal("strike-4");
   s0.player.hp = 4;
   const hit = (s: GameState) => step(step(s, { cmd: "deal" }).state, { cmd: "devil_reply", deal: STRIKE });
-  const r1 = hit(s0);
-  assert.deepEqual(r1.events.map((e) => e.type), ["devil_struck", "revived"]);
-  assert.deepEqual(r1.events[0], { type: "devil_struck", dialogue: "Enough noise.", effects: { hp: -4 } }, "effects show what actually landed");
+  const dying = hit(s0);
+  assert.deepEqual(dying.events.map((e) => e.type), ["devil_struck", "devil_at_death"]);
+  assert.deepEqual(dying.events[0], { type: "devil_struck", dialogue: "Enough noise.", effects: { hp: -4 } }, "effects show what actually landed");
+  assert.equal(dying.awaiting?.devil?.context.kind, "death");
+  const r1 = step(step(dying.state, { cmd: "devil_reply", deal: { dialogue: "Your soul.", effects: { soul: -1, hp: 15 } } }).state, { cmd: "accept" });
+  assert.deepEqual(r1.events.map((e) => e.type), ["deal_applied", "revived"]);
   assert.equal(r1.state.player.soul, 0);
   assert.equal(r1.state.player.hp, 15);
   assert.equal(r1.state.ending, null);

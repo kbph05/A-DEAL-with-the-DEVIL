@@ -12,6 +12,10 @@
  * A realtime fight is the same kind of round trip: `{cmd:"fight", realtime:true}` returns `awaiting: { fight: request }`
  * (recorded in `state.pendingFight`), and the next command must be `{cmd:"fight_result", ...}` with what the client's
  * fight reported (sanitized by fightResult.ts). Plain `{cmd:"fight"}` stays the one-round fight.
+ *
+ * Death's door (4 Oct): HP 0 with the soul still yours no longer revives on its own. `settleHp` sets `state.dying`, and
+ * the command that killed you ends with a pending devil request (`context.kind` "death", his free opener). Then only
+ * `deal` (haggle), `accept` (the soul is sold, another life), `refuse` (the death stands: "lose") and `look` are legal.
  */
 import { generateAct, markVisited, nextRandom, rewriteNode } from "../map";
 import { legalActions } from "./actions";
@@ -20,13 +24,14 @@ import type { Curse, Deal } from "./devil";
 import type { Deltas, GameEvent } from "./events";
 import { fightRequest, sanitizeFightResult } from "./fightResult";
 import {
-  BOSSES, FOES, MAX_ASKS, MAX_CURSES, MAX_DEVIL_QUERIES, TRAIN_ATTACK, WARES, currentAct, currentNode, devilAtWell, devilContext, devilDone,
+  BOSSES, DYING, FOES, MAX_ASKS, MAX_CURSES, MAX_DEVIL_QUERIES, TRAIN_ATTACK, WARES, currentAct, currentNode, devilAtWell, devilContext, devilDone,
   devilPresent, enemyView, exitsOf, isOpener, ONE_CHOICE, oneChoice,
   type Command, type Enemy, type GameState, type StepResult,
 } from "./gameState";
 import { BOSS, FOE, FREE_HEAL } from "./difficulty";
 import { BOSS_GOLD, KILL_GOLD } from "./economy";
-import { STAT_RANGE, addGold, applyEffects, heal, hurt, note, settle, snapshot, spend } from "./state";
+import type { DevilRequest } from "./httpDevil";
+import { STAT_RANGE, addGold, applyEffects, heal, hurt, normalize, note, reviveHp, settle, snapshot, spend, type PlayerState } from "./state";
 
 const clone = <T>(x: T): T => structuredClone(x);
 
@@ -39,6 +44,14 @@ export function rejection(s: GameState, cmd: Command): string | null {
   if (s.pendingFight && c.cmd !== "fight_result") return "the fight is still on; send fight_result";
   const over = s.ending ? `the run is over (${s.ending}); start a new game` : null;
   if (c !== cmd) return "unknown command undefined";
+  if (s.dying && !over) switch (cmd.cmd) { // death's door: only the devil's business
+    case "accept": case "refuse": return s.offer ? null : "the devil has not named his price yet";
+    case "deal":
+      if (s.totalAsks >= MAX_DEVIL_QUERIES) return "The devil has heard enough from you this run.";
+      return s.dying.haggles >= MAX_ASKS ? "he is done haggling: accept() or refuse()" : null;
+    case "devil_reply": case "fight_result": break; // the usual answers below
+    default: return DYING;
+  }
   switch (cmd.cmd) {
     case "go": {
       if (over) return over;
@@ -124,6 +137,11 @@ export function step(state: GameState, cmd: Command): StepResult {
     }
     case "buy": buy(d, ev, wareName(cmd.item)); break;
     case "deal":
+      if (d.dying) { // a haggle at death's door: one question, and his price climbs (context.haggle)
+        d.dying.haggles++; d.totalAsks++;
+        d.pending = deathRequest(d, typeof cmd.text === "string" ? cut(cmd.text, MAX_PLAYER_TEXT) : null);
+        break;
+      }
       if (isOpener(d, cmd.text)) { // the opening offer: free, once per node, no text (the devil pitches to the state)
         d.opened = true;
         d.pending = { state: snapshot(d.player), context: { ...devilContext(d), opening: true }, playerText: null };
@@ -135,15 +153,18 @@ export function step(state: GameState, cmd: Command): StepResult {
     case "devil_reply":
       d.pending = null;
       { const deal = sanitizeDeal(cmd.deal);
-        if (deal.forced) strike(d, ev, deal); // a punishment, not an offer: applied now, node stays open
+        if (deal.forced && d.dying) deathStrike(d, ev, deal); // he loses patience and just takes the soul
+        else if (deal.forced) strike(d, ev, deal); // a punishment, not an offer: applied now, node stays open
         else { d.offer = deal; ev.push({ type: "deal_offered", deal }); } }
       break;
-    case "accept": accept(d, ev); break;
+    case "accept": if (d.dying) deathAccept(d, ev); else accept(d, ev); break;
     case "refuse":
+      if (d.dying) { deathRefuse(d, ev); break; }
       decided(d, false);
       ev.push({ type: "deal_refused" });
       break;
   }
+  if (d.dying && !state.dying && !d.ending) d.pending = deathRequest(d, null); // just died with the soul: his opener
   return { ok: true, state: d, events: ev, actions: legalActions(d), ...awaitingOf(d) };
 }
 
@@ -164,20 +185,30 @@ function bounty(d: GameState, e: Enemy): number {
   return g.base[act] + roll(d, g.spread);
 }
 
-/** HP <= 0 loses unless the soul can pay once. */
+/**
+ * HP <= 0: with the soul still yours, the run pauses at death's door (`dying`; the devil's request is made at the end of
+ * the command, see `step`); without it, the run is lost.
+ */
 function settleHp(d: GameState, ev: GameEvent[], cause: string): void {
-  if (d.ending) return;
+  if (d.ending || d.dying) return;
+  normalize(d.player);
+  if (d.player.hp <= 0 && d.player.soul === 1) {
+    d.dying = { cause, haggles: 0, ...(d.offer ? { standing: d.offer } : {}) };
+    d.offer = null;
+    ev.push({ type: "devil_at_death", cause, nodeId: d.player.nodeId });
+    note(d.player, `at death's door: ${cause}`);
+    return;
+  }
   const r = settle(d.player);
   if (r === "revived") { ev.push({ type: "revived", hp: d.player.hp }); note(d.player, "soul spent on a revival"); }
   else if (r === "dead") { d.ending = "lose"; ev.push({ type: "lost", cause }); note(d.player, `died: ${cause}`); }
 }
 
+/** Fire the curses on `trigger`, each removed as it fires; none while dead or dying (the rest wait for the next trigger). */
 function fire(d: GameState, ev: GameEvent[], trigger: Curse["trigger"]): void {
-  const hit = d.curses.filter((c) => c.trigger === trigger);
-  if (!hit.length) return;
-  d.curses = d.curses.filter((c) => c.trigger !== trigger);
-  for (const c of hit) {
-    if (d.ending) return;
+  for (const c of d.curses.filter((x) => x.trigger === trigger)) {
+    if (d.ending || d.dying) return;
+    d.curses.splice(d.curses.indexOf(c), 1);
     const changes = applyEffects(d.player, c.effect);
     ev.push({ type: "curse_fired", trigger, effect: c.effect, changes });
     settleHp(d, ev, "a curse");
@@ -185,6 +216,7 @@ function fire(d: GameState, ev: GameEvent[], trigger: Curse["trigger"]): void {
 }
 
 function healBy(d: GameState, ev: GameEvent[], amount: number, source: string): void {
+  if (d.dying) return; // the devil decides whether there is anyone left to heal
   const was = d.player.hp;
   heal(d.player, amount);
   if (d.player.hp > was) ev.push({ type: "healed", amount: d.player.hp - was, source, hp: d.player.hp });
@@ -233,7 +265,7 @@ function go(d: GameState, ev: GameEvent[], i: number): void {
   const exits = exitsOf(d);
   const from = d.player.nodeId, fromDeal = currentNode(d).kind === "deal";
   fire(d, ev, "next_node");
-  if (d.ending) return;
+  if (d.ending || d.dying) return; // died on the way out: you go nowhere until the devil is answered
   const ex = exits[i - 1];
   if (ex.kind === "stairs") {
     d.player.act++;
@@ -344,4 +376,85 @@ function accept(d: GameState, ev: GameEvent[]): void {
     else ev.push({ type: "rewrite_failed", nodeId: deal.rewrite.nodeId, reason: r.reason });
   }
   settleHp(d, ev, "the devil's bargain");
+}
+
+// ---- death's door ------------------------------------------------------------------------------------------------
+
+/** The devil's request at death's door: his opener (`text` null) or a haggle. `context.kind` is "death" (devilContext). */
+function deathRequest(d: GameState, text: string | null): DevilRequest {
+  return { state: snapshot(d.player), context: { ...devilContext(d), ...(text === null ? { opening: true } : {}) }, playerText: text };
+}
+
+/** Stat changes between two snapshots, keyed like applyEffects' result (zero changes omitted). */
+function diff(was: PlayerState, now: PlayerState): Deltas {
+  const out: Deltas = {};
+  const put = (k: keyof Deltas, a: number, b: number) => { if (a !== b) out[k] = b - a; };
+  put("max_hp", was.maxHp, now.maxHp); put("hp", was.hp, now.hp); put("gold", was.gold, now.gold);
+  put("attack", was.attack, now.attack); put("soul", was.soul, now.soul);
+  return out;
+}
+
+/** Leave death's door: the interrupted node offer (if any) is back on the table. */
+function leaveDeath(d: GameState): void {
+  d.offer = d.dying?.standing ?? null;
+  d.dying = null;
+}
+
+/** Back from the dead, the soul gone: the `revived` event and the log line the HUD reads ("soul spent on a revival"). */
+function revive(d: GameState, ev: GameEvent[], how: string): void {
+  ev.push({ type: "revived", hp: d.player.hp });
+  note(d.player, `soul spent on a revival: ${how}`);
+}
+
+/**
+ * The soul sold for another life. Whatever his offer says, the engine holds the core of the bargain: the soul goes, and
+ * you wake with at least the old revival's HP (`reviveHp`), so a junk, silent or spiteful reply can neither keep you at 0
+ * HP nor let you keep the soul. His extras (gold, attack, max HP) and their price (curse, rewrite, max HP loss) apply as
+ * usual. Not a node decision: `resolved` and `dealsDecided` are untouched.
+ */
+function deathAccept(d: GameState, ev: GameEvent[]): void {
+  const deal = d.offer!, was = snapshot(d.player);
+  leaveDeath(d);
+  applyEffects(d.player, deal.effects);
+  d.player.soul = 0;
+  d.player.hp = Math.max(d.player.hp, reviveHp(d.player.maxHp));
+  normalize(d.player);
+  ev.push({ type: "deal_applied", deal, changes: diff(was, d.player) });
+  note(d.player, `sold the soul at death's door: ${deal.dialogue.slice(0, 60)}`);
+  if (deal.curse && d.curses.length < MAX_CURSES) {
+    d.curses.push({ trigger: deal.curse.trigger, effect: deal.curse.effect });
+    ev.push({ type: "curse_added", curse: deal.curse });
+  }
+  if (deal.rewrite) {
+    const r = rewriteNode(currentAct(d), deal.rewrite.nodeId, deal.rewrite.to);
+    if (r.ok) { d.acts[d.player.act] = r.act; ev.push({ type: "node_rewritten", change: r.change }); }
+    else ev.push({ type: "rewrite_failed", nodeId: deal.rewrite.nodeId, reason: r.reason });
+  }
+  revive(d, ev, "sold at death's door");
+}
+
+/** No deal: the death stands. You die with your soul ("lose"; "hell" is reaching the final door without it). */
+function deathRefuse(d: GameState, ev: GameEvent[]): void {
+  const cause = d.dying!.cause;
+  d.dying = null; d.offer = null;
+  ev.push({ type: "deal_refused" });
+  d.ending = "lose";
+  ev.push({ type: "lost", cause });
+  note(d.player, `died: ${cause} (refused the devil)`);
+}
+
+/**
+ * A strike at death's door (gibberish, off-topic text or a jailbreak, and a bad roll): he loses patience and takes the soul
+ * anyway, for the least life there is: 1 HP, no extras. Never better than his offer, and the run goes on (a typo should not
+ * end a run; refuse is the way to die).
+ */
+function deathStrike(d: GameState, ev: GameEvent[], deal: Deal): void {
+  const was = snapshot(d.player);
+  leaveDeath(d);
+  d.player.soul = 0;
+  d.player.hp = Math.max(d.player.hp, 1);
+  normalize(d.player);
+  ev.push({ type: "devil_struck", dialogue: deal.dialogue, effects: diff(was, d.player) });
+  note(d.player, `the devil took the soul: ${deal.dialogue.slice(0, 60)}`);
+  revive(d, ev, "taken by force at death's door");
 }
