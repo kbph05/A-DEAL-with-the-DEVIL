@@ -54,7 +54,8 @@ body { overflow: hidden; }
    the world's touch stick rests bottom-centre. Keep the Map button short, the prompt clear of the item column, and
    the map title and toast below the stats. */
 @media (max-aspect-ratio: 1/1) {
-  .play-mapbtn .key { display: none; }
+  .play-mapbtn .key, .play-mapclose .key { display: none; }
+  #play .play-mapclose { padding-inline: 10px; }
   .play-prompt { left: max(10px, env(safe-area-inset-left)); right: 84px; width: auto; transform: none; bottom: calc(max(12px, env(safe-area-inset-bottom)) + 150px); }
   .play-maptitle { bottom: auto; top: calc(max(8px, env(safe-area-inset-top)) + 122px); }
   .play-toast { top: calc(max(8px, env(safe-area-inset-top)) + 164px); }

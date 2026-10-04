@@ -65,7 +65,9 @@ const hud = mountHud(root, { onUseItem: (item) => { if (item.command) void send(
 const mapBtn = button("Map", () => toggleMap(true), "play-mapbtn");
 mapBtn.append(h("span", "key", " (M)"));
 mapBtn.setAttribute("aria-keyshortcuts", "M");
-const mapClose = button("Close map", () => toggleMap(false), "play-mapclose quiet");
+const mapClose = button("Close", () => toggleMap(false), "play-mapclose quiet");
+mapClose.append(h("span", "key", " map")); // portrait hides " map" so the button clears the HUD stats
+mapClose.setAttribute("aria-label", "Close map");
 const mapTitle = h("div", "play-maptitle", "Choose where to go next");
 const prompt = h("div", "play-prompt");
 const panel = h("div", "play-layer play-dim");
