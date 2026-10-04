@@ -1,6 +1,6 @@
 import Phaser from "phaser";
 import { FloatingStick } from "../input/stick";
-import { ARENA, PLAYER, STEP_MS, aimAtPointer, moveDir, swingArc, type Circle, type FightLayout, type FightResult, type Vec } from "./logic";
+import { ARENA, PLAYER, STEP_MS, aimAtPointer, moveDir, swingArc, swingDrawOrigin, type Circle, type FightLayout, type FightResult, type Vec } from "./logic";
 import { FightSim, type FightControls } from "./sim";
 import type { FightInput } from "./logic";
 
@@ -239,8 +239,7 @@ export class FightScene extends Phaser.Scene {
 
     // Player.
     const p = s.player;
-    const px = ox + p.pos.x;
-    const py = oy + p.pos.y;
+    const { x: px, y: py } = swingDrawOrigin(p.pos, (v) => ({ x: ox + v.x, y: oy + v.y })); // the hitbox's origin
     if (p.swingMs > 0) {
       const arc = swingArc(p.pos, p.swingDir, p.radius); // the hitbox itself, so it turns with the facing
       const k = p.swingMs / PLAYER.swingMs;

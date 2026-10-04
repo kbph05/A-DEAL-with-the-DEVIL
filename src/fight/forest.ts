@@ -110,6 +110,13 @@ export const toPx = (v: number): number => v / K;
  */
 export const footPx = (pos: Vec, r: number): number => (pos.y + r / 2) / K;
 
+/**
+ * Where the player's sprite stands (its feet, world pixels): low enough that the visible figure, `figureH` pixels tall,
+ * is centred on the sim's player centre, which is where the sword's hitbox (and its drawn arc) is anchored (kbph, 4 Oct:
+ * the arc must sit on the figure). Enemies stand on `footPx`.
+ */
+export const playerFeetPx = (pos: Vec, figureH: number): number => pos.y / K + figureH / 2;
+
 // ---------------------------------------------------------------------------------------------------------------
 // Screen layout. Forest mode uses Phaser's RESIZE scale mode: the canvas is the container's size, re-laid out on
 // every resize (a phone rotating mid-fight), so this is called again with the new size.

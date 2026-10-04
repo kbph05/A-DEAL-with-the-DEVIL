@@ -148,7 +148,7 @@ export class ActorSprite {
   constructor(scene: Phaser.Scene, art: CharacterArt, scale: number) {
     this.art = art;
     this.scale = scale;
-    this.sprite = scene.add.sprite(0, 0, art.idle.key, "0");
+    this.sprite = scene.add.sprite(0, 0, art.idle.key, "0").setScale(scale);
     this.play("idle");
   }
 

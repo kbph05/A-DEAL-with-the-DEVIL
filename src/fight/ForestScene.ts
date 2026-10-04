@@ -5,13 +5,13 @@ import { facingOf, type Facing } from "../world/logic";
 import { addBand, bundledKey, preloadBand, setBandGamma } from "../world/bandArt";
 import { BG_DEPTH, actorDepth, artSource, isUrl, overlayDepth, privateSceneFile, type SceneDef } from "../world/scene";
 import { backgroundPlaceholder, overlayPlaceholder } from "../world/scenePlaceholders";
-import { HERO_COLS, HERO_ROWS, PLACEHOLDER_HERO, ensurePlaceholderTextures } from "../world/textures";
+import { HERO_COLS, HERO_ROWS, HERO_SIZE, PLACEHOLDER_HERO, ensurePlaceholderTextures } from "../world/textures";
 import { FOREST_BG_GAMMA } from "./art";
 import { COL, bar, button, inCircle, lerpColor } from "./draw";
 import { ENEMY_ART_SIZE, enemyTextureKey, ensureEnemyTextures } from "./enemyArt";
 import { encounterSummary, type Encounter } from "./encounters";
-import { UNITS_PER_PX, footPx, forestLayout, toPx, type ForestLayout } from "./forest";
-import { PLAYER, STEP_MS, aimAtPointer, moveDir, swingArc, type FightInput, type FightResult, type Vec } from "./logic";
+import { UNITS_PER_PX, footPx, forestLayout, playerFeetPx, toPx, type ForestLayout } from "./forest";
+import { PLAYER, STEP_MS, aimAtPointer, moveDir, swingArc, swingDrawOrigin, type FightInput, type FightResult, type Vec } from "./logic";
 import { FightSim, type EnemyBody, type FightControls, type SimWorld } from "./sim";
 import { ActorSprite, buildCharacter, figureHeight, preloadCharacters, type CharacterArt } from "../render/spriteArt";
 import { enemyAnim, playerAnim, roleArt, roleScale, type CharacterId } from "../render/sprites";
@@ -372,7 +372,8 @@ export class ForestScene extends Phaser.Scene {
     const s = this.sim;
     const p = s.player;
     const blink = Math.floor(s.timeMs / 80) % 2 === 0;
-    const px = toPx(p.pos.x), pf = footPx(p.pos, p.radius);
+    // The figure is centred on the sim's centre (the hitbox's and the arc's origin), horizontally and vertically.
+    const px = toPx(p.pos.x), pf = playerFeetPx(p.pos, this.hero ? this.hero.figureH : HERO_SIZE);
     const moved = Math.hypot(p.pos.x - this.lastPos.x, p.pos.y - this.lastPos.y) > 0.5;
     this.lastPos = { ...p.pos };
     this.facing = facingOf(p.facing, this.facing);
@@ -497,7 +498,9 @@ export class ForestScene extends Phaser.Scene {
     }
 
     // The player's swing and dash trail.
-    const px = toPx(p.pos.x), py = toPx(p.pos.y) - 3;
+    // The arc is drawn from the hitbox's own origin (the sim's player centre, which the sprite's figure stands on,
+    // centred), not a few pixels up: what you see is what hits.
+    const { x: px, y: py } = swingDrawOrigin(p.pos, (v) => ({ x: toPx(v.x), y: toPx(v.y) }));
     if (p.swingMs > 0) {
       const arc = swingArc(p.pos, p.swingDir, p.radius); // the hitbox itself, so it turns with the facing
       const k = p.swingMs / PLAYER.swingMs;

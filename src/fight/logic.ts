@@ -145,6 +145,42 @@ export const hitBySwing = (arc: SwingArc, target: Vec, targetRadius: number): bo
  */
 export const aimAtPointer = (mouseClick: boolean, touchUI: boolean): boolean => mouseClick && !touchUI;
 
+export interface AttackDirInput {
+  /** Non-zero movement input this step (keys or stick). */
+  moving: boolean;
+  /** That movement direction (any length; 8-way from the keys). */
+  moveVec: Vec;
+  /** The last non-zero movement direction: the facing when standing still. */
+  lastFacing: Vec;
+  /** A mouse click's target (sim units), if this attack came from one; null/undefined for Space or touch Attack. */
+  clickTarget?: Vec | null;
+  /** Where the player is (sim units): the click aims from here. */
+  from?: Vec;
+}
+
+/**
+ * Which way a swing goes (kbph, 4 Oct: "if you are moving it should be assumed that it follows direction of where
+ * player is going"). While moving: the movement direction, for every input, a mouse click included. Standing still: a
+ * mouse click aims at the cursor; Space and the touch Attack button swing the last facing. Unit vector (a zero
+ * everything faces right).
+ */
+export function attackDir(i: AttackDirInput): Vec {
+  const m = norm(i.moveVec);
+  if (i.moving && (m.x !== 0 || m.y !== 0)) return m;
+  if (i.clickTarget) {
+    const a = norm(sub(i.clickTarget, i.from ?? { x: 0, y: 0 }));
+    if (a.x !== 0 || a.y !== 0) return a;
+  }
+  const f = norm(i.lastFacing);
+  return f.x !== 0 || f.y !== 0 ? f : { x: 1, y: 0 };
+}
+
+/**
+ * Where the swing is drawn, in the scene's pixels: exactly the hitbox's origin (the sim's player centre) converted with
+ * the scene's own scale and offset. Both scenes draw the arc from here so the drawing and the hitbox can't drift apart.
+ */
+export const swingDrawOrigin = (pos: Vec, toScene: (v: Vec) => Vec): Vec => toScene(pos);
+
 /** Knockback impulse pushing `to` away from `from`. Straight down if they coincide. */
 export function knockback(from: Vec, to: Vec, strength: number): Vec {
   const d = norm(sub(to, from));
