@@ -21,5 +21,5 @@ const define = { __PRIVATE_ASSETS__: JSON.stringify(privateAssets) };
 const phaserChunk = { codeSplitting: { groups: [{ name: "phaser", test: /[\\/]node_modules[\\/]phaser[\\/]/ }] } };
 
 export default defineConfig(({ mode }) => (mode === "test"
-  ? { define, build: { chunkSizeWarningLimit: 1400, rolldownOptions: { input: { index: "index.html", fight: "fight.html", world: "world.html", hud: "hud.html" }, output: phaserChunk } } }
+  ? { define, build: { chunkSizeWarningLimit: 1400, rolldownOptions: { input: { index: "index.html", fight: "fight.html", world: "world.html", hud: "hud.html", map: "map.html" }, output: phaserChunk } } }
   : { define, build: { chunkSizeWarningLimit: 1400 } }));

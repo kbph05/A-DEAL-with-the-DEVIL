@@ -6,6 +6,7 @@
   "scripts": {
     "dev": "vite --mode test",
     "game": "vite --mode test --open /world.html",
+    "map": "vite --mode test --open /map.html",
     "build": "tsc && vite build",
     "build:test": "tsc && vite build --mode test --outDir dist-test",
     "preview": "vite preview",

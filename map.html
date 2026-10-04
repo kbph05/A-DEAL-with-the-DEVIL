@@ -1,0 +1,35 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+    <title>Map lab: A DEAL with the DEVIL</title>
+    <style>
+      html, body { margin: 0; height: 100%; background: #120a0a; color: #eee; font: 14px system-ui, sans-serif; }
+      body { display: flex; flex-direction: column; height: 100dvh; overflow: hidden; }
+      #bar { display: flex; flex-wrap: wrap; gap: 6px 8px; align-items: center; padding: 6px 10px; background: #1d1111; border-bottom: 1px solid #3a2222; }
+      #bar label { display: inline-flex; gap: 4px; align-items: center; }
+      #bar input { width: 6em; }
+      button, #bar input { font: inherit; background: #2a1a1a; color: #eee; border: 1px solid #553333; border-radius: 6px; padding: 3px 10px; min-height: 40px; box-sizing: border-box; }
+      button { background: #8a2020; border-color: #b33; font-weight: 600; cursor: pointer; }
+      button:disabled { opacity: .5; cursor: not-allowed; }
+      #event { flex-basis: 100%; color: #a99; min-height: 1.3em; font-size: 13px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+      #stage { position: relative; flex: 1; min-height: 0; overflow: hidden; }
+      #acts { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; justify-content: center; padding: 6px 10px; background: #1d1111; border-top: 1px solid #3a2222; min-height: 40px; }
+      #acts .none { color: #a99; font-size: 13px; }
+    </style>
+  </head>
+  <body>
+    <div id="bar">
+      <strong>Map lab</strong>
+      <label>Seed <input id="seed" type="text" placeholder="random" /></label>
+      <button id="new" type="button">New run</button>
+      <button id="bot" type="button">Bot step</button>
+      <div id="event" aria-live="polite"></div>
+    </div>
+    <div id="stage"></div>
+    <div id="acts" role="group" aria-label="Actions here"></div>
+    <script type="module" src="/src/mapscene/dev.ts"></script>
+  </body>
+</html>
