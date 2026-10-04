@@ -13,7 +13,7 @@
  * - Never forced (nor open) while the devil is speaking, an offer stands, an enemy blocks the way or a fight is on.
  * - A run that is over shows the ending card.
  */
-import { MAX_ASKS, type Command, type Ending, type View } from "../game";
+import { MAX_ASKS, type Command, type Ending, type GameEvent, type View } from "../game";
 
 /** The parts of the engine's `View` the flow reads (a real `view(state)` fits). */
 export type FlowView = Pick<View, "nodeId" | "kind" | "enemy" | "offer" | "pending" | "resolved" | "ending" | "devilPresent" | "asksLeft" | "actions"> & Partial<Pick<View, "opening">>;
@@ -124,4 +124,27 @@ export const arrived = (nodeId: string): Local => ({ ...LOCAL, at: nodeId });
 /** Set flags for the current node (resetting them first if they belonged to another node). */
 export function setLocal(local: Local, nodeId: string, patch: Partial<Local>): Local {
   return { ...(local.at === nodeId ? local : arrived(nodeId)), ...patch, at: nodeId };
+}
+
+/**
+ * At a well: which of its choices was taken since the player arrived, read from the event log (newest first). "blessing"
+ * once it is bought, "devil" once his offer was accepted or refused (he has left), null before either. The engine's view
+ * can't tell them apart (both leave the devil done), but the panel's words must: accepting his offer is not the blessing.
+ */
+export function wellChoice(log: readonly GameEvent[]): "blessing" | "devil" | null {
+  for (const e of log) {
+    if (e.type === "moved" || e.type === "started") return null;
+    if (e.type === "bought" && e.item === "blessing") return "blessing";
+    if (e.type === "deal_applied" || e.type === "deal_refused") return "devil";
+  }
+  return null;
+}
+
+/**
+ * What the devil's wish box sends, or null to send nothing. A blank wish is the free opening offer while it is still
+ * due (`opening`); after that the engine counts it as a question like any other, so a blank Ask or Haggle is not sent.
+ */
+export function wishToSend(text: string, opening: boolean | undefined): string | null {
+  const t = text.trim();
+  return t || opening === true ? t : null;
 }

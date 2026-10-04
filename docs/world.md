@@ -64,7 +64,7 @@ A scene is plain JSON data (`SceneDef` in `src/world/scene.ts`). The example bel
 
 ## The village and shop zones
 
-kbph (4 Oct): the village scene, the one the game starts with, contains the shops. Act 1 always starts on the village node, where the engine sells **heal** (10g, +12 HP) and **blade** (15g, +1 attack); **blessing** (8g, one of +3 max HP, +1 attack or +8 HP) is sold at **wells** only.
+kbph (4 Oct): the village scene, the one the game starts with, contains the shops. Act 1 always starts on the village node, where the engine sells **heal** (10g, +12 HP) and **blade** (12g, +1 attack); **blessing** (8g, one of +3 max HP, +1 attack or +8 HP) is sold at **wells** only.
 
 `src/world/scenes/village.json`:
 
@@ -81,11 +81,11 @@ shopPrompt(zone, game.view()) // → { title, price, desc, enabled, reason?, com
 ```
 
 - `enabled` is true exactly when the engine's legal `actions` contain `{cmd:"buy", item: zone.item}`. Then `command` is that command.
-- Otherwise `reason` says why: "Not enough gold: need 15g, you have 10g", "Only sold at a well, not in the village", "Not at a shop (this is a fight node)", "The well has given what it will give", "The run is over", "The devil is speaking".
+- Otherwise `reason` says why: "Not enough gold: need 12g, you have 10g", "Only sold at a well, not in the village", "Not at a shop (this is a fight node)", "The well has given what it will give", "The run is over", "The devil is speaking".
 - So at the village the Shrine stall is always disabled: the engine's rules (unchanged) sell blessings at wells. If the team wants it buyable here, that is an engine change (`legalActions` and `rejection`).
 - `exitPrompt(zone)` is "Leave the village (map: coming soon)".
 
-**In the world lab** (`dev.ts`): walk into a stall's zone and a prompt appears at the bottom: item, price, effect and a Buy button (E or Enter also buys). Buy sends the command with `game.step`, shows the engine's result text (`describe` of the events, e.g. "Bought blade for 15g: Attack +1."), and updates the HUD and the prompt. Leaving the zone hides it. The HUD's own item bar buys too, through the same path. A new run has 10 gold, so only the Healer is affordable; use `?gold=40` to try the Smith.
+**In the world lab** (`dev.ts`): walk into a stall's zone and a prompt appears at the bottom: item, price, effect and a Buy button (E or Enter also buys). Buy sends the command with `game.step`, shows the engine's result text (`describe` of the events, e.g. "Bought blade for 12g: Attack +1."), and updates the HUD and the prompt. Leaving the zone hides it. The HUD's own item bar buys too, through the same path. A new run has 10 gold, so only the Healer is affordable; use `?gold=40` to try the Smith.
 
 **Wiring `buy` in the real game scene** (kbph): the same pieces, with the session's game instead of the lab's:
 

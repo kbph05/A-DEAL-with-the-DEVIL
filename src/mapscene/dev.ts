@@ -3,7 +3,8 @@
 // under the map has the node's other legal actions (fights here are the plain turn-based `fight`, one round per press;
 // the devil is asked without a wish, as the bot does, so `?steps=N` replays `autoplay` exactly).
 // Query: ?seed=abc&steps=N (N bot steps on load). Playwright reads window.__map.
-import { botPolicy, createGame, describe, execute, type Command, type Game, type GameEvent, type Result, type View } from "../game";
+import { botPolicy, createGame, execute, type Command, type Game, type GameEvent, type Result, type View } from "../game";
+import { eventText } from "../ui/logic";
 import { mountHud } from "../hud/hud";
 import { hudModel } from "../hud/model";
 import { mountMap, type MapHandle } from "./index";
@@ -17,7 +18,7 @@ let game: Game = createGame(new URLSearchParams(location.search).get("seed") || 
 let steps = 0, busy = false;
 const log: string[] = [];
 
-const map = mountMap(stage, { onGo: (n) => void act({ cmd: "go", n }), map: game.map(), view: game.view() });
+const map = mountMap(stage, { onGo: (n) => void act({ cmd: "go", n }), map: game.map(), view: game.view(), overlays: () => [hud.el.querySelector(".hud-stats")] });
 const hud = mountHud(stage, { onUseItem: (item) => { if (item.command) void act(item.command); } });
 
 const ware = (item?: string) => (item === "heal" ? "Heal" : item === "blade" ? "Blade" : item === "blessing" ? "Blessing" : item ?? "?");
@@ -59,7 +60,7 @@ function render(events: GameEvent[] = []): void {
     buttons.push(s as unknown as HTMLButtonElement);
   }
   acts.replaceChildren(...buttons);
-  const lines = events.map(describe).filter(Boolean);
+  const lines = events.map((e) => eventText(e)).filter(Boolean);
   log.push(...lines);
   if (lines.length) eventLine.textContent = lines.slice(-2).join(" ");
   window.__map = { game, view: v, map, steps, busy, log, bot: () => botPolicy(game.observe()) };

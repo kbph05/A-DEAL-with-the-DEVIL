@@ -4,6 +4,7 @@
  * actions. Tested in node (shopZone.test.ts). The world lab (dev.ts) renders it; docs/world.md, "Shop zones".
  */
 import { MAX_ASKS, ONE_CHOICE, WARES, type Command } from "../game/gameState";
+import { pointlessBuy } from "../ui/shopGuard";
 import type { SceneZone } from "./scene";
 
 /** What a shop prompt shows. `command` is what to send to the engine when Buy is pressed (only when `enabled`). */
@@ -21,7 +22,8 @@ export interface ShopPrompt {
 /** The slice of the engine's `View` (game.view()) that a shop prompt reads. A whole View fits. */
 export interface ShopView {
   kind: string;
-  state: { gold: number };
+  /** `hp` and `maxHp` (a whole View has them) let the prompt refuse a heal at full health. */
+  state: { gold: number; hp?: number; maxHp?: number };
   actions: readonly Command[];
   resolved?: boolean;
   ending?: string | null;
@@ -50,7 +52,10 @@ export function shopPrompt(zone: SceneZone, v: ShopView): ShopPrompt {
   if (!ware || !text) return { title, price: null, desc: "", enabled: false, reason: "Nothing for sale here" };
   const base = { title, price: ware.cost, desc: text.desc };
   const command: Command = { cmd: "buy", item };
-  if (v.actions.some((c) => isBuy(c, item))) return { ...base, enabled: true, command };
+  if (v.actions.some((c) => isBuy(c, item))) {
+    const pointless = pointlessBuy(item, v.state?.hp, v.state?.maxHp); // the engine would take the gold for nothing
+    return pointless ? { ...base, enabled: false, reason: pointless } : { ...base, enabled: true, command };
+  }
   return { ...base, enabled: false, reason: whyNot(item, ware.cost, text.soldAt, v) };
 }
 

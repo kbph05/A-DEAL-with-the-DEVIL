@@ -9,7 +9,8 @@ body { overflow: hidden; }
 .play-backdrop canvas { width: min(40vmin, 220px); image-rendering: pixelated; opacity: .35; }
 .play-map { z-index: 5; background: #0b0707; }
 .play .hud { z-index: 10; }
-.play button { font: inherit; color: #eee; background: #8a2020; border: 1px solid #c44; border-radius: 8px; padding: 8px 14px; min-height: 44px; min-width: 44px; font-weight: 600; cursor: pointer; }
+/* The page's own buttons only: the HUD's item slots and the map's Legend toggle keep their own styles (their padding and colours were being overridden). */
+.play button:not(.hud-slot):not(.mapscene-legend-btn) { font: inherit; color: #eee; background: #8a2020; border: 1px solid #c44; border-radius: 8px; padding: 8px 14px; min-height: 44px; min-width: 44px; font-weight: 600; cursor: pointer; }
 .play button.quiet { background: #2a1a1a; border-color: #553333; }
 .play button:disabled { opacity: .5; cursor: not-allowed; }
 .play button:focus-visible { outline: 3px solid #f0c060; outline-offset: 2px; }
@@ -28,20 +29,8 @@ body { overflow: hidden; }
 .play-choices { display: grid; gap: 8px; }
 .play-choices button { display: flex; flex-direction: column; align-items: flex-start; text-align: left; }
 .play-choices button small { font-weight: 400; color: #f3dada; opacity: .85; }
-/* The devil's overlay: the dealer (dealer.ts) fills the space above, his table runs across the screen, and the card
-   (dialogue, offer, buttons) sits on the felt below him. The figure shrinks to whatever the card leaves. */
-.play-devil { z-index: 40; display: flex; flex-direction: column; align-items: center; justify-content: flex-end; padding: 0 12px 12px; box-sizing: border-box;
-  background: linear-gradient(#0e2a1a, #0b2215); border-bottom: 12px solid #3a1d0d; box-shadow: inset 0 -14px 0 -12px #6a3a1c; }
-/* The dealer fills what the card leaves; his art is always as tall as his box (contain in landscape, cover in portrait,
-   bottom-centred), so the table's far rim sits at 70% of the box (TABLE_Y in dealer.ts) and the CSS carries the rim and
-   felt across the screen. Above the rim: the dark room. */
-.play-dealer { flex: 1 1 0; min-height: 0; width: calc(100% + 24px); margin: 0 -12px; pointer-events: none; overflow: hidden;
-  background: linear-gradient(transparent 70%, #3a1d0d 70%, #3a1d0d 71.67%, #0e2a1a 71.67%), radial-gradient(ellipse at 50% 55%, #2a0a0c 0%, #0a0303 70%); }
-.play-dealer canvas, .play-dealer img { display: block; width: 100%; height: 100%; object-fit: contain; object-position: 50% 100%; image-rendering: pixelated; }
-@media (max-aspect-ratio: 1/1) { .play-dealer canvas, .play-dealer img { object-fit: cover; } }
-.play-seat { flex: none; width: 100%; display: flex; justify-content: center; max-height: 72%; }
-.play-seat .play-card { max-height: 100%; }
-.play-devil .play-card { background: rgba(6, 16, 10, .9); border-color: #6a3a1c; box-shadow: 0 10px 30px rgba(0, 0, 0, .7); }
+.play-devil { z-index: 40; display: flex; align-items: center; justify-content: center; background: radial-gradient(ellipse at 50% 35%, #3a0d0d 0%, #0a0303 75%); padding: 12px; box-sizing: border-box; }
+.play-devil .play-card { background: rgba(18, 6, 6, .94); border-color: #a33; }
 .play-devil .say { font: italic 17px Georgia, serif; color: #f2d2c0; margin: 8px 0 12px; min-height: 2.4em; }
 .play-devil .strike { color: #ff8a7a; font-weight: 600; margin: 0 0 8px; }
 .play-devil .chips { display: flex; flex-wrap: wrap; gap: 6px; margin: 0 0 10px; }
@@ -65,9 +54,21 @@ body { overflow: hidden; }
    the world's touch stick rests bottom-centre. Keep the Map button short, the prompt clear of the item column, and
    the map title and toast below the stats. */
 @media (max-aspect-ratio: 1/1) {
-  .play-mapbtn .key { display: none; }
+  .play-mapbtn .key, .play-mapclose .key { display: none; }
+  #play .play-mapclose { padding-inline: 10px; }
   .play-prompt { left: max(10px, env(safe-area-inset-left)); right: 84px; width: auto; transform: none; bottom: calc(max(12px, env(safe-area-inset-bottom)) + 150px); }
-  .play-maptitle { bottom: auto; top: calc(max(8px, env(safe-area-inset-top)) + 122px); }
-  .play-toast { top: calc(max(8px, env(safe-area-inset-top)) + 164px); }
+  .play-maptitle { bottom: auto; top: calc(var(--hud-bottom, 122px) + 8px); }
+  .play-toast { top: calc(var(--hud-bottom, 122px) + 50px); }
+}
+/* Landscape under 1300 px wide (a laptop window, a turned phone): a centred toast runs into the HUD's stats strip
+   (348 px from the left edge), hiding Soul and Revive. Centre it in the space right of the strip instead. */
+@media (min-aspect-ratio: 1/1) and (max-width: 1299px) {
+  .play-toast { left: calc(max(8px, env(safe-area-inset-left)) + 356px); right: max(8px, env(safe-area-inset-right)); transform: none; margin-inline: auto; box-sizing: border-box; max-width: min(560px, calc(100% - 372px)); }
+}
+/* Short landscape (a turned phone, 844x390): the map keeps your node near the bottom of the screen, where the centred
+   "Choose where to go next" sat on it. Put the title under the HUD's stats on the left, beside the parchment instead;
+   where they still meet (narrower phones), the map scrolls its top clear of the title (it is one of the map's overlays). */
+@media (min-aspect-ratio: 1/1) and (max-height: 540px) {
+  .play-maptitle { left: max(8px, env(safe-area-inset-left)); transform: none; bottom: auto; top: calc(var(--hud-bottom, 96px) + 8px); }
 }
 .play [hidden]:not(.play-toast) { display: none !important; }

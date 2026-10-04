@@ -10,12 +10,13 @@ const deepFreeze = <T>(o: T): T => {
 const clone = <T>(o: T): T => JSON.parse(JSON.stringify(o)) as T;
 
 test("hudModel: a new run (village, 10g) shows stats and the shop; heal usable, blade short of gold", () => {
-  const m = hudModel(initialState("hud"));
-  assert.equal(m.hp, 30); assert.equal(m.maxHp, 30); assert.equal(m.gold, 10); assert.equal(m.attack, 3);
+  const fresh = initialState("hud");
+  const m = hudModel({ ...fresh, player: { ...fresh.player, hp: 20 } }); // hurt, so a heal is worth buying
+  assert.equal(m.hp, 20); assert.equal(m.maxHp, 30); assert.equal(m.gold, 10); assert.equal(m.attack, 3);
   assert.equal(m.speed, null);
   assert.equal(m.soul, "kept"); assert.equal(m.revive, "available");
   assert.equal(m.kind, "village"); assert.equal(m.act, 1); assert.equal(m.layer, 1); assert.ok(m.layers! >= 6);
-  assert.deepEqual(m.items.map((i) => [i.id, i.usable, i.reason, i.cost, i.count]), [["heal", true, null, 10, null], ["blade", false, "need 5g more", 15, null]]);
+  assert.deepEqual(m.items.map((i) => [i.id, i.usable, i.reason, i.cost, i.count]), [["heal", true, null, 10, null], ["blade", false, "need 2g more", 12, null]]);
   assert.deepEqual(m.items[0].command, { cmd: "buy", item: "heal" });
   assert.deepEqual(m.devil, { questionsLeft: MAX_DEVIL_QUERIES, max: MAX_DEVIL_QUERIES, asksLeft: null });
   assert.deepEqual(m.curses, []); assert.equal(m.ending, null); assert.equal(m.busy, null);
@@ -91,4 +92,15 @@ test("announce: only HP and gold changes, with direction", () => {
   assert.equal(announce(a, { ...a, hp: 24 }), "HP 24 of 30, down 6.");
   assert.equal(announce(a, { ...a, gold: 15, attack: 9 }), "Gold 15, up 5.");
   assert.equal(announce(a, { ...a, hp: 15, revive: "used", soul: "spent" }), "HP 15 of 30, down 15. Your soul paid for a revival.");
+});
+
+test("hudModel: the Heal slot is disabled at full HP with the reason; the engine's command stays legal (UI-only guard)", () => {
+  const full = initialState("hud-full");
+  assert.equal(full.player.hp, full.player.maxHp);
+  const heal = hudModel({ ...full, player: { ...full.player, gold: 99 } }).items.find((i) => i.id === "heal")!;
+  assert.deepEqual([heal.usable, heal.reason], [false, "You're at full health"]);
+  const hurt = hudModel({ ...full, player: { ...full.player, gold: 99, hp: full.player.maxHp - 1 } }).items.find((i) => i.id === "heal")!;
+  assert.deepEqual([hurt.usable, hurt.reason], [true, null]);
+  const blade = hudModel({ ...full, player: { ...full.player, gold: 99 } }).items.find((i) => i.id === "blade")!;
+  assert.equal(blade.usable, true, "the blade is not guarded");
 });

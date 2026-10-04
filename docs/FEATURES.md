@@ -83,7 +83,7 @@ Source: `src/game/state.ts`. The only place stat ranges live.
 | --- | --- | --- | --- |
 | HP (`hp`) | 30 | 0 to `maxHp` | 0 or below triggers death or revival (see 8). |
 | Max HP (`maxHp`) | 30 | 1 to 60 | Lowering it also clamps current HP down. Raising it does **not** heal. |
-| Gold (`gold`) | 10 | 0 to 999 | Spent at village and well, earned from kills and deals. |
+| Gold (`gold`) | 10 (`START_GOLD`) | 0 to 999 | Spent at village and well, earned from kills and deals. Every gold knob lives in `src/game/economy.ts` (5.3). |
 | Attack (`attack`) | 3 | 1 to 12 | Base damage per fight round. "damage" in deal JSON means attack. |
 | Soul (`soul`) | 1 | 0 or 1 | 1 = still yours. 0 = sold or spent on a revival. |
 
@@ -102,7 +102,7 @@ What changes each stat:
 ### 3.1 How deltas are applied (also how deals and curses work)
 
 - A deal or curse gives signed **effects**. Accepted keys: `hp`, `max_hp` (alias `maxHp`), `gold`, `attack` (alias `damage`), `soul`. Unknown keys and non-numbers are dropped. If a deal uses both `damage` and `attack`, they add together, then clamp.
-- Values are rounded to integers, then clamped to a **per-change range**: hp +-25, max_hp +-10, gold +-100, attack +-3, soul +-1 (`DELTA_RANGE`). Then the stat is clamped to its absolute range above.
+- Values are rounded to integers, then clamped to a **per-change range**: hp +-25, max_hp +-10, gold -100 to +30 (a deal may give at most `MAX_DEAL_GOLD` = 30 gold, 4 Oct; it may still take up to 100), attack +-3, soul +-1 (`DELTA_RANGE`). Then the stat is clamped to its absolute range above.
 - Application order: **max_hp first** (so an hp gain in the same deal is judged against the new cap), then hp, gold, attack, soul. Events report the **net change that actually landed** after clamping, and omit zero changes.
 - There is no concept of timed effects, buffs, armor, speed or inventory. Everything is permanent stat change.
 
@@ -123,7 +123,7 @@ What happens on **entering any node**, in order: the `moved` event, then **`on_e
 - `accept()`: applies the effects, adds the curse if any (max 5), applies the rewrite if any, then checks death/revival (see 6.6 for the order). Marks the node resolved.
 - `refuse()`: nothing happens (`deal_refused`). Marks resolved.
 - Once decided, the node is resolved: no more asks.
-- **His opening offer** (kbph, 4 Oct): when he appears (a deal node, a well where he sits, Deal at a campfire) the client asks for it at once (a `deal` with no text). It is free (no ask, no question), once per node, and tailored to your state by the StubDevil (`openingOffer` in `src/game/devil.ts`): at 40% HP or less a heal or max HP, low attack with the boss near attack, a curse's toll paid in advance, under 10 gold gold, else the soul; always at a price. At a well he opens by talking you out of the blessing; refusing his opener there leaves the blessing, accepting it locks it.
+- **His opening offer** (kbph, 4 Oct): when he appears (a deal node, a well where he sits, Deal at a campfire) the client asks for it at once (a `deal` with no text). It is free (no ask, no question), once per node, and tailored to your state by the StubDevil (`openingOffer` in `src/game/devil.ts`): at 40% HP or less a heal or max HP, low attack with the boss near attack, a curse's toll paid in advance, under 10 gold attack or max HP before mid act 2 (`DEVIL_GOLD_FROM`, progress 0.5) and a small purse after it (`devilGold(progress)`, plus -3 to -5 max HP), else the soul (with gold only from mid act 2); always at a price. At a well he opens by talking you out of the blessing; refusing his opener there leaves the blessing, accepting it locks it.
 - The same rules hold wherever else he sits (a campfire, 4.3; a well where he turned up, 4.4): 3 asks per node, the run-wide cap, anger and strikes, accept and refuse. `Observation.devilPresent` says whether he is at your node; `asksLeft` how many asks you have left there.
 - You cannot ask while an enemy is present, while a previous ask is still pending, or where the devil is not ("the devil does not sit here"). Movement is blocked while the devil is "still speaking" (pending).
 - Cost: free. Rewards and penalties are whatever the deal says.
@@ -135,7 +135,7 @@ What happens on **entering any node**, in order: the `moved` event, then **`on_e
 | Ware | Cost | Effect |
 | --- | --- | --- |
 | heal | 10g | +12 HP (capped at max HP; **no guard against buying at full HP**, the gold is still spent) |
-| blade | 15g | +1 attack (capped at 12) |
+| blade | 12g | +1 attack (capped at 12). Was 15g before the 4 Oct economy pass, which cut income by about 40%. |
 
 - Not enough gold: rejected, nothing changes. "Sell" does not exist (requirements said "trade or sell").
 
@@ -204,11 +204,23 @@ Formulas: regular HP `8 + 4*act + d4`, regular power `2 + act`, boss HP `18 + 8*
 
 | Source | Reward |
 | --- | --- |
-| Regular kill | gold `4 + d5(0..4) + act` (act 0-based): 4 to 8 in act 1, 5 to 9 in act 2, 6 to 10 in act 3 |
-| Boss kill | gold `12 + d6(0..5)` = 12 to 17, plus **+10 HP** |
+| Regular kill | gold `KILL_GOLD.base[act] + d3(0..2)`: 4 to 6 in act 1, 5 to 7 in act 2, 2 to 4 in act 3 |
+| Boss kill | gold `BOSS_GOLD.base[act] + d3(0..2)`: 12 to 14, 14 to 16, 0 to 2 (nothing is sold after the act-3 boss), plus **+10 HP** |
 | Stairs (after act 1 or 2 boss) | +6 HP on arrival |
 
-Gold is clamped at 999. Regular fights give no healing. There is no XP, loot or item drop.
+Gold is clamped at 999. Regular fights give no healing. There is no XP, loot or item drop. The realtime fight pays the same bounty (one helper, `bounty` in `state-machine.ts`).
+
+**The gold economy (4 Oct; kbph: "the gold inflation is insane").** All knobs are in `src/game/economy.ts`: `START_GOLD` 10, `WARES` (heal 10, blade 12, blessing 8), `KILL_GOLD`, `BOSS_GOLD`, `MAX_DEAL_GOLD` 30 (the most one deal may give, any devil: 6.5), and the StubDevil's `DEVIL_GOLD` (4 early to 18 late), `DEVIL_GOLD_FROM` and `DEVIL_GOLD_LEAD` (6.3). Measured on seeds `sim-0..999` with the bot and a "human-like" policy (buys the best affordable ware at every village, a blade or a heal when at half HP; takes the opener when it pays gold and isn't the soul; drinks wells), before and after:
+
+| | bot before | bot after | human before | human after |
+| --- | --- | --- | --- | --- |
+| win / hell / lose | 46.9 / 39.9 / 13.2 | 43.8 / 39.8 / 16.4 | 58.7 / 30.3 / 11.0 | 53.9 / 30.7 / 15.4 |
+| gold in per run: kills / bosses / deals | 51 / 41 / 18 | 34 / 28 / 3 | 52 / 42 / 5 | 35 / 29 / 4 |
+| gold per regular kill (mean) | 7.0 | 4.7 | 7.0 | 4.7 |
+| gold on arriving at a village (median) | 18 | 15 | 17 | 14 |
+| gold left at the end (median; finishers) | 30; 29 | 10; 9 | 28; 28 | 10; 10 |
+
+Before, most of the end gold was dead gold: earned after the last village (finishers' median 22), mostly the act-3 boss's 12 to 17. Now a typical village visit buys one thing, a blade or a heal; `src/game/economy.test.ts` guards the median end gold (≤ 15 over 200 bot runs) and the bounty per kill (3 to 6).
 
 ### 5.5 Realtime fights (docs/fight.md)
 
@@ -253,28 +265,29 @@ The request has `state` (full player state: hp, maxHp, gold, attack, soul, act, 
 | `questionsLeft` | questions the player may still ask this run, after this one (`MAX_DEVIL_QUERIES - askIndex`; 0 = the last) |
 | `rewritable` | `{id, kind}` of nodes the devil may rewrite: reachable **ahead** of the player in this act, unvisited, not the act exit boss |
 | `curses` | curses currently on the player |
+| `progress` | how far through the run: 0 at the start of act 1, 1 at the act-3 boss, `(act + layer / boss layer) / 3`, two decimals (additive, 4 Oct; the devil should be stingy with gold early) |
 
 The devil does **not** see: the full map shape (edges), future acts, the player's past deal history beyond the 100-entry log, or the enemy roster.
 
 ### 6.3 StubDevil: the canned offers
 
-Deterministic in (seed, ask index): pure in the request, seeded by `devil:${seed}:${askIndex}`. 8 offers. Each ask: take the offers that are currently **eligible**; if the player's text matches any of their keyword regexes, keep **only** those (steering is absolute), otherwise keep all; then pick uniformly. There is no "not the same as last time" rule: with no text, consecutive offers repeat about 20% of the time. (Corrected 4 Oct from the code; this section used to describe a 5:1 weighting and an exclude-last rule that the code does not have. See the balance report: steering plus the fine-print trick is a strong exploit.)
+Deterministic in (seed, ask index): pure in the request, seeded by `devil:${seed}:${askIndex}`. 8 offers. Each ask: take the offers that are currently **eligible**; if the player's text matches any of their keyword regexes, keep **only** those (steering is absolute), otherwise keep all; then split that pool into offers that lead with gold (`coin`, `bleed`, `movefurniture`) and the rest, and roll whether he leads with gold: `DEVIL_GOLD_LEAD` from 5% (act 1 start) to 40% (act-3 boss), or 25% to 90% when the wish asked for gold (a "gold" wish he doesn't grant gets one of the non-gold offers instead); then pick uniformly within the chosen half (4 Oct, kbph: "make the devil less friendly with gold offers especially right at the beginning"). Gold amounts scale with `progress`: `devilGold` = 4 at the start to 18 at the act-3 boss (G below). There is no "not the same as last time" rule: with no text, consecutive offers repeat about 20% of the time. (Corrected 4 Oct from the code; this section used to describe a 5:1 weighting and an exclude-last rule that the code does not have. See the balance report: steering plus the fine-print trick is a strong exploit.)
 
 | id | Keyword hint | Eligible when | Effects (gives / takes) | Curse | Rewrite |
 | --- | --- | --- | --- | --- | --- |
-| coin | gold, coin, rich, money | always | gold +25 | on_hit: hp -4 | none |
+| coin | gold, coin, rich, money | always | gold +G, max_hp -3 | on_hit: hp -5 | none |
 | sharpen | attack, sword, strong, damage, blade | always | attack +2, max_hp -6 | none | none |
 | mend | heal, hp, life, mend, hurt | hp < maxHp | hp +15 | next_node: gold -12 | none |
-| soul | soul, forever, eternal | soul is yours | **soul -1 (sells it)**, gold +60, max_hp +10, attack +1 | none | none |
-| bleed | blood, bleed, pain | hp > 8 | hp -5, gold +40 | none | none |
+| soul | soul, forever, eternal | soul is yours | **soul -1 (sells it)**, max_hp +10, attack +1, and gold +G from mid act 2 | none | none |
+| bleed | blood, bleed, pain | hp > 10 | hp -8, gold +G | none | none |
 | fineprint | luck, safe, fortune, protect | always | max_hp +8 | on_fight: attack -1 | none |
-| movefurniture | road, map, path, ahead, future | a rewritable good node exists | gold +30, attack +1 | none | a random rewritable **good** node becomes **fight** |
+| movefurniture | road, map, path, ahead, future | a rewritable good node exists | gold +G/2, attack +1 | none | a random rewritable **good** node becomes **fight** |
 | hearth | rest, camp, road, ahead, safe | hp > 8 and a rewritable fight exists | hp -8 | none | a random rewritable **fight** becomes **campfire** |
 
 Notes:
 - Each carries a flavoured dialogue line, written to hide or hint at the trick (for example `coin`: "...it will want to go home through your ribs.").
 - The `hearth` rewrite is the only offer that turns a bad node good. `movefurniture` always flips polarity (good to bad), so it clears the act's alternation flag.
-- Offers cost real value: `coin` is +25 gold for a 4 HP penalty on the next hit; `soul` is the biggest stat package in the game (+60 gold, +10 max HP, +1 attack) in exchange for the revival safety net and your win.
+- Offers cost real value: every gold offer also takes something the fine print cannot strike (max HP, HP, or a good node ahead turned into a fight); `soul` is the biggest stat package in the game (+10 max HP, +1 attack, and late some gold) in exchange for the revival safety net and your win.
 
 ### 6.4 The "fine print" trick (the player's counterplay)
 
@@ -284,7 +297,7 @@ If the player's text matches `/fine print|loophole|clause|read the contract|cont
 
 `StubDevil` calls `isGibberish(playerText)` (exported from `src/game/devil.ts`; pure, no dictionary). A text is gibberish when half or more of its words are junk, or when it is mostly symbols (5 or more non-letters, more than the letters). A Latin-letter word (accents ignored) is junk when it: is a keyboard run (`asdf`, `hjkl`, or contains `qwert`, `asdfg`, `zxcvb` or their reverses); has no vowels (`aeiouy`) at 5+ letters (unless it uses 2 or fewer distinct letters, like `hmmmm`); has six consonants in a row and under 20% vowels; has under 20% vowels at 8+ letters (`strengths` and `twelfths` excepted); is 10+ letters of 2 or fewer distinct ones; or is a 1-3 letter unit repeated 3+ times at 9+ letters. A token of 6+ characters that flips between letters and digits 3+ times (`a1b2c3d4`) is junk too. Words under 4 letters, numbers, emoji, other scripts and empty text are never junk. So `laksjdhflkajshdg9` is gibberish; `gold`, `heal me`, `make me rich` and `I read the fine print` are not.
 
-On gibberish he ignores keywords and the fine-print trick and is plainly furious. A seeded roll (`STRIKE_CHANCE`, 0.5, exported) decides: he either **strikes** (6.4c: one of 6 lines such as "You dare waste my time with noise? Speak plainly or bleed.", `hp` -3 to -6, no offer) or rants with one of 6 other angry lines (seeded by seed and ask index, no religious references) and makes a **spite offer** that always carries a curse: `hp -8, gold +10` with `on_fight: attack -1` (only if HP > 8), `max_hp -6, gold +15` with `next_node: hp -6`, or `attack -1, gold +20` with `on_hit: hp -5`. Once the run-wide limit is nearly spent he also adds a taunt (one question left; that was your last question). The real devil is asked to do the same (docs/devil-api.md).
+On gibberish he ignores keywords and the fine-print trick and is plainly furious. A seeded roll (`STRIKE_CHANCE`, 0.5, exported) decides: he either **strikes** (6.4c: one of 6 lines such as "You dare waste my time with noise? Speak plainly or bleed.", `hp` -3 to -6, no offer) or rants with one of 6 other angry lines (seeded by seed and ask index, no religious references) and makes a **spite offer** that always carries a curse: `hp -8, gold +10` with `on_fight: attack -1` (only if HP > 8), `max_hp -6, gold +15` with `next_node: hp -6`, or `attack -1, gold +20` with `on_hit: hp -5`, each gold amount capped at `devilGold(progress)` so rudeness never pays more than a polite wish (4 early). Once the run-wide limit is nearly spent he also adds a taunt (one question left; that was your last question). The real devil is asked to do the same (docs/devil-api.md).
 
 ### 6.4b2 Off-topic text and jailbreak attempts make him angry too
 
@@ -307,7 +320,7 @@ Besides an offer, a devil (the stub, or the Gemini one) may answer with `forced:
 - **`sanitizeDeal`** (`src/game/deal.ts`) turns anything into a safe Deal. Never throws.
   - Not an object (string, null, array, number): replaced by the **silent devil**: dialogue "The devil only smiles. He has nothing to say to you today.", no effects.
   - `dialogue`: must be a non-empty string, trimmed and cut to **600 chars** (never half an emoji), else `"..."`.
-  - `effects`: allowed keys, rounding, clamps as in 3.1; other keys dropped.
+  - `effects`: allowed keys, rounding, clamps as in 3.1; other keys dropped. A deal gives at most **30 gold** (`MAX_DEAL_GOLD`, 4 Oct), whichever devil sent it.
   - `curse`: kept only if the trigger is one of the 4 allowed and the sanitized effect is non-empty.
   - `forced`: kept only when exactly `true`; then the deal is cut to a strike (6.4c). Omitted otherwise, so ordinary deals are unchanged.
   - `rewrite`: kept only if `nodeId` is a string of at most 40 chars and `to` is a valid kind other than `boss`/`final`. Whether the node can actually be rewritten is checked later, at accept time (6.6).
@@ -485,7 +498,7 @@ A deliberately plain DOM page over the same `Session` (one `Game` plus an event 
 
 - A **policy** is a function from an `Observation` to a `Command | null`. `null` gives up.
 - `autoplay(seed?, policy = botPolicy, maxSteps = 1000, devil?)` plays one run and returns `{ seed, outcome, steps, events }` where outcome is `win | lose | hell | timeout`; each command counts as one step. `simulate(n = 100, policy, maxSteps, prefix = "sim")` runs seeds `sim-0 ... sim-(n-1)` and returns outcome counts plus `total`.
-- **Default bot (`botPolicy`):** fights whenever an enemy is present; at an unspent campfire **trains if HP >= 70% of max** (and attack is below 12), **else rests** (a simple rule, not tuned); at a village buys `heal` if HP is at least 12 below max and gold >= 10, else `blade` if gold >= 15 (loops until neither applies); drinks the well if gold >= 8; at a deal node asks (no text), then **alternates refuse, accept, refuse, accept...** across all deals in the run (refuse first); at a well where the devil sits it drinks first, then asks him the same way; at a campfire it takes the deal only when training is capped (attack 12) and HP is at least 90% (so rest and train would do little); it only asks while `asksLeft` and `questionsLeft` allow; otherwise takes exit 1.
+- **Default bot (`botPolicy`):** fights whenever an enemy is present; at an unspent campfire **trains if HP >= 70% of max** (and attack is below 12), **else rests** (a simple rule, not tuned); at a village buys `heal` if HP is at least 12 below max and it can afford one, else `blade` if it can (prices from `WARES`; loops until neither applies); drinks the well if it can afford the blessing; at a deal node asks (no text), then **alternates refuse, accept, refuse, accept...** across all deals in the run (refuse first); at a well where the devil sits it drinks first, then asks him the same way; at a campfire it takes the deal only when training is capped (attack 12) and HP is at least 90% (so rest and train would do little); it only asks while `asksLeft` and `questionsLeft` allow; otherwise takes exit 1.
 
 ### 10.6 Build modes (`package.json`, `src/main.ts`, `README.md`)
 
@@ -511,6 +524,7 @@ In test builds, `VITE_DEVIL_URL` only sets the default URL shown in the Devil la
 | `src/game/autoplay.test.ts` | 7 | 200 seeds always end win, lose or hell with no stalls, stats always in range, determinism, `simulate` tallies, a do-nothing policy times out, hell when winning soulless vs win with soul, where and when the bot deals (wells, deal nodes, a capped campfire; never past the caps, never with text) |
 | `src/game/httpDevil.test.ts` | 5 | HttpDevil against the mock backend (request body, sanitizable reply), a full bot run with chaos on, chaos replies either reject or sanitize, refused connection and timeout never throw, non-JSON server |
 | `src/ui/logic.test.ts` | 22 | button availability from `observe()` and from the engine's `actions`, event colour classes, `diffDeal`, labels and chips, the DAG model and exit numbers, `planarOrder` (every generated act lays out with 0 crossings in the generator's own order), panel kinds (the Devil's table beside the choices at campfires and devil wells), shop and choose cards (campfire Rest/Sharpen/Deal, `fireChoice`), against the real engine |
+| `src/game/economy.test.ts` | 2 | balance guard: over 200 bot runs the median end gold is at most 15, a regular kill pays 3 to 6 on average and a boss at most 14, bounties stay inside the tables; the StubDevil over 300 seeded requests (no text, "gold", "make me rich", the broke and the rich opener) pays gold under 20% of the time early (progress 0.05) and at least 2.5 times as often late (0.95), early gold small, no reply (spite offers to gibberish and a jailbreak included) above `devilGold(progress)`, every gold offer priced in something the fine print can't strike, all well under `MAX_DEAL_GOLD` |
 | `src/game/equivalence.test.ts` | 3 | 500 bot seeds and 200 chaos seeds (random valid and invalid commands) reproduce, command for command, the results, events and final states recorded with the pre-refactor engine (`src/game/__fixtures__/`) |
 | `src/world/shopZone.test.ts` | 3 | the village has one shop zone per engine ware plus an exit; `shopPrompt` is enabled exactly when the engine lists the buy (and the buy then spends the gold), and disabled with the reason otherwise (gold, ware sold elsewhere, spent well, not a shop, run over, devil speaking) |
 | `src/world/scene.test.ts` | 9 | SceneDef validation (bounds inside size, spawn inside bounds, finite numbers, unique ids, reachable zones, shop zones need an `item`), the village as the default scene, stall and cottage placeholders, the y-sort depth (`footY`, `actorDepth`, overlay above all), `clampToBounds`, zone enter/leave once each (none for the spawn zone), art precedence (private file > URL/key > placeholder), the placeholder tile grid and canopies |
@@ -519,7 +533,7 @@ In test builds, `VITE_DEVIL_URL` only sets the default URL shown in the Devil la
 | `src/game/engine.test.ts` | 11 | `step` purity (deep-frozen input), legal-actions property, act 1 opening on the village, campfire rest xor train (and the attack cap), the devil round trip, GameState JSON save and restore mid-run, devil-stage events, `Session.onSync`, `view` |
 | `tools/encrypted-assets.test.ts` | 10 | encrypted art: key parsing (hex, base64, bad keys without echoing them), round trip, wrong key, any tampered byte, swapped paths (AAD), the manifest skipping unchanged files and re-encrypting on change or new key, `assets:check` errors, the plugin a no-op without a key and falling back on a wrong one, the dev middleware serving decrypted bytes with the right content type (a public file wins), a build emitting the files with the key nowhere in the output |
 
-Not covered by tests: the DOM UI rendering, the console, REPL text mode, combat numbers, shop numbers, balance (the REPL `--json` shape is covered by the contract test).
+Not covered by tests: the DOM UI rendering, the console, REPL text mode, combat numbers, balance beyond the gold guard in `economy.test.ts` (the REPL `--json` shape is covered by the contract test).
 
 ---
 
@@ -552,6 +566,8 @@ What each change did (same script, `simulate(500)`, seeds `sim-0 ... sim-499`):
 | + deal nodes a third as likely (4 Oct) | **281 (56.2%)** | **45 (9.0%)** | 174 (34.8%) | 65.4 |
 
 Starting at the shop instead of a random good node costs the bot a little; training is the big swing (+1 attack per fire compounds through every later fight and both late bosses). The map width changes mostly reshuffle which nodes the bot (which always takes exit 1, the leftmost lane) walks through, close to seed noise. The devil-anywhere rules alone are noise for this bot (it alternates accepting and refusing unsteered deals wherever it meets them). **The jump comes from the map:** two in three former deal nodes are now a village, campfire or well, and for this bot those are worth far more than an unsteered deal (the 4 Oct balance report found that skipping deal nodes already raised its win rate by 7 points). If the target for a plain player is about 50% clean wins, this round overshoots for the bot; the levers are in that report (bosses, gold, blade price). The strategy variants measured on an older `main` (refuse every deal: win 34 / lose 275 / hell 191; accept every deal: win 70 / lose 221 / hell 209) have not been re-run; on the 4 Oct build before this round the balance report measured accept-all at 32.8% wins against 33.9% for ignoring deals (more runs finish, but as hell), so "taking the stub's deals helps" no longer holds.
+
+**Gold economy pass (4 Oct, after the devil's opener and the one-choice well):** the bot was at 46.9 / 39.9 / 13.2 (win / hell / lose, `sim-0..999`) and ended runs with a median 30 unspent gold. Income cut by about 40% (kills, bosses, the devil's gold), the blade down to 12g, the act-3 boss nearly broke: now 43.8 / 39.8 / 16.4 with a median 10 left. Numbers by source and the human-like policy are in 5.3; the knobs are in `src/game/economy.ts`.
 
 Caveats: this is one bot and one stub devil. The Gemini devil will change everything about deals. All combat and shop numbers are first guesses, and the bot's 70% training rule is a sensible default, not a tuned one.
 

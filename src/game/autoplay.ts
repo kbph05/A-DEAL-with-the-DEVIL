@@ -1,7 +1,7 @@
 /** Headless automated play: runs a policy against the engine. Works in Node tests and in the browser console. */
 import type { Devil } from "./devil";
 import type { Ending, GameEvent, Result } from "./events";
-import { MAX_ASKS, type Command } from "./gameState";
+import { MAX_ASKS, WARES, type Command } from "./gameState";
 import { createGame, type Game, type Observation } from "./run";
 import { STAT_RANGE } from "./state";
 
@@ -51,13 +51,13 @@ export const botPolicy: Policy = (o) => {
       if (canAsk && o.state.attack >= STAT_RANGE.attack[1] && hp >= 0.9 * maxHp) return { cmd: "deal" };
       return { cmd: hp >= 0.7 * maxHp && o.state.attack < STAT_RANGE.attack[1] ? "train" : "rest" };
     case "village":
-      if (hp <= maxHp - 12 && gold >= 10) return { cmd: "buy", item: "heal" };
-      if (gold >= 15) return { cmd: "buy", item: "blade" };
+      if (hp <= maxHp - 12 && gold >= WARES.heal.cost) return { cmd: "buy", item: "heal" };
+      if (gold >= WARES.blade.cost) return { cmd: "buy", item: "blade" };
       break;
     case "well":
       // One choice per well: the devil if he sits there and will listen, else the blessing (never both: ONE_CHOICE).
       if (canAsk) return { cmd: "deal" };
-      if (!o.resolved && (!o.devilPresent || o.asksLeft === MAX_ASKS) && gold >= 8) return { cmd: "buy", item: "blessing" };
+      if (!o.resolved && (!o.devilPresent || o.asksLeft === MAX_ASKS) && gold >= WARES.blessing.cost) return { cmd: "buy", item: "blessing" };
       break;
     case "deal":
       if (canAsk) return { cmd: "deal" };

@@ -4,7 +4,7 @@ import { botPolicy, createGame, execute, type MapView, type Observation } from "
 import { ACTS, generateAct, type Act, type MapNode } from "../map";
 import { dagModel, type Dag } from "../ui/logic";
 import { ICONS, ICON_SIZE, privateIconFile, privateIcons } from "./icons";
-import { crossings, focusY, LAYOUT, layoutMap, MAP_WIDTH, segmentsCross, type MapLayout } from "./layout";
+import { bandCenter, clampCenter, coveredTop, crossings, focusY, LAYOUT, layoutMap, legendBeside, legendShown, MAP_WIDTH, mapZoom, segmentsCross, type MapLayout } from "./layout";
 
 /** The engine's MapView for an act, standing on `here` (as src/game/view.ts builds it). */
 function mapViewOf(a: Act, here: string): MapView {
@@ -102,4 +102,46 @@ test("icons: every kind has a 16×16 grid using only its palette; the private ho
   for (const k of ["campfire", "fight", "deal", "well", "village", "boss", "final", "stairs", "rewritten"] as const) assert.ok(k in ICONS);
   assert.deepEqual(privateIcons(["map/well.png", "map/boss.png", "player-idle.png", "map/here.png"]), ["well", "boss"]);
   assert.equal(privateIconFile("campfire"), "map/campfire.png");
+});
+
+// ---- camera and legend ----
+
+test("legend: collapsed by default on phones and tablets in portrait, open on laptops and desktops", () => {
+  assert.equal(legendShown(390, 844), false, "phone, portrait");
+  assert.equal(legendShown(360, 640), false, "small phone");
+  assert.equal(legendShown(844, 390), true, "phone, landscape: the parchment is a thin strip, so the legend fits beside it");
+  assert.equal(legendShown(768, 1024), false, "tablet, portrait");
+  assert.equal(legendShown(1366, 768), true, "laptop");
+  assert.equal(legendShown(1920, 1080), true, "desktop");
+  assert.equal(legendShown(1024, 768), true, "landscape tablet");
+});
+
+test("legend: the player's own toggle wins over the screen, and the default is the 'beside' rule", () => {
+  assert.equal(legendShown(390, 844, true), true);
+  assert.equal(legendShown(1366, 768, false), false);
+  for (const [w, h] of [[390, 844], [1366, 768], [768, 1024], [1920, 1080]]) assert.equal(legendShown(w, h), legendBeside(w, h));
+  assert.equal(mapZoom(390, 844) > 1 && mapZoom(390, 844) < 1.1, true);
+});
+
+test("coveredTop: only overlays over the parchment's top half count", () => {
+  const span = { left: 6, right: 384 }; // a phone: the parchment fills the width
+  const stats = { left: 8, right: 308, top: 8, bottom: 121 };
+  assert.equal(coveredTop([stats], span, 844), 129);
+  assert.equal(coveredTop([], span, 844), 0);
+  assert.equal(coveredTop([stats, { left: 80, right: 310, top: 130, bottom: 164 }], span, 844), 172, "the lowest wins");
+  assert.equal(coveredTop([{ left: 8, right: 348, top: 8, bottom: 173 }], { left: 417, right: 948 }, 768), 0, "a laptop's stats strip sits beside the parchment");
+  assert.equal(coveredTop([{ left: 80, right: 310, top: 700, bottom: 740 }], span, 844), 0, "a bottom overlay is ignored");
+});
+
+test("clampCenter: the camera may go past the top by the inset (and no further), and still stops at the bottom", () => {
+  const worldH = 1400, viewH = 844, zoom = 1, half = 422;
+  assert.equal(clampCenter(0, worldH, viewH, zoom), half, "no inset: the top of the parchment is the top of the screen");
+  assert.equal(clampCenter(0, worldH, viewH, zoom, 130), half - 130, "130 px of HUD: the top row can sit below it");
+  assert.equal(clampCenter(99999, worldH, viewH, zoom, 130), worldH - half, "the bottom is unchanged");
+  assert.equal(clampCenter(700, worldH, viewH, zoom, 130), 700, "in range: untouched");
+  // A parchment that fits is centred below the inset.
+  const small = clampCenter(0, 500, 844, 1, 130);
+  assert.equal(small, (500 - 130) / 2);
+  assert.equal(bandCenter(600, 1, 130), 535);
+  assert.equal(bandCenter(600, 2, 130), 600 - 32.5);
 });

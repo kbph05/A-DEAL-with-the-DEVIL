@@ -9,9 +9,10 @@
  * tooltip, and the hint line that shows why nothing can be clicked (the devil is speaking, a fight is on).
  */
 import Phaser from "phaser";
+import { destroyGame } from "../destroyGame";
 import type { MapView, View } from "../game";
 import { dagModel, type Dag, type DagNode } from "../ui/logic";
-import { layoutMap, type LaidNode, type MapLayout } from "./layout";
+import { layoutMap, type Cover, type LaidNode, type MapLayout } from "./layout";
 import { MapScene } from "./MapScene";
 import "./mapscene.css";
 
@@ -27,6 +28,12 @@ export interface MountMapOptions {
   view: View;
   /** The UI is waiting on something of its own (e.g. a network devil): lock the map as "The devil considers…". */
   busy?: boolean;
+  /**
+   * Elements drawn over the map that should not hide its topmost nodes, e.g. `() => [hud.querySelector(".hud-stats")]`.
+   * Called on every layout: the camera may scroll the top of the parchment down clear of the ones that cover it (those over
+   * the parchment's top half; a strip beside it on a wide screen does not count). Hidden elements are ignored.
+   */
+  overlays?: () => Array<Element | null | undefined>;
 }
 
 export interface MapDebug {
@@ -36,7 +43,12 @@ export interface MapDebug {
   screenOf(id: string): { x: number; y: number } | null;
   zoom: number;
   centerY: number;
+  /** No room beside the parchment: the legend is a card over the map's corner, behind the "Legend" button. */
   legendOnMap: boolean;
+  /** Is the legend showing right now? */
+  legendOpen: boolean;
+  /** px at the top of the map kept clear of `overlays`. */
+  inset: number;
   /** Icons replaced by private art. */
   privateArt: string[];
 }
@@ -74,7 +86,13 @@ export function mountMap(parent: HTMLElement, options: MountMapOptions): MapHand
   const tip = h("div", "mapscene-tip");
   tip.setAttribute("aria-hidden", "true");
   tip.hidden = true;
-  el.append(host, nav, hint, tip);
+  // The legend is drawn by the scene; this button shows or hides it (collapsed on narrow screens, open on wide ones).
+  const legendBtn = h("button", "mapscene-legend-btn", "Legend");
+  legendBtn.type = "button";
+  legendBtn.append(h("span", "chev", "▾"));
+  legendBtn.setAttribute("aria-expanded", "false");
+  legendBtn.onclick = () => scene.toggleLegend();
+  el.append(host, nav, hint, tip, legendBtn);
   parent.append(el);
 
   let dag: Dag, layout: MapLayout;
@@ -98,7 +116,19 @@ export function mountMap(parent: HTMLElement, options: MountMapOptions): MapHand
     toast(n.state === "next" ? n.disabled ?? n.label : n.label);
   };
 
+  const covers = (): Cover[] => {
+    const base = host.getBoundingClientRect();
+    return (options.overlays?.() ?? []).flatMap((o) => {
+      const r = o?.getBoundingClientRect();
+      return r && r.width > 0 && r.height > 0 ? [{ left: r.left - base.left, right: r.right - base.left, top: r.top - base.top, bottom: r.bottom - base.top }] : [];
+    });
+  };
   const scene = new MapScene({
+    covers,
+    onLegend(open) {
+      legendBtn.setAttribute("aria-expanded", String(open));
+      legendBtn.classList.toggle("open", open);
+    },
     onTap: (n: LaidNode) => choose(n.node),
     onHover(n, x, y) {
       if (!n) { tip.hidden = true; return; }
@@ -121,6 +151,18 @@ export function mountMap(parent: HTMLElement, options: MountMapOptions): MapHand
     scale: { mode: Phaser.Scale.RESIZE, width: host.clientWidth || 360, height: host.clientHeight || 640 },
     scene: [scene],
   });
+  // RESIZE mode alone can miss a phone turning: Phaser refreshes on the orientation event before it has read the parent's
+  // new size, then its resize poll sees no change, and the map stays laid out for the old shape (half off screen, the
+  // next nodes out of reach). Refresh again once the container has its new size, as runForestFight does.
+  let pending = 0;
+  const watch = new ResizeObserver(() => {
+    cancelAnimationFrame(pending);
+    pending = requestAnimationFrame(() => {
+      const b = host.getBoundingClientRect();
+      if (b.width > 0 && b.height > 0 && (Math.round(b.width) !== game.scale.width || Math.round(b.height) !== game.scale.height)) { game.scale.getParentBounds(); game.scale.refresh(); }
+    });
+  });
+  watch.observe(host);
 
   /** The accessible list: one button per next node (disabled ones stay focusable and say why), roving tabindex. */
   function renderList() {
@@ -180,7 +222,9 @@ export function mountMap(parent: HTMLElement, options: MountMapOptions): MapHand
       if (destroyed) return;
       destroyed = true;
       clearTimeout(toastTimer);
-      game.destroy(true);
+      cancelAnimationFrame(pending);
+      watch.disconnect();
+      destroyGame(game);
       el.remove();
     },
     debug: () => ({ dag, layout, screenOf: (nid) => scene.screenOf(nid), ...scene.view, privateArt: [...scene.privateArt] }),

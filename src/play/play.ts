@@ -5,18 +5,17 @@
  * goes through the one shared `Session`; what is on screen is derived from `flow(view, local)` (flow.ts) on each render.
  */
 import "./play.css";
-import { HttpDevil, ONE_CHOICE, describe, execute, setDevil, type Command, type GameEvent, type View } from "../game";
+import { HttpDevil, ONE_CHOICE, execute, setDevil, type Command, type GameEvent, type View } from "../game";
 import { createSession } from "../game/session";
 import { runForestFight } from "../fight";
 import { mountHud } from "../hud/hud";
 import { hudModel } from "../hud/model";
 import { mountMap, type MapHandle } from "../mapscene";
 import { paintIcon, type IconKey } from "../mapscene/icons";
-import { effectChips, curseText, lastStrike, outcomeEvents, questionsText } from "../ui/logic";
+import { effectChips, curseText, eventText, kindLookup, lastStrike, outcomeEvents, questionsText, restHint, rewriteText } from "../ui/logic";
 import { mountScene, sceneById, type SceneHandle, type SceneZone } from "../world";
 import { shopPrompt } from "../world/shopZone";
-import { mountDealer } from "./dealer";
-import { CLOSE_DEVIL, LOCAL, OPEN_DEVIL, arrived, flow, setLocal, wantsOpener, type Flow, type Local } from "./flow";
+import { CLOSE_DEVIL, LOCAL, OPEN_DEVIL, arrived, flow, setLocal, wantsOpener, wellChoice, wishToSend, type Flow, type Local } from "./flow";
 
 const params = new URLSearchParams(location.search);
 const TEST = import.meta.env.MODE === "test";
@@ -37,6 +36,7 @@ function h<K extends keyof HTMLElementTagNameMap>(tag: K, cls?: string, text?: s
   if (text !== undefined) e.textContent = text;
   return e;
 }
+const capital = (t: string): string => t.charAt(0).toUpperCase() + t.slice(1);
 function button(text: string, onClick: () => void, cls = "", sub?: string): HTMLButtonElement {
   const b = h("button", cls);
   b.type = "button";
@@ -62,10 +62,19 @@ mapLayer.hidden = true;
 root.append(sceneLayer, mapLayer);
 const session = createSession(params.get("seed") ?? undefined);
 const hud = mountHud(root, { onUseItem: (item) => { if (item.command) void send(item.command); } });
+// Portrait puts the map title and the toast under the HUD's stats, which grow with the devil's line and curse chips:
+// keep --hud-bottom (play.css) on the stats' real bottom edge. A hidden HUD (during a fight) keeps the last value.
+const hudStats = hud.el.querySelector<HTMLElement>(".hud-stats");
+if (hudStats) new ResizeObserver(() => {
+  const b = hudStats.getBoundingClientRect();
+  if (b.height > 0) root.style.setProperty("--hud-bottom", `${Math.round(b.bottom)}px`);
+}).observe(hudStats);
 const mapBtn = button("Map", () => toggleMap(true), "play-mapbtn");
 mapBtn.append(h("span", "key", " (M)"));
 mapBtn.setAttribute("aria-keyshortcuts", "M");
-const mapClose = button("Close map", () => toggleMap(false), "play-mapclose quiet");
+const mapClose = button("Close", () => toggleMap(false), "play-mapclose quiet");
+mapClose.append(h("span", "key", " map")); // portrait hides " map" so the button clears the HUD stats
+mapClose.setAttribute("aria-label", "Close map");
 const mapTitle = h("div", "play-maptitle", "Choose where to go next");
 const prompt = h("div", "play-prompt");
 const panel = h("div", "play-layer play-dim");
@@ -75,9 +84,6 @@ const devil = h("div", "play-layer play-devil");
 devil.setAttribute("role", "dialog");
 devil.setAttribute("aria-modal", "true");
 devil.setAttribute("aria-label", "The devil");
-const dealer = mountDealer(devil); // decorative: the devil behind his table (dealer.ts)
-const seat = h("div", "play-seat"); // the dialogue, offer and buttons, "on the table" below him
-devil.append(seat);
 const ending = h("div", "play-layer play-ending");
 const toast = h("div", "play-toast");
 toast.setAttribute("role", "status");
@@ -102,7 +108,8 @@ function patch(p: Partial<Local>): void { local = setLocal(local, session.game()
 function say(events: GameEvent[]): void {
   // The devil's own words are in his overlay; the toast carries everything else (and a lone rejection).
   const shown = outcomeEvents(events).filter((e) => e.type !== "deal_offered" && e.type !== "devil_struck" && (e.type !== "rejected" || events.length === 1));
-  const text = shown.map(describe).filter(Boolean).join(" ");
+  const kindOf = kindLookup(session.game().view().map);
+  const text = shown.map((e) => eventText(e, kindOf)).filter(Boolean).join(" ");
   if (!text) return;
   toast.textContent = text;
   toast.hidden = false;
@@ -175,12 +182,14 @@ function renderMap(v: View, f: Flow): void {
   mapLayer.hidden = !show;
   if (!show) { map?.destroy(); map = null; return; }
   if (map) map.update(v.map, v, local.busy !== null);
-  else map = mountMap(mapLayer, { onGo: go, map: v.map, view: v, busy: local.busy !== null });
+  else map = mountMap(mapLayer, { onGo: go, map: v.map, view: v, busy: local.busy !== null, overlays: () => [hud.el.querySelector(".hud-stats"), mapTitle] });
 }
 
 // ---- the scene under it all --------------------------------------------------------------------------------------
 function renderScene(v: View, f: Flow): void {
-  const key = f.screen === "village" ? `village:${v.nodeId}` : f.screen === "fight" ? `fight:${v.nodeId}` : `backdrop:${v.kind}:${v.nodeId}`;
+  // The village is laid out for the screen's shape when it mounts (worldLayout), then only scaled, so it is mounted
+  // afresh when a phone turns (see the resize listener below); you start again on the village square.
+  const key = f.screen === "village" ? `village:${v.nodeId}:${shape()}` : f.screen === "fight" ? `fight:${v.nodeId}` : `backdrop:${v.kind}:${v.nodeId}`;
   if (mounted?.key === key) return;
   if (f.screen === "fight" && local.busy === "fight") return; // the fight owns the stage
   mounted?.destroy(); world = null; zone = null;
@@ -235,22 +244,24 @@ function renderPanel(v: View, f: Flow): void {
     title.append(icon("campfire"), "A campfire");
     card.append(title, h("p", "lead", "One choice, then the night moves on."));
     const can = (p: string) => f.prompts.includes(p as never);
-    const rest = button("Rest", () => void send({ cmd: "rest" }), "", `Heal ${Math.ceil(v.state.maxHp * 0.4)} HP`);
+    const rest = button("Rest", () => void send({ cmd: "rest" }), "", restHint(v.state.hp, v.state.maxHp));
     const train = button("Sharpen Weapon", () => void send({ cmd: "train" }), "", "+1 attack, for the rest of the run");
     const deal = button("Deal", () => patch(OPEN_DEVIL), "", "Talk to the devil by the fire");
     rest.disabled = !can("rest"); train.disabled = !can("train"); deal.disabled = !can("deal");
     list.append(rest, train, deal);
   } else if (f.screen === "well") {
     title.append(icon("well"), "A well");
-    card.append(title, h("p", "lead", v.devilPresent ? "Someone sits on the rim of the well, smiling." : "Cold water, and an old coin slot."));
+    const chose = wellChoice(log); // the blessing, or the devil's offer accepted or refused (then he has left)
+    card.append(title, h("p", "lead", v.devilPresent && chose !== "devil" ? "Someone sits on the rim of the well, smiling." : "Cold water, and an old coin slot."));
     const p = shopPrompt({ id: "well", kind: "shop", item: "blessing", label: "Well", x: 0, y: 0, w: 1, h: 1 }, v);
-    const buy = button(`Buy a blessing (${p.price}g)`, () => { if (p.command) void send(p.command); }, "", p.enabled ? p.desc : p.reason);
+    const locked = chose === "devil" && v.resolved ? capital(ONE_CHOICE.well.devil) : p.reason; // his offer accepted, not the blessing
+    const buy = button(`Buy a blessing (${p.price}g)`, () => { if (p.command) void send(p.command); }, "", p.enabled ? p.desc : locked);
     buy.disabled = !p.enabled;
     list.append(buy);
     if (f.prompts.includes("deal")) list.append(button("Deal", () => patch(OPEN_DEVIL), "", "Talk to the devil at the well"));
     else if (v.devilPresent) { // one choice per well: say why the devil is closed
-      const why = v.resolved ? ONE_CHOICE.well.spent : v.questionsLeft <= 0 ? "the devil has heard enough from you this run" : "the devil has gone";
-      const deal = button("Deal", () => undefined, "", why.charAt(0).toUpperCase() + why.slice(1));
+      const why = chose === "devil" ? "the devil has gone" : v.resolved ? ONE_CHOICE.well.spent : v.questionsLeft <= 0 ? "the devil has heard enough from you this run" : "the devil has gone";
+      const deal = button("Deal", () => undefined, "", capital(why));
       deal.disabled = true;
       list.append(deal);
     }
@@ -267,8 +278,7 @@ function renderPanel(v: View, f: Flow): void {
 
 function renderDevil(v: View, f: Flow): void {
   devil.hidden = !f.devil;
-  if (!f.devil) { dealer.stop(); return; }
-  dealer.start();
+  if (!f.devil) return;
   const active = document.activeElement;
   const typing = active instanceof HTMLInputElement && devil.contains(active);
   if (typing && local.busy === null && devil.dataset.key === JSON.stringify([v.nodeId, v.asksLeft, v.questionsLeft, !!v.offer])) return;
@@ -285,7 +295,7 @@ function renderDevil(v: View, f: Flow): void {
     const chips = h("div", "chips");
     for (const c of effectChips(v.offer.effects)) chips.append(h("span", `chip ${c.tone}`, c.text));
     if (v.offer.curse) chips.append(h("span", "chip bad", `Curse, ${curseText(v.offer.curse)}`));
-    if (v.offer.rewrite) chips.append(h("span", "chip bad", `Rewrites ${v.offer.rewrite.nodeId} into a ${v.offer.rewrite.to}`));
+    if (v.offer.rewrite) chips.append(h("span", "chip bad", `Rewrites the road: ${rewriteText(v.offer.rewrite, kindLookup(v.map))}`));
     card.append(chips);
   }
   card.append(h("p", "count", `${questionsText(v.questionsLeft)} · asks left here: ${v.asksLeft}`));
@@ -299,7 +309,13 @@ function renderDevil(v: View, f: Flow): void {
     ask.type = "submit";
     ask.disabled = busy;
     input.disabled = busy;
-    form.onsubmit = (e) => { e.preventDefault(); const text = wish.trim(); wish = ""; void send({ cmd: "deal", text }); };
+    form.onsubmit = (e) => {
+      e.preventDefault();
+      const text = wishToSend(wish, v.opening);
+      if (text === null) { input.focus(); return; } // an empty wish would cost a question for nothing
+      wish = "";
+      void send({ cmd: "deal", text });
+    };
     form.append(input, ask);
     card.append(form);
   }
@@ -307,7 +323,7 @@ function renderDevil(v: View, f: Flow): void {
   if (v.offer && !busy) row.append(button("Accept", () => void send({ cmd: "accept" })), button("Refuse", () => void send({ cmd: "refuse" }), "quiet"));
   if (!v.offer && !busy) row.append(button("Walk away", () => patch(CLOSE_DEVIL), "quiet"));
   card.append(row);
-  seat.replaceChildren(card);
+  devil.replaceChildren(card);
   // Focus the wish box with a keyboard; on a touch screen that would pop the on-screen keyboard over the offer.
   const coarse = window.matchMedia?.("(pointer: coarse)").matches === true;
   (devil.querySelector<HTMLElement>(coarse ? "button:not(:disabled)" : "input:not(:disabled)") ?? devil.querySelector<HTMLElement>("button:not(:disabled)"))?.focus();
@@ -328,6 +344,7 @@ function render(): void {
   const v = session.game().view();
   const f = flow(v, local);
   current = f;
+  mapTitle.hidden = f.map !== "forced"; // before renderMap: the map keeps its top nodes clear of the title as well as the HUD
   renderScene(v, f);
   renderMap(v, f);
   hud.el.hidden = f.screen === "fight" && local.busy === "fight";
@@ -348,6 +365,11 @@ function render(): void {
     queueMicrotask(() => void fight());
   }
 }
+
+// A phone turned in the village kept a thin portrait strip in the middle of a landscape screen (or the reverse).
+function shape(): "wide" | "tall" { return innerWidth >= innerHeight ? "wide" : "tall"; }
+let lastShape = shape();
+window.addEventListener("resize", () => { if (shape() !== lastShape) { lastShape = shape(); render(); } });
 
 // ---- keys ----------------------------------------------------------------------------------------------------------
 window.addEventListener("keydown", (e) => {

@@ -147,3 +147,49 @@ export function focusY(layout: MapLayout): number {
   if (!next.length) return cur.y;
   return (cur.y + next.reduce((s, n) => s + n.y, 0) / next.length) / 2;
 }
+
+// ---- the camera and the legend: pure, so tests can pin them down --------------------------------------------------
+
+/** Zoom that fits the parchment's width to the screen (with a little table showing), capped so icons stay sensible. */
+export function mapZoom(width: number, height: number): number {
+  return Math.max(0.5, Math.min((width - 12) / MAP_WIDTH, height / 520, 2.4));
+}
+
+/** Screen room (px) the legend needs on one side of the parchment to sit beside it. */
+export const LEGEND_SIDE_W = 190;
+
+/** Is there room for the legend beside the parchment? Wide screens yes (laptops, landscape tablets), phones no. */
+export const legendBeside = (width: number, height: number): boolean => (width - MAP_WIDTH * mapZoom(width, height)) / 2 >= LEGEND_SIDE_W;
+
+/**
+ * Is the legend showing? `choice` is the player's own toggle (null until they use it). Otherwise it follows the screen:
+ * open where it fits beside the parchment, collapsed (a small "Legend" button) on narrow screens, where it would cover the map.
+ */
+export const legendShown = (width: number, height: number, choice: boolean | null = null): boolean => choice ?? legendBeside(width, height);
+
+/** Screen rectangle (px, from the map's top-left) of something drawn over the map, such as the HUD's stats strip. */
+export interface Cover { left: number; right: number; top: number; bottom: number }
+
+/**
+ * How many px from the top of the map are covered by overlays that sit over the parchment (`span` is its left and right
+ * edge on screen), plus `gap`. Only overlays in the top half of the map and overlapping the parchment horizontally count, so a
+ * stats strip that sits beside a centred strip on a laptop adds nothing, and a prompt at the bottom is ignored.
+ */
+export function coveredTop(covers: readonly Cover[], span: { left: number; right: number }, mapHeight: number, gap = 8): number {
+  let px = 0;
+  for (const c of covers) if (c.top < mapHeight / 2 && c.right > span.left && c.left < span.right && c.bottom > 0) px = Math.max(px, c.bottom + gap);
+  return px;
+}
+
+/**
+ * Where the camera may centre (world y). Normally the view stays inside the parchment, but `inset` px at the top of the
+ * screen are covered by the HUD, so the camera may go that far past the top edge: the topmost nodes can be scrolled down
+ * clear of it. When the whole parchment fits, it is centred in the part of the screen below the inset.
+ */
+export function clampCenter(y: number, worldH: number, viewH: number, zoom: number, inset = 0): number {
+  const half = viewH / (2 * zoom), lo = half - inset / zoom, hi = worldH - half;
+  return lo >= hi ? (lo + hi) / 2 : Math.min(hi, Math.max(lo, y));
+}
+
+/** The camera centre that puts world `y` in the middle of the visible band below the inset (not of the whole screen). */
+export const bandCenter = (y: number, zoom: number, inset = 0): number => y - inset / (2 * zoom);

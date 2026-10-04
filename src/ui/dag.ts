@@ -5,6 +5,8 @@ import { h } from "./dom";
 
 const ICON: Record<DagKind, string> = { campfire: "🔥", village: "🏘", well: "⛲", deal: "😈", fight: "⚔", boss: "👹", final: "🚪", stairs: "🪜" };
 const SVG = "http://www.w3.org/2000/svg";
+/** Show node ids under the boxes: test builds only (`npm run dev`); the final build shows the kind alone. */
+const SHOW_IDS = import.meta.env.MODE === "test";
 
 export interface DagView { el: HTMLElement; update(m: Dag): void }
 
@@ -23,8 +25,9 @@ export function mountDag(send: (c: Command) => void): DagView {
     const kids: Array<Node | string> = [
       h("span", { class: "ico", aria: { hidden: "true" }, text: ICON[n.kind] }),
       h("span", { class: "kind", text: dagWord(n.kind) }),
-      h("small", { class: "id", text: n.kind === "stairs" ? "next act" : n.id }),
     ];
+    // Node ids ("a0n12") mean nothing to a player: test builds keep them, for reading console transcripts against the map.
+    if (n.kind === "stairs" || SHOW_IDS) kids.push(h("small", { class: "id", text: n.kind === "stairs" ? "next act" : n.id }));
     if (n.rewritten) kids.push(h("span", { class: "star", aria: { hidden: "true" }, text: "★" }));
     if (n.state === "current") kids.unshift(h("span", { class: "here", aria: { hidden: "true" }, text: "▼ YOU ARE HERE" }));
     const cls = `node ${n.kind} ${n.state}${n.rewritten ? " rewritten" : ""}`;

@@ -8,7 +8,7 @@
  */
 import type { Rect, SceneDef } from "../world/scene";
 import type { Encounter } from "./encounters";
-import type { Circle, Vec } from "./logic";
+import { clampToRect, type Circle, type Vec } from "./logic";
 import type { SimEnemySpawn, SimWorld } from "./sim";
 
 /**
@@ -49,16 +49,37 @@ export function packSizes(n: number): number[] {
   return [first, n - first];
 }
 
+/**
+ * How far the placeholder canopy rows reach into the bounds, world pixels (`overlayCanopies`: radius 26, centred 8 px
+ * outside the top and bottom edges). Under them a body is hidden by the leaves.
+ */
+export const CANOPY_REACH = 18;
+/** Kept clear at the top on top of that: about half an archer's height (its sprite is 24 px, feet on the circle). */
+export const BAND_HEAD = 12;
+
+/**
+ * The path band: the readable middle of the path, the bounds less the strips under the canopy rows (and, at the top,
+ * room for an archer's head). Skeleton archers keep to it, so one that backs off from you stays on the path instead of
+ * standing in the tree line. Bounds too short for a band give the bounds. World pixels.
+ */
+export function pathBand(def: SceneDef): Rect {
+  const b = def.bounds;
+  const top = CANOPY_REACH + BAND_HEAD, bottom = CANOPY_REACH;
+  if (b.h - top - bottom < 32) return { ...b };
+  return { x: b.x, y: b.y + top, w: b.w, h: b.h - top - bottom };
+}
+
 /** Where pack members stand around their spawn point, world pixels (the first on the point). Inside PACK_RANGE. */
 export const PACK_OFFSETS: readonly Vec[] = [{ x: 0, y: 0 }, { x: 26, y: -22 }, { x: 26, y: 22 }, { x: 52, y: 0 }, { x: -24, y: 24 }];
 
 /**
  * The sim world for an encounter on a scene: bounds, the player's spawn, the enemies placed in packs on the spawn
- * points (nearest the player first, in the encounter's order: slimes first, archers at the back), the exit as the
- * alarm.
+ * points (nearest the player first, in the encounter's order: slimes first, archers at the back; archers inside the
+ * path band), the exit as the alarm.
  */
 export function forestWorld(def: SceneDef, enc: Encounter): SimWorld {
   const spawns = orderedSpawns(def);
+  const band = toUnits(pathBand(def));
   const sizes = packSizes(enc.enemies.length);
   const slots = spawnSlots(sizes.length, spawns.length);
   const enemies: SimEnemySpawn[] = [];
@@ -68,14 +89,15 @@ export function forestWorld(def: SceneDef, enc: Encounter): SimWorld {
     for (let k = 0; k < size; k++, i++) {
       const e = enc.enemies[i];
       const o = PACK_OFFSETS[k % PACK_OFFSETS.length];
+      const pos = { x: (at.x + o.x) * K, y: (at.y + o.y) * K };
       enemies.push({
         kind: e.id, name: e.name, boss: e.boss, hp: e.hp, maxHp: e.maxHp, power: e.power, params: e.params,
-        pos: { x: (at.x + o.x) * K, y: (at.y + o.y) * K },
+        pos: e.params.behaviour === "archer" ? clampToRect(pos, e.params.radius, band) : pos, // archers start on the path too
       });
     }
   });
   const exit = (def.zones ?? []).find((z) => z.kind === "exit");
-  return { bounds: toUnits(def.bounds), playerSpawn: { x: def.spawn.x * K, y: def.spawn.y * K }, enemies, alarm: exit ? toUnits(exit) : undefined };
+  return { bounds: toUnits(def.bounds), band, playerSpawn: { x: def.spawn.x * K, y: def.spawn.y * K }, enemies, alarm: exit ? toUnits(exit) : undefined };
 }
 
 /** Sim units to world pixels (positions and lengths). */

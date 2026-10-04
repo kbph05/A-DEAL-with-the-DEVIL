@@ -60,6 +60,11 @@ export interface SimWorld {
   obstacles?: Rect[];
   playerSpawn: Vec;
   enemies: SimEnemySpawn[];
+  /**
+   * Skeleton archers are kept inside this rect (the path band, forest.ts `pathBand`) instead of `bounds`, so backing off
+   * never takes them into the tree line. It should lie inside `bounds`. Default: `bounds`.
+   */
+  band?: Rect;
   /** The player's feet in this rect wake every enemy still idle (the exit: you can't slip past them). */
   alarm?: Rect;
   /** An enemy that wakes also wakes the idle ones within this range of it, units. Default PACK_RANGE. */
@@ -85,6 +90,8 @@ export class FightSim {
   readonly obstacles: Rect[];
   /** The rect everyone is kept inside: the arena's room, or the forest path's bounds (sim units). */
   readonly bounds: Rect;
+  /** Where archers are kept: the world's `band` (the forest path's readable middle), else `bounds`. */
+  readonly band: Rect;
   /** True for a `SimWorld` (forest) fight: aggro by range, waking on hit, the alarm and pack waking. */
   readonly forest: boolean;
   readonly alarm: Rect | null;
@@ -111,6 +118,7 @@ export class FightSim {
     let start: Vec;
     if (world) {
       this.bounds = { ...world.bounds };
+      this.band = world.band ? { ...world.band } : this.bounds;
       this.obstacles = (world.obstacles ?? []).map((r) => ({ ...r }));
       this.alarm = world.alarm ? { ...world.alarm } : null;
       start = world.playerSpawn;
@@ -121,6 +129,7 @@ export class FightSim {
       const pool = inp.enemy.boss ? [LAYOUTS[0], LAYOUTS[2]] : LAYOUTS;
       this.obstacles = pool[Math.floor(this.rng() * pool.length)].map((r) => ({ ...r }));
       this.bounds = { x: 0, y: 0, w: ARENA, h: ARENA };
+      this.band = this.bounds;
       this.alarm = null;
       start = PLAYER_SPAWN;
       const kind: EnemyId = inp.enemy.boss ? BOSS_KINDS[enemyTier(inp.enemy.power, true)] : "slime";
@@ -137,7 +146,7 @@ export class FightSim {
       const hp = Math.max(0, Math.round(s.hp));
       return {
         kind: s.kind, name: s.name, boss: s.boss, power: s.power,
-        pos: this.collide({ ...s.pos }, s.params.radius), knock: { x: 0, y: 0 }, radius: s.params.radius,
+        pos: this.collide({ ...s.pos }, s.params.radius, this.rectFor(s.params)), knock: { x: 0, y: 0 }, radius: s.params.radius,
         hp, maxHp: Math.max(hp, Math.round(s.maxHp), 1),
         brain: newBrain(s.params), params: s.params, aim: { x: 0, y: 1 }, lungeLanded: false, hurtMs: 0, stunMs: 0, detour: 0,
         diedAtMs: hp <= 0 ? 0 : null,
@@ -230,7 +239,7 @@ export class FightSim {
       if (e.hp <= 0) continue;
       if (e.stunMs > 0) {
         // Stunned: frozen in place, except for the knockback.
-        e.pos = this.collide({ x: e.pos.x + e.knock.x * dt, y: e.pos.y + e.knock.y * dt }, e.radius);
+        e.pos = this.collide({ x: e.pos.x + e.knock.x * dt, y: e.pos.y + e.knock.y * dt }, e.radius, this.rectFor(e.params));
         e.knock = decay(e.knock, dt);
         continue;
       }
@@ -250,7 +259,7 @@ export class FightSim {
       let v: Vec = { x: 0, y: 0 };
       if (e.brain.mode === "chase") v = this.chaseVelocity(e, gap, dt);
       else if (e.brain.mode === "lunge") v = { x: e.aim.x * e.params.lungeSpeed, y: e.aim.y * e.params.lungeSpeed };
-      e.pos = this.collide({ x: e.pos.x + (v.x + e.knock.x) * dt, y: e.pos.y + (v.y + e.knock.y) * dt }, e.radius);
+      e.pos = this.collide({ x: e.pos.x + (v.x + e.knock.x) * dt, y: e.pos.y + (v.y + e.knock.y) * dt }, e.radius, this.rectFor(e.params));
       e.knock = decay(e.knock, dt);
     }
 
@@ -318,7 +327,7 @@ export class FightSim {
   private steer(e: EnemyBody, want: Vec, speed: number, dt: number): Vec {
     const step = speed * dt;
     const progress = (d: Vec) => {
-      const q = this.collide({ x: e.pos.x + d.x * step, y: e.pos.y + d.y * step }, e.radius);
+      const q = this.collide({ x: e.pos.x + d.x * step, y: e.pos.y + d.y * step }, e.radius, this.rectFor(e.params));
       return ((q.x - e.pos.x) * d.x + (q.y - e.pos.y) * d.y) / step;
     };
     if (progress(want) > 0.9) { e.detour = 0; return { x: want.x * speed, y: want.y * speed }; }
@@ -345,8 +354,8 @@ export class FightSim {
       if (d >= min) continue;
       const n = d > 1e-6 ? norm(sub(b.pos, a.pos)) : { x: 1, y: 0 };
       const push = (min - d) / 2;
-      a.pos = this.collide({ x: a.pos.x - n.x * push, y: a.pos.y - n.y * push }, a.radius);
-      b.pos = this.collide({ x: b.pos.x + n.x * push, y: b.pos.y + n.y * push }, b.radius);
+      a.pos = this.collide({ x: a.pos.x - n.x * push, y: a.pos.y - n.y * push }, a.radius, this.rectFor(a.params));
+      b.pos = this.collide({ x: b.pos.x + n.x * push, y: b.pos.y + n.y * push }, b.radius, this.rectFor(b.params));
     }
   }
 
@@ -388,10 +397,13 @@ export class FightSim {
     if (p.hp <= 0) this.finish(false);
   }
 
-  private collide(pos: Vec, r: number): Vec {
+  /** The rect a body is kept in: the path band for archers, the bounds for everyone else. */
+  private rectFor(params: EnemyParams): Rect { return params.behaviour === "archer" ? this.band : this.bounds; }
+
+  private collide(pos: Vec, r: number, within: Rect = this.bounds): Vec {
     let q = pos;
     for (const rect of this.obstacles) q = pushOutOfRect(q, r, rect);
-    return clampToRect(q, r, this.bounds);
+    return clampToRect(q, r, within);
   }
 
   private finish(won: boolean): void {

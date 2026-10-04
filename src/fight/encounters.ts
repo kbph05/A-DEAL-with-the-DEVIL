@@ -14,6 +14,10 @@
  *   power is the engine enemy's `power` times its damage factor. So the FightResult maps back as is: `enemyHpLeft`
  *   is the sum left, `won` means all of them dropped.
  * - **Bosses:** a boss request is one boss, `miniboss1` in act 1, `miniboss2` in act 2, `final_boss` in the last act.
+ * - **Names:** the engine's enemy is the encounter. Its name is the encounter's `title` ("Cave rat", or "Cave rat and
+ *   its pack" for a group) and labels the group's lead (the band's `lead`, which every group has); the rest of the pack
+ *   keep their roster labels. A boss keeps the engine's boss name. The end-of-fight line (`encounterSummary`) says
+ *   "Cave rat falls." as the engine's `enemy_slain` event does.
  */
 import { hashSeed, mulberry32 } from "../map/rng";
 import { ENEMIES, baseParams, enemyPower, enemyTier, type EnemyId, type EnemyParams } from "./enemies";
@@ -132,7 +136,7 @@ export function splitHp(total: number, weights: readonly number[]): number[] {
 
 export interface EncounterEnemy {
   id: EnemyId;
-  /** Shown above it: the roster label, or the engine's boss name. */
+  /** Shown above it: the engine's enemy name for the boss and the group's lead, the roster label for the rest. */
   name: string;
   boss: boolean;
   hp: number;
@@ -144,6 +148,10 @@ export interface EncounterEnemy {
 }
 
 export interface Encounter {
+  /** The engine enemy's name, as the engine's events say it ("cave rat", "the Gatekeeper"). */
+  foe: string;
+  /** Shown as the fight's heading: the engine name, capitalized, plus " and its pack" for a group. */
+  title: string;
   progress: number;
   /** Index into ENCOUNTER_BANDS (-1 for a boss). */
   band: number;
@@ -162,6 +170,17 @@ export interface EncounterOptions {
   force?: EnemyId;
 }
 
+/** Capitalize the first letter only ("cave rat" -> "Cave rat", "the unlit" -> "The unlit"), as the UI's `capitalize`. */
+const cap = (t: string): string => t.charAt(0).toUpperCase() + t.slice(1);
+
+/** The encounter's heading from the engine's enemy name: "Cave rat", or "Cave rat and its pack" for a group. */
+export const encounterTitle = (foe: string, count: number, boss = false): string =>
+  `${cap(foe)}${!boss && count > 1 ? " and its pack" : ""}`;
+
+/** The end-of-fight line, in the engine's words: "Cave rat falls." (its `enemy_slain`), or "Cave rat still stands." */
+export const encounterSummary = (enc: Pick<Encounter, "foe">, won: boolean): string =>
+  `${cap(enc.foe)} ${won ? "falls" : "still stands"}.`;
+
 /** Who you meet on the path for this request. Pure; seeded by `request.seed`. */
 export function encounterFor(request: ForestRequest, opts: EncounterOptions = {}): Encounter {
   const inp = sanitizeInput(request);
@@ -173,6 +192,7 @@ export function encounterFor(request: ForestRequest, opts: EncounterOptions = {}
   const boss = forcedBoss || (inp.enemy.boss && (opts.force === undefined));
   let ids: EnemyId[];
   let band = -1;
+  let lead: EnemyId | null = null;
   if (boss) ids = [forcedBoss ? opts.force! : bossFor(act, acts)];
   else {
     band = bandAt(progress);
@@ -183,21 +203,24 @@ export function encounterFor(request: ForestRequest, opts: EncounterOptions = {}
     const pool = Object.entries(B.mix) as [EnemyId, number][];
     const W = pool.reduce((a, [, w]) => a + w, 0);
     ids = [B.lead];
+    lead = B.lead;
     for (let i = 1; i < n; i++) {
       let r = rng() * W;
       let pick = pool[pool.length - 1][0];
       for (const [id, w] of pool) { if (r < w) { pick = id; break; } r -= w; }
       ids.push(pick);
     }
-    if (opts.force) ids = ids.map(() => opts.force!);
+    if (opts.force) { ids = ids.map(() => opts.force!); lead = opts.force; }
     ids = ids.map((id, i) => ({ id, i })).sort((a, b) => RANK[a.id] - RANK[b.id] || a.i - b.i).map((x) => x.id);
   }
   const weights = ids.map((id) => ENEMIES[id].hpShare);
   const hps = splitHp(total, weights);
   const maxes = splitHp(inp.enemy.maxHp, weights);
+  const leadAt = lead === null ? -1 : ids.indexOf(lead); // after the sort: the first of the lead's kind
   const enemies = ids.map((id, i): EncounterEnemy => ({
-    id, name: ENEMIES[id].boss && inp.enemy.boss && !opts.force ? inp.enemy.name : ENEMIES[id].label, boss: ENEMIES[id].boss,
+    id, name: ENEMIES[id].boss && inp.enemy.boss && !opts.force ? inp.enemy.name : i === leadAt ? cap(inp.enemy.name) : ENEMIES[id].label, boss: ENEMIES[id].boss,
     hp: hps[i], maxHp: Math.max(hps[i], maxes[i], 1), power: enemyPower(id, inp.enemy.power), params: scaledParams(id, progress),
   }));
-  return { progress, band, act, acts, boss, enemies, totalHp: total, scale };
+  const foe = inp.enemy.name;
+  return { foe, title: encounterTitle(foe, enemies.length, boss), progress, band, act, acts, boss, enemies, totalHp: total, scale };
 }

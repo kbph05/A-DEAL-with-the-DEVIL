@@ -6,6 +6,7 @@ import { StubDevil } from "./devil";
 import { initialState } from "./gameState";
 import { restoreGame, type Game } from "./run";
 import { newPlayer } from "./state";
+import { MAX_DEAL_GOLD } from "./economy";
 
 test("sanitizeDeal clamps numbers and ignores unknown keys", () => {
   const d = sanitizeDeal({
@@ -15,7 +16,7 @@ test("sanitizeDeal clamps numbers and ignores unknown keys", () => {
     rewrite: { nodeId: "a0n3", to: "village" },
   });
   assert.equal(d.dialogue, "Sign here.");
-  assert.deepEqual(d.effects, { gold: 100, hp: -25, soul: -1, attack: 3 });
+  assert.deepEqual(d.effects, { gold: MAX_DEAL_GOLD, hp: -25, soul: -1, attack: 3 }, "gold gains stop at MAX_DEAL_GOLD");
   assert.deepEqual(d.curse, { trigger: "on_hit", effect: { hp: -25 } });
   assert.deepEqual(d.rewrite, { nodeId: "a0n3", to: "village" });
 });

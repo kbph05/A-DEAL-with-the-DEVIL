@@ -39,11 +39,6 @@ Each node kind has a screen:
 
 **The devil's opening offer:** when the devil appears (a deal node, a well where he sits, or Deal at a campfire) the page asks for his opener at once (`wantsOpener` in `flow.ts`, from the engine's `opening`), so his overlay opens with an offer tailored to your state. It is free; accept it, refuse it, or type a wish to counter (that counts as a question). At a well, refusing it sends him away and the blessing is still yours to buy.
 
-**The devil's dealer** (kbph, 4 Oct: "a devil png (which will look like a shadow character, dark and mysterious) should be taking up some of the scene, sitting like a dealer at a casino"). The overlay shows him behind his table, filling whatever space the card leaves above it (about the top 55 to 60% on a 1366×768 screen; smaller and stacked above the card on a 390×844 phone). The card (his words, the offer, the buttons) sits on the green felt below him; a dark-wood rim runs across the screen at his table line and a wood edge along the bottom. He is decorative (`aria-hidden`, never focusable); focus goes to the card as before.
-
-- **Placeholder** (`src/play/dealer.ts`): a 160×120 pixel-art shadow figure painted in code each frame (scaled up, pixelated): a near-black silhouette with a soft red edge glow, short horns, two slanted ember eyes that blink every 4.1 s, head and shoulders that rise a pixel with each 3.2 s breath, forearms on the felt, two cards and a sealed contract in front of him. It animates only while the overlay is open and holds still under `prefers-reduced-motion`. The pose math (`dealerPose`) and the art lookup (`dealerSource`) are tested in `src/play/dealer.test.ts`.
-- **Real art:** put `public/assets/private/devil/dealer.png` there (or an encrypted asset of that name, served at `/assets/private/devil/dealer.png`); it replaces the placeholder automatically (a failed load falls back to it). Expected: **4:3, e.g. 640×480 or 1024×768**, transparent above the table, the figure centred, head and shoulders with his forearms resting on the table; the **table's far edge (rim) at 70% of the height** (y = 336 of 480), felt below it to the bottom edge, nothing below the frame (no feet). It is scaled to the box's full height and bottom-centred: `contain` in landscape, `cover` in portrait (the sides are cropped on a phone, so keep him within the middle 60% of the width). The page's CSS continues the rim (`#3a1d0d`) and felt (`#0e2a1a`) across the screen, so match those colours at the image's edges.
-
 **The devil's overlay** is the same at deal nodes, campfires and wells. It is a dark full-screen panel with:
 
 - the devil's line: his offer's dialogue, his strike if he lashed out, "Well? Name your wish.", or "I have heard enough from you this run.";
@@ -88,7 +83,7 @@ A property test plays 150 random legal runs on the real engine. At every state i
 | `flow.ts` | The controller. Pure. |
 | `flow.test.ts` | Its tests. |
 | `play.ts` | The page: mounts the layers, runs commands through the session, renders from `flow`. |
-| `play.css` | The page's styles. Portrait screens keep the prompt clear of the HUD's item column and put the map title and toast under the stats. |
+| `play.css` | The page's styles. Portrait screens keep the prompt clear of the HUD's item column and put the map title and toast under the stats. Short landscape screens (a turned phone) put the map title under the stats on the left, off your node. |
 | `/play.html` | The entry. Test builds only (`vite.config.ts` lists it in mode `test`). |
 
 Test builds expose `window.__play`: `{ session, flow(), local(), view(), map(), zone(), toast(), send(cmd) }`. `map()` is the map scene's `debug()` while it is up.
@@ -114,5 +109,5 @@ That is the whole swap. The rest follows from it:
 ## Not done yet
 
 - **Campfires and wells** have no walking scene, only panels over a dim backdrop (kbph, 4 Oct). Deal nodes have no table scene behind the overlay.
-- **The map is its own Phaser game,** mounted when it opens and destroyed when it closes. One shared Phaser game would be lighter (docs/mapscene.md, "Wiring it into the game").
+- **The map is its own Phaser game,** mounted when it opens and destroyed when it closes. One shared Phaser game would be lighter (docs/mapscene.md, "Wiring it into the game"). Each teardown (the map, a fight, the village) goes through `destroyGame` (`src/destroyGame.ts`), which also releases the game's WebGL context, so a long run no longer piles up contexts (Chrome warned "Too many active WebGL contexts" after about 16). One shared game is not a simple swap: the map is drawn over the live village, and the scenes use different scale modes, physics and input settings.
 - **No save or resume** across reloads.

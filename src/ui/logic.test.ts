@@ -3,9 +3,10 @@ import type { MapView, Observation } from "../game";
 import assert from "node:assert/strict";
 import { createGame, describe } from "../game";
 import type { Command, GameEvent } from "../game";
-import { availableActions, blurbOf, chooseCards, fireChoice, type FireChoice, dealEnd, devilPhase, askBlockReason, haggleText, questionsText, panelKinds, shopItems, buyLabel, curseText, effectChips, eventClass, afterKinds, dagModel, exitNumber, fightLabel, lockReason, moveLock, nodeState, nodeTitle, eventText, outcomeEvents, pct, STAIRS_ID, topId } from "./logic";
+import { availableActions, blurbOf, chooseCards, fireChoice, type FireChoice, dealEnd, devilPhase, askBlockReason, haggleText, questionsText, panelKinds, shopItems, buyLabel, curseText, effectChips, eventClass, afterKinds, dagModel, exitNumber, fightLabel, lockReason, moveLock, nodeState, nodeTitle, placeWord, capitalize, eventText, kindLookup, rejectedText, rewriteText, outcomeEvents, pct, STAIRS_ID, topId } from "./logic";
+import { FULL_HEALTH, pointlessBuy } from "./shopGuard";
 import { diffDeal } from "./dealDiff";
-import { lastStrike, STRIKE_HEAD } from "./logic";
+import { lastStrike, restHint, STRIKE_HEAD } from "./logic";
 import { sanitizeDeal } from "../game/deal";
 import { MAX_ASKS, initialState } from "../game/gameState";
 import { restoreGame } from "../game/run";
@@ -130,8 +131,9 @@ test("dagModel: rows top to bottom, node states, edges, labels", () => {
   assert.deepEqual([by.b.n, by.c.n, by.d.n, by.a.n], [1, 2, null, null]);
   assert.equal(by.c.rewritten, true);
   assert.equal(by.b.disabled, null);
-  assert.equal(by.b.label, "Go to fight b, then deal");
-  assert.equal(by.a.label, "You are here: deal a");
+  assert.equal(by.b.label, "Go to fight on the left, then deal");
+  assert.equal(by.c.label, "Go to fight on the right, then campfire (rewritten by the devil)");
+  assert.equal(by.a.label, "You are here: deal");
   assert.deepEqual(d.edges.filter(([f]) => f === "a"), [["a", "b"], ["a", "c"]]);
   assert.ok(d.edges.some(([f, t]) => f === "x" && t === STAIRS_ID), "boss -> stairs edge");
   assert.equal(d.lock, null);
@@ -308,9 +310,9 @@ test("askBlockReason: the run-wide limit outranks the per-node haggle limit; nul
 
 test("shop lists price tags at the village only; the well's blessing is a single-use choice", () => {
   const g = createGame("ui-1"), o = g.observe();
-  const village = { ...o, kind: "village" as const, state: { ...o.state, gold: 12 } };
+  const village = { ...o, kind: "village" as const, state: { ...o.state, gold: 10, hp: o.state.maxHp - 5 } };
   const items = shopItems(village, availableActions(village));
-  assert.deepEqual(items.map((i) => [i.item, i.cost, i.affordable, i.reason]), [["heal", 10, true, null], ["blade", 15, false, "need 3 more gold"]]);
+  assert.deepEqual(items.map((i) => [i.item, i.cost, i.affordable, i.reason]), [["heal", 10, true, null], ["blade", 12, false, "need 2 more gold"]]);
   const well = { ...o, kind: "well" as const, resolved: false, state: { ...o.state, gold: 12 } };
   assert.deepEqual(shopItems(well, availableActions(well)), []);
   assert.deepEqual(chooseCards(well, availableActions(well)).map((c) => [c.key, c.state]), [["blessing", "available"]]);
@@ -477,4 +479,99 @@ test("chooseCards: at a well, asking the devil closes the blessing, with the rea
   const [c] = chooseCards({ ...o, asksLeft: MAX_ASKS - 1 }, { ...A, buy: [] });
   assert.equal(c.state, "closed");
   assert.match(c.note!, /chose the devil/);
+});
+
+test("eventText: no node ids in any event, whatever the engine's console text says", () => {
+  const events: GameEvent[] = [
+    { type: "moved", from: "a0n1", to: "a0n6", kind: "deal", act: 0 },
+    { type: "node_rewritten", change: { nodeId: "a0n6", from: "fight", to: "campfire", polarityFlip: true } },
+    { type: "rewrite_failed", nodeId: "a0n6", reason: "unknown node a0n6" },
+    { type: "deal_offered", deal: { dialogue: "A bargain.", effects: { gold: 5 }, rewrite: { nodeId: "a0n6", to: "fight" } } },
+    { type: "rejected", reason: "drowned monk blocks the way; fight()" },
+    { type: "rejected", reason: "no exit 3; choose 1..2" },
+    { type: "enemy_appeared", enemy: { name: "ash hound", hp: 9, maxHp: 9, boss: false } },
+  ];
+  for (const e of events) assert.ok(!/\ba\d+n\d+\b|\(\)|->|fight_result/.test(eventText(e)), `${e.type}: ${eventText(e)}`);
+  assert.equal(eventText(events[0]), "You come to the devil's table.");
+  assert.equal(eventText(events[1]), "The devil turned a fight ahead into a campfire (good turned bad, or the reverse).");
+  assert.match(eventText(events[3]), /a stop ahead becomes a fight/);
+});
+
+test("rewriteText says what the node is when the map is known, and never its id", () => {
+  const m = fixture(); // b is a fight
+  assert.equal(rewriteText({ nodeId: "b", to: "campfire" }, kindLookup(m)), "a fight ahead becomes a campfire");
+  assert.equal(rewriteText({ nodeId: "nope", to: "well" }, kindLookup(m)), "a stop ahead becomes a well");
+  assert.equal(rewriteText({ nodeId: "b", to: "well" }), "a stop ahead becomes a well");
+  assert.match(eventText({ type: "deal_offered", deal: { dialogue: "x", effects: {}, rewrite: { nodeId: "b", to: "campfire" } } }, kindLookup(m)), /a fight ahead becomes a campfire/);
+});
+
+test("rejectedText drops console hints and ends with a full stop", () => {
+  assert.equal(rejectedText("the devil is waiting for your answer: accept() or refuse()"), "the devil is waiting for your answer.");
+  assert.equal(rejectedText("rat blocks the way; fight()"), "rat blocks the way.");
+  assert.equal(rejectedText("nobody asked the devil anything; deal() first"), "nobody asked the devil anything.");
+  assert.equal(rejectedText("the fight is still on; send fight_result"), "the fight is still on.");
+  assert.equal(rejectedText("no exit 3; choose 1..2"), "That way is not open.");
+  assert.equal(rejectedText("the embers are spent"), "the embers are spent.");
+  assert.equal(rejectedText("fight()"), "That is not possible right now.");
+});
+
+test("capitalize: sentences start with a capital, quotes and the devil's words are left alone", () => {
+  assert.equal(capitalize("drowned monk falls. +4 gold."), "Drowned monk falls. +4 gold.");
+  assert.equal(capitalize("the unlit falls."), "The unlit falls.");
+  assert.equal(capitalize("(rat blocks the way)"), "(Rat blocks the way)");
+  assert.equal(capitalize("Already fine."), "Already fine.");
+  assert.equal(capitalize('  he gives: x\nthe price'), "  He gives: x\nThe price");
+  assert.equal(capitalize('The devil: "yes. perhaps."'), 'The devil: "yes. perhaps."');
+  assert.equal(capitalize("+4 gold"), "+4 gold");
+  assert.equal(capitalize(""), "");
+});
+
+test("eventText: the fight summary starts every sentence with a capital", () => {
+  const slain = eventText({ type: "enemy_slain", name: "drowned monk", gold: 4, boss: false });
+  assert.equal(slain, "Drowned monk falls. +4 gold.");
+  const bout = eventText({ type: "fought", dealt: 9, enemyHp: 0, taken: 0, bout: { timeMs: 20100, hits: 0, enemy: "drowned monk", outcome: "won" } });
+  assert.equal(bout, "After 20.1 s of fighting you dealt 9 and took no damage.");
+  assert.equal(eventText({ type: "rejected", reason: "the embers are spent" }), "The embers are spent.");
+  assert.equal(eventText({ type: "enemy_appeared", enemy: { name: "cave rat", hp: 6, maxHp: 6, boss: false } }), "An enemy appears: cave rat (6 HP).");
+});
+
+test("shopGuard: a heal at full HP is pointless (UI-only); nothing else is guarded", () => {
+  assert.equal(pointlessBuy("heal", 30, 30), FULL_HEALTH);
+  assert.equal(pointlessBuy("heal", 31, 30), FULL_HEALTH);
+  assert.equal(pointlessBuy("heal", 29, 30), null);
+  assert.equal(pointlessBuy("blade", 30, 30), null);
+  assert.equal(pointlessBuy("blessing", 30, 30), null);
+  assert.equal(pointlessBuy("heal", undefined, undefined), null, "unknown HP: leave it to the engine");
+  assert.equal(pointlessBuy("heal", 0, 0), null);
+  assert.equal(FULL_HEALTH, "You're at full health");
+});
+
+test("DOM shop: the Heal card is disabled at full HP with the reason, enabled when hurt", () => {
+  const g = createGame("ui-1"), o = g.observe();
+  const at = (hp: number) => { const v = { ...o, kind: "village" as const, state: { ...o.state, gold: 99, hp } }; return shopItems(v, availableActions(v)); };
+  const [healFull, bladeFull] = at(o.state.maxHp);
+  assert.deepEqual([healFull.item, healFull.affordable, healFull.reason], ["heal", false, FULL_HEALTH]);
+  assert.deepEqual([bladeFull.item, bladeFull.affordable, bladeFull.reason], ["blade", true, null], "the blade is not guarded");
+  const [healHurt] = at(o.state.maxHp - 1);
+  assert.deepEqual([healHurt.affordable, healHurt.reason], [true, null]);
+});
+
+test("placeWord tells siblings apart without ids", () => {
+  assert.equal(placeWord(0, 1), "");
+  assert.deepEqual([0, 1].map((i) => placeWord(i, 2)), ["on the left", "on the right"]);
+  assert.deepEqual([0, 1, 2].map((i) => placeWord(i, 3)), ["on the left", "in the middle", "on the right"]);
+  assert.equal(new Set([0, 1, 2, 3].map((i) => placeWord(i, 4))).size, 4);
+  assert.equal(placeWord(4, 6), "5 of 6 from the left");
+});
+
+test("map labels name no node id, on a real act", () => {
+  const g = createGame("label-ids"), v = g.view();
+  const d = dagModel(v, v.map, false, v.actions);
+  for (const n of d.rows.flat()) assert.ok(!/\ba\d+n\d+\b/.test(n.label), n.label);
+});
+
+test("restHint: the HP a rest really heals (40% of max, capped at full)", () => {
+  assert.equal(restHint(10, 30), "Heal 12 HP");
+  assert.equal(restHint(30, 43), "Heal 13 HP", "only 13 missing, not 18");
+  assert.equal(restHint(43, 43), `${FULL_HEALTH}: heals nothing`);
 });

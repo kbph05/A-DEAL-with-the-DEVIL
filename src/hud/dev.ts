@@ -2,7 +2,8 @@
 // the final build (vite.config.ts only adds hud.html as an input in mode "test"). It runs a real engine game with the
 // StubDevil; the buttons step it and the HUD updates live. Query: ?seed=abc&steps=N (N bot steps on load).
 // The dashed circle is where the world scene's touch stick rests (worldLayout in src/world/logic.ts), for checking overlap.
-import { botPolicy, createGame, describe, execute, type Command, type Game, type GameEvent, type Result, type View } from "../game";
+import { botPolicy, createGame, execute, type Command, type Game, type GameEvent, type Result, type View } from "../game";
+import { eventText } from "../ui/logic";
 import { worldLayout } from "../world/logic";
 import { mountHud } from "./hud";
 import { hudModel, type HudModel } from "./model";
@@ -39,7 +40,7 @@ function render(events: GameEvent[] = []): void {
   btn.buy.disabled = over || busy;
   const offer = v.actions.some((c) => c.cmd === "accept");
   btn.deal.textContent = offer ? "Accept offer" : "Deal";
-  if (events.length) eventLine.textContent = events.map(describe).filter(Boolean).slice(-3).join(" ");
+  if (events.length) eventLine.textContent = events.map((e) => eventText(e)).filter(Boolean).slice(-3).join(" ");
 }
 
 /** Run some engine commands (each returns a Result or a promise of one), then redraw with their events. */

@@ -213,11 +213,14 @@ These replace the arena's per-act tiers in forest mode (no double scaling); boss
 
 **Bosses:** a boss request (`enemy.boss`) is one boss with the engine's HP and name: `miniboss1` in act 1, `miniboss2` in act 2, `final_boss` in the last act.
 
+**Names:** the engine's enemy is the encounter. Its name heads the fight's HUD (`title`: "Cave rat", or "Cave rat and its pack" for a group) and labels the group's lead (the band's `lead`); the rest of the pack keep their roster labels (Slime, Demon, Skeleton archer), which say how they fight. The end banner's line is `encounterSummary`: "Cave rat falls." on a win, as the engine's `enemy_slain` toast says it, or "Cave rat still stands."
+
 Measured with a bot that walks at the nearest enemy swinging and never dodges (20 seeds, the same 40 HP player each time), the HP it loses goes from about 2 at the bottom of act 1 to about 7 in the middle of act 2 and about 10 at the top of act 3. A bot that dashes out of every telegraph loses almost nothing. These are **first guesses**, like the arena's.
 
 ### On the path
 
 - **The scene** is `src/world/scenes/forest.json` (1280×560): a dirt path through grass, bounds that keep you on or near it (112 px tall), canopy rows over both edges, an exit zone at the far end, and six `spawns` along the path (docs/world.md).
+- **Archers keep to the path band** (`pathBand` in `forest.ts`): the bounds less the 18 px strips under the canopy rows, and 12 px more at the top for an archer's head. They spawn in it, and backing off from you stops at its edge (`SimWorld.band`), so they never stand in the tree line. Everyone else, you included, uses the full bounds.
 - **Units:** the scene is in world pixels, the sim in fight units, at 3 units per pixel (`UNITS_PER_PX`). That makes the sim's player about the size and pace of the world's hero.
 - **Placement** (`forestWorld`): one or two enemies stand apart, met one at a time. Three or more come as two packs, the first one bigger, each on a spawn point with the members around it, the first pack on the nearest spawn.
 - **Aggro (the choice):** an enemy wakes when the gap between you and it drops below its aggro range: slime 230, demon 260, archer 380, bosses 300 units (about 75 to 125 px). There is no timeout: an enemy you haven't reached waits. When one wakes, the idle ones within 240 units of it wake too (`PACK_RANGE`), so a pack fights together. Hitting an enemy wakes it. Stepping into the exit zone wakes everyone left, so you can't slip past.

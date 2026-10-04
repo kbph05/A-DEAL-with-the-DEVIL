@@ -4,6 +4,7 @@ import type { EnemyView } from "../game/events";
 import { MAX_ASKS, TRAIN_ATTACK, WARES } from "../game/gameState";
 import { STAT_RANGE } from "../game/state";
 import type { Kind } from "../map";
+import { FULL_HEALTH, pointlessBuy } from "./shopGuard";
 
 export type Ware = keyof typeof WARES;
 export interface Actions {
@@ -152,14 +153,23 @@ export function nodeState(n: Pick<MapNodeView, "id" | "current" | "visited">, ne
 const DAG_WORD: Record<DagKind, string> = { ...KIND_WORD, stairs: "Stairs" };
 export const dagWord = (k: DagKind): string => DAG_WORD[k];
 
-function dagLabel(kind: DagKind, id: string, state: DagState, rewritten: boolean, then: Kind[], lock: string | null): string {
+/** Where a node stands among the others in its row, in words ("on the left"), so two of a kind can be told apart without ids. "" when it is alone. */
+export function placeWord(i: number, count: number): string {
+  if (count <= 1) return "";
+  if (count === 2) return i === 0 ? "on the left" : "on the right";
+  if (count === 3) return ["on the left", "in the middle", "on the right"][i];
+  if (count === 4) return ["on the far left", "left of centre", "right of centre", "on the far right"][i];
+  return `${i + 1} of ${count} from the left`;
+}
+
+function dagLabel(kind: DagKind, id: string, state: DagState, rewritten: boolean, then: Kind[], lock: string | null, place = ""): string {
   const word = kind.toLowerCase(), star = rewritten ? " (rewritten by the devil)" : "";
   if (kind === "stairs") return state === "next" ? `Go down the stairs to the next act${lock ? `. ${lock}` : ""}` : "Stairs to the next act, not reachable yet";
-  const here = id === "final" ? "the final door" : `${word} ${id}`;
+  const here = id === "final" ? "the final door" : `${word}${place ? ` ${place}` : ""}`; // never the node id: it means nothing to the player
   if (state === "current") return `You are here: ${here}${star}`;
   if (state === "visited") return `${here}, visited${star}`;
   if (state === "far") return `${here}, not reachable yet${star}`;
-  return `Go to ${id === "final" ? "the final door" : here}${then.length ? `, then ${then.join(" or ")}` : ""}${star}${lock ? `. ${lock}` : ""}`;
+  return `Go to ${here}${then.length ? `, then ${then.join(" or ")}` : ""}${star}${lock ? `. ${lock}` : ""}`;
 }
 
 /**
@@ -174,10 +184,10 @@ export function dagModel(o: Observation, map: MapView, busy = false, legal?: rea
   const all = [...nodes.keys(), ...(map.final ? [] : [STAIRS_ID])];
   const nextIds = new Set(all.filter((id) => exitNumber(o, map, id) !== null));
   const bossHere = nodes.get(o.nodeId)?.kind === "boss";
-  const mk = (n: MapNodeView): DagNode => {
+  const mk = (n: MapNodeView, place = ""): DagNode => {
     const state = nodeState(n, nextIds);
     const num = state === "next" ? exitNumber(o, map, n.id) : null, why = state === "next" ? off(num) : null;
-    return { id: n.id, kind: n.kind, state, rewritten: n.rewritten, n: num, disabled: why, label: dagLabel(n.kind, n.id, state, n.rewritten, afterKinds(map, n.id), why) };
+    return { id: n.id, kind: n.kind, state, rewritten: n.rewritten, n: num, disabled: why, label: dagLabel(n.kind, n.id, state, n.rewritten, afterKinds(map, n.id), why, place) };
   };
   const top: DagNode = map.final ? mk(map.final) : {
     id: STAIRS_ID, kind: STAIRS_ID, state: bossHere ? "next" : "far", rewritten: false, n: bossHere ? 1 : null,
@@ -187,7 +197,7 @@ export function dagModel(o: Observation, map: MapView, busy = false, legal?: rea
   for (const n of nodes.values()) for (const t of n.next) edges.push([n.id, t]);
   // Lay each layer out to avoid crossing edges (kbph: "the graph should be planar").
   const { order } = planarOrder(map.layers.map((l) => l.nodes.map((n) => n.id)), edges);
-  const rows = [[top], ...order.map((ids) => ids.map((id) => mk(nodes.get(id)!))).reverse()];
+  const rows = [[top], ...order.map((ids) => ids.map((id, i) => mk(nodes.get(id)!, placeWord(i, ids.length)))).reverse()];
   const boss = [...nodes.values()].find((n) => n.kind === "boss");
   if (boss) edges.push([boss.id, top.id]);
   return { rows, edges, lock };
@@ -277,18 +287,60 @@ const GO_TEXT: Record<Kind, string> = {
   fight: "You press on towards a fight.", boss: "You face the way down, and what guards it.", final: "You reach the final door.",
 };
 
+/** "a fight", "a campfire": what a node kind is called in a sentence. */
+const KIND_A: Record<Kind, string> = { campfire: "a campfire", village: "a village", well: "a well", deal: "a devil's table", fight: "a fight", boss: "a boss", final: "the final door" };
+export const kindA = (k: Kind): string => KIND_A[k] ?? "a stop";
+
+/** Looks up what a node id is on the current act's map (so wording can say "a fight" instead of "a0n3"). */
+export function kindLookup(map: MapView): (id: string) => Kind | undefined {
+  const nodes = nodeIndex(map);
+  return (id) => nodes.get(id)?.kind;
+}
+
 /**
- * What the Outcome and History panels say about an event. `describe()` is console text (it mentions commands such as
- * accept() and node ids); the UI words the few events where that leaks, and falls back to `describe()` for the rest.
+ * A devil's rewrite in words, with no node id: "a fight ahead becomes a campfire". `kindOf` (see `kindLookup`) says what
+ * the node is now; without it the text says "a stop ahead".
  */
-export function eventText(e: GameEvent): string {
+export function rewriteText(r: { nodeId: string; to: Kind }, kindOf?: (id: string) => Kind | undefined): string {
+  const from = kindOf?.(r.nodeId);
+  return `${from ? kindA(from) : "a stop"} ahead becomes ${kindA(r.to)}`;
+}
+
+/**
+ * An engine rejection in words: drops the console hints ("fight()", "accept() or refuse()", "send fight_result") and ends
+ * with a full stop. "the devil is waiting for your answer: accept() or refuse()" becomes "the devil is waiting for your answer."
+ */
+export function rejectedText(reason: string): string {
+  if (/^no exit\b/.test(reason)) return "That way is not open.";
+  const clean = reason
+    .replace(/[;:]?\s*\b\w+\(\)(?:\s+or\s+\w+\(\))*(?:\s+first)?/g, "")
+    .replace(/[;:]\s*(?:send fight_result|fight with realtime first)/g, "")
+    .trim().replace(/[.;:,]+$/, "");
+  return `${clean || "That is not possible right now"}.`;
+}
+
+/**
+ * What the Outcome and History panels, and the play page's toast, say about an event. `describe()` is console text (it
+ * mentions commands such as accept() and node ids); the UI words the events where that leaks, and falls back to
+ * `describe()` for the rest. `kindOf` (see `kindLookup`) lets a devil's rewrite say what the node is. Never shows an id.
+ */
+export const eventText = (e: GameEvent, kindOf?: (id: string) => Kind | undefined): string => capitalize(wordEvent(e, kindOf));
+
+/**
+ * Upper-cases the first letter of the text and of each of its lines, so a name the engine keeps lower-case ("drowned monk
+ * falls.") starts its sentence properly. A leading quote or bracket is skipped; the rest of the text is left alone (the
+ * devil's own words are not re-cased).
+ */
+export const capitalize = (text: string): string => text.replace(/^([\s"'“‘(\[]*)(\p{Ll})/gmu, (_m, lead: string, c: string) => lead + c.toUpperCase());
+
+function wordEvent(e: GameEvent, kindOf?: (id: string) => Kind | undefined): string {
   switch (e.type) {
     case "moved": return GO_TEXT[e.kind];
     case "deal_offered": {
       const d = e.deal;
       return [`The devil: "${d.dialogue}"`, `  He gives: ${deltaText(d.effects)}`,
         ...(d.curse ? [`  The price, a curse: ${curseText(d.curse)}`] : []),
-        ...(d.rewrite ? [`  He will change the road ahead: ${d.rewrite.nodeId} becomes a ${d.rewrite.to}`] : []),
+        ...(d.rewrite ? [`  He will change the road ahead: ${rewriteText(d.rewrite, kindOf)}`] : []),
         "  Accept or refuse?"].join("\n");
     }
     case "devil_struck": return [`The devil strikes: "${e.dialogue}"`, `  You take ${deltaText(e.effects)}`].join("\n");
@@ -296,6 +348,10 @@ export function eventText(e: GameEvent): string {
     case "curse_added": return `A curse settles on you: ${curseText(e.curse)}.`;
     case "curse_fired": return `The curse fires (${curseText({ trigger: e.trigger, effect: e.effect })}): ${deltaText(e.changes)}.`;
     case "bought": return `Bought ${e.item} for ${e.cost}g: ${deltaText(e.changes)}.`;
+    case "node_rewritten": return `The devil turned ${kindA(e.change.from)} ahead into ${kindA(e.change.to)}${e.change.polarityFlip ? " (good turned bad, or the reverse)" : ""}.`;
+    case "rewrite_failed": return "The devil tried to change the road ahead, but it would not bend.";
+    case "rejected": return rejectedText(e.reason);
+    case "enemy_appeared": return `${e.enemy.boss ? "A boss bars the way" : "An enemy appears"}: ${e.enemy.name} (${e.enemy.hp} HP).`;
     default: return describe(e);
   }
 }
@@ -393,9 +449,12 @@ const WARE_ICON: Record<Ware, string> = { heal: "❤️", blade: "🗡️", bles
 
 export interface ShopItem { item: Ware; icon: string; name: string; effect: string; cost: number; affordable: boolean; /** e.g. "need 3 more gold"; null when affordable. */ reason: string | null }
 /** The shop's price tags (village only: the well's single blessing is a choice, not a shop). */
-export function shopItems(o: Pick<Observation, "kind" | "state">, A: Pick<Actions, "buy">): ShopItem[] {
+export function shopItems(o: Pick<Observation, "kind"> & { state: Pick<Observation["state"], "gold"> & Partial<Pick<Observation["state"], "hp" | "maxHp">> }, A: Pick<Actions, "buy">): ShopItem[] {
   if (o.kind !== "village") return [];
-  return A.buy.map((w) => ({ item: w.item, icon: WARE_ICON[w.item], name: WARE_NAME[w.item], effect: WARE_EFFECT[w.item], cost: w.cost, affordable: w.affordable, reason: buyLabel(w, o.state.gold).reason }));
+  return A.buy.map((w) => {
+    const pointless = w.affordable ? pointlessBuy(w.item, o.state.hp, o.state.maxHp) : null; // a heal at full HP: UI-only guard
+    return { item: w.item, icon: WARE_ICON[w.item], name: WARE_NAME[w.item], effect: WARE_EFFECT[w.item], cost: w.cost, affordable: w.affordable && !pointless, reason: pointless ?? buyLabel(w, o.state.gold).reason };
+  });
 }
 
 export interface ChooseCard {
@@ -421,6 +480,15 @@ export function fireChoice(log: readonly GameEvent[]): FireChoice {
     if (e.type === "started") return null;
   }
   return null;
+}
+
+/**
+ * The campfire's Rest hint, in the HP the engine's `rest` will really heal: 40% of max HP (rounded up), capped by the HP
+ * missing. "Heal 18 HP" at 30/43 healed 13, and at full health nothing.
+ */
+export function restHint(hp: number, maxHp: number): string {
+  const heal = Math.min(Math.ceil(maxHp * 0.4), Math.max(0, maxHp - hp));
+  return heal > 0 ? `Heal ${heal} HP` : `${FULL_HEALTH}: heals nothing`;
 }
 
 /**

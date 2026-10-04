@@ -4,7 +4,8 @@ import { sanitizeFightResult, type FightRequest } from "../game/fightResult";
 import { sceneById } from "../world/scenes";
 import { pointIn } from "../world/scene";
 import { encounterFor, type ForestRequest } from "./encounters";
-import { UNITS_PER_PX, VIEW_SHORT, VIEW_SHORT_PORTRAIT, footPx, forestLayout, forestWorld, orderedSpawns, packSizes, spawnSlots } from "./forest";
+import { BAND_HEAD, CANOPY_REACH, UNITS_PER_PX, VIEW_SHORT, VIEW_SHORT_PORTRAIT, footPx, forestLayout, forestWorld, orderedSpawns, packSizes, pathBand, spawnSlots } from "./forest";
+import { overlayCanopies } from "../world/scenePlaceholders";
 import { dist, norm, sub, type Vec } from "./logic";
 import { FightSim, NO_CONTROLS, PACK_RANGE, type FightControls } from "./sim";
 
@@ -159,4 +160,44 @@ test("arrows and bullets stop at the path's bounds", () => {
   }
   const p: Vec = s.player.pos;
   assert.ok(pointIn(p, B));
+});
+
+test("skeleton archers keep to the path band: spawned in it, and backing off never takes them into the trees", () => {
+  const K = UNITS_PER_PX;
+  const B = forest.bounds, band = pathBand(forest);
+  // The band is the bounds less the strips under the canopy rows (and room for an archer's head at the top).
+  const reach = Math.max(...overlayCanopies(forest).filter((c) => c.y < B.y).map((c) => c.y + c.r - B.y));
+  const reachLow = Math.max(...overlayCanopies(forest).filter((c) => c.y > B.y + B.h).map((c) => B.y + B.h - (c.y - c.r)));
+  assert.equal(reach, CANOPY_REACH, "the top canopy row reaches CANOPY_REACH into the bounds");
+  assert.equal(reachLow, CANOPY_REACH, "so does the bottom row");
+  assert.deepEqual(band, { x: B.x, y: B.y + CANOPY_REACH + BAND_HEAD, w: B.w, h: B.h - 2 * CANOPY_REACH - BAND_HEAD });
+  for (const sp of forest.spawns!) assert.ok(pointIn(sp, band), "the scene's spawn points are on the path band");
+  assert.deepEqual(pathBand({ ...forest, bounds: { x: 0, y: 0, w: 100, h: 60 } }), { x: 0, y: 0, w: 100, h: 60 }, "too short for a band: the bounds");
+
+  const inBand = (pos: Vec, r: number, w: { x: number; y: number; w: number; h: number }) =>
+    pos.x >= w.x + r - 1e-9 && pos.x <= w.x + w.w - r + 1e-9 && pos.y >= w.y + r - 1e-9 && pos.y <= w.y + w.h - r + 1e-9;
+  let archers = 0, steps = 0;
+  for (let i = 0; i < 24; i++) {
+    const r = req(3, 4 + (i % 3), `band-${i}`);
+    const w = forestWorld(forest, encounterFor(r));
+    assert.deepEqual(w.band, { x: band.x * K, y: band.y * K, w: band.w * K, h: band.h * K });
+    for (const e of w.enemies) if (e.kind === "skeleton_archer") { archers++; assert.ok(inBand(e.pos, e.params.radius, w.band!), `archer spawn in the band (${r.seed})`); }
+    // Chase the archers up and down the path: the bot first, then straight at the nearest archer, sweeping the edges.
+    const s = new FightSim({ ...r, player: { hp: 9999, maxHp: 9999, attack: 1 } }, w);
+    for (const e of s.enemies) e.brain = { ...e.brain, mode: "chase" };
+    for (let t = 0; t < 3600 && !s.over; t++) {
+      const arch = s.alive.filter((e) => e.kind === "skeleton_archer");
+      const target = arch[0];
+      const edge = Math.floor(t / 240) % 2 ? -1 : 1; // come at them from above, then from below
+      const c = target && t % 600 > 200
+        ? { move: norm({ x: target.pos.x - s.player.pos.x, y: target.pos.y + edge * 40 - s.player.pos.y }), attack: false, dash: t % 90 === 0, aim: null }
+        : bot(s);
+      s.step(c);
+      steps++;
+      for (const e of arch) assert.ok(inBand(e.pos, e.radius, s.band), `archer at ${e.pos.x.toFixed(0)},${e.pos.y.toFixed(0)} left the band (${r.seed}, step ${t})`);
+      for (const e of s.alive) assert.ok(inBand(e.pos, e.radius, s.bounds), "everyone stays in the bounds");
+    }
+  }
+  assert.ok(archers >= 10, `enough archers to mean something (${archers})`);
+  assert.ok(steps > 10_000);
 });

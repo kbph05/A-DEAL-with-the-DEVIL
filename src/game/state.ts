@@ -1,4 +1,5 @@
 /** Player state, clamping helpers, and the one place stat ranges live. */
+import { MAX_DEAL_GOLD, START_GOLD } from "./economy";
 
 export interface PlayerState {
   hp: number;
@@ -19,9 +20,9 @@ export type StatKey = "hp" | "max_hp" | "gold" | "attack" | "soul";
 export const STAT_RANGE: Record<"maxHp" | "gold" | "attack" | "soul", readonly [number, number]> = {
   maxHp: [1, 60], gold: [0, 999], attack: [1, 12], soul: [0, 1],
 };
-/** Range of a single signed change per stat: what a deal or curse may ask for at most. */
+/** Range of a single signed change per stat: what a deal or curse may ask for at most. Gold gains stop at MAX_DEAL_GOLD (economy.ts). */
 export const DELTA_RANGE: Record<StatKey, readonly [number, number]> = {
-  hp: [-25, 25], max_hp: [-10, 10], gold: [-100, 100], attack: [-3, 3], soul: [-1, 1],
+  hp: [-25, 25], max_hp: [-10, 10], gold: [-100, MAX_DEAL_GOLD], attack: [-3, 3], soul: [-1, 1],
 };
 /** Accepted effect keys. Anything else is ignored. "damage" is the team's name for attack. */
 const ALIASES: Record<string, StatKey> = {
@@ -32,7 +33,7 @@ export const clamp = (n: number, lo: number, hi: number): number => Math.min(hi,
 const LOG_CAP = 100;
 
 export function newPlayer(nodeId: string): PlayerState {
-  return { hp: 30, maxHp: 30, gold: 10, attack: 3, soul: 1, act: 0, nodeId, log: [] };
+  return { hp: 30, maxHp: 30, gold: START_GOLD, attack: 3, soul: 1, act: 0, nodeId, log: [] };
 }
 
 /** Pull every stat back into its legal range (hp 0..maxHp, gold >= 0, ...). Mutates and returns `s`. */
