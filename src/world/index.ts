@@ -1,47 +1,55 @@
 /**
- * World scene, public API: `mountWorld(parent, options)` mounts a Phaser.Game in `parent` with the player walking
- * around a tile map (generated from `seed`, or a given `map`), and returns `{ destroy() }`. `onEnterTile` fires
- * whenever the player's feet move onto another tile (e.g. a DOOR: later, a node of the act map). Docs: docs/world.md.
+ * World scene, public API. `mountScene(parent, { scene, onEnterZone, onLeaveZone })` mounts a Phaser.Game in
+ * `parent` showing one SceneDef (background texture, y-sorted actors and player, overlay texture), with the player
+ * walking inside the scene's playable rect, and returns `{ scene, setOutlines(on), destroy() }`. `onEnterZone` /
+ * `onLeaveZone` fire once per entry and exit: the hook for linking scenes to act-map nodes later. Docs: docs/world.md.
  */
 import Phaser from "phaser";
-import { generateWorld, type GenOptions } from "./gen";
 import { worldLayout } from "./logic";
+import { parseSceneDef, type SceneDef, type SceneZone } from "./scene";
+import { SCENES } from "./scenes";
 import { WorldScene, type WorldDebug } from "./WorldScene";
-import type { WorldMap } from "./tiles";
 
-export type { WorldDebug } from "./WorldScene";
-export type { WorldMap, TilePos, TileId } from "./tiles";
-export { T, TILES, tileName } from "./tiles";
-export { generateWorld } from "./gen";
-export { loadMapJson, fromTiled } from "./tiled";
+export type { WorldDebug, Art } from "./WorldScene";
+export type { SceneDef, SceneZone, SceneActor, Rect } from "./scene";
+export { parseSceneDef, sceneErrors } from "./scene";
+export { SCENES, sceneById } from "./scenes";
 
-export interface MountWorldOptions {
-  /** Seed for the generated map (ignored when `map` is given). Default: random. */
-  seed?: string;
-  /** Use this map instead of generating one (our JSON or a Tiled export, through `loadMapJson`). */
-  map?: WorldMap;
-  /** Size of the generated map, in tiles. */
-  size?: GenOptions;
-  onEnterTile?: (tileId: number, x: number, y: number) => void;
+export interface MountSceneOptions {
+  /** The scene to show (checked with parseSceneDef). Default: the first sample scene. */
+  scene?: SceneDef;
+  /** The feet entered a zone (once per entry; not for a zone you spawn in). */
+  onEnterZone?: (zone: SceneZone, scene: SceneDef) => void;
+  /** The feet left a zone. */
+  onLeaveZone?: (zone: SceneZone, scene: SceneDef) => void;
+  /** Top walking speed, px/s. Default 80 (WALK.speed). */
+  speed?: number;
+  /** Integer camera zoom. Default 2. */
+  zoom?: number;
   /** Force the touch stick on or off. Default: on when the device reports touch input (it also appears on the first touch). */
   touch?: boolean;
-  /** Dev: outline the tile under the player. */
-  showTile?: boolean;
+  /** Dev: draw the playable rect, the zones and the feet box as outlines. */
+  outlines?: boolean;
   /** Dev/test hook: called once with a live, read-only view of the player. */
   onDebug?: (debug: WorldDebug) => void;
 }
 
-export interface WorldHandle {
-  map: WorldMap;
+export interface SceneHandle {
+  scene: SceneDef;
+  /** Dev: show or hide the debug outlines. */
+  setOutlines(on: boolean): void;
   destroy(): void;
 }
 
-export function mountWorld(parent: HTMLElement, options: MountWorldOptions = {}): WorldHandle {
-  const map = options.map ?? generateWorld(options.seed ?? Math.random().toString(36).slice(2, 8), options.size);
+export function mountScene(parent: HTMLElement, options: MountSceneOptions = {}): SceneHandle {
+  const def = parseSceneDef(options.scene ?? SCENES[0]);
   const box = parent.getBoundingClientRect();
-  const layout = worldLayout(box.width || window.innerWidth, box.height || window.innerHeight);
+  const layout = worldLayout(box.width || window.innerWidth, box.height || window.innerHeight, options.zoom);
   const touch = options.touch ?? (navigator.maxTouchPoints > 0 || "ontouchstart" in window);
-  const scene = new WorldScene({ map, layout, touch, showTile: options.showTile, onEnterTile: options.onEnterTile, onDebug: options.onDebug });
+  const scene = new WorldScene({
+    scene: def, layout, touch, speed: options.speed, outlines: options.outlines,
+    onEnterZone: options.onEnterZone, onLeaveZone: options.onLeaveZone, onDebug: options.onDebug,
+  });
   const game = new Phaser.Game({
     type: Phaser.AUTO,
     parent,
@@ -57,7 +65,8 @@ export function mountWorld(parent: HTMLElement, options: MountWorldOptions = {})
   });
   let destroyed = false;
   return {
-    map,
+    scene: def,
+    setOutlines: (on) => scene.setOutlines(on),
     destroy() {
       if (destroyed) return;
       destroyed = true;
@@ -65,3 +74,8 @@ export function mountWorld(parent: HTMLElement, options: MountWorldOptions = {})
     },
   };
 }
+
+/** The old name, kept so existing callers still work. It now mounts a scene (the tile-map options went with the tile model). */
+export const mountWorld = mountScene;
+export type MountWorldOptions = MountSceneOptions;
+export type WorldHandle = SceneHandle;

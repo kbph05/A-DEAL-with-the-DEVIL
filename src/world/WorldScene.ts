@@ -1,126 +1,202 @@
 import Phaser from "phaser";
 import { moveDir, type Vec } from "../input/dir";
 import { FloatingStick } from "../input/stick";
-import { PRIVATE_PLAYER, PRIVATE_TILESET, privateFiles, privateUrl } from "./assets";
+import { PRIVATE_PLAYER, privateFiles, privateUrl } from "./assets";
 import { FEET, WALK, facingOf, stepVelocity, type Facing, type WorldLayout } from "./logic";
-import { HERO_COLS, HERO_ROWS, HERO_SIZE, PLACEHOLDER_HERO, PLACEHOLDER_TILES, ensurePlaceholderTextures } from "./textures";
-import { BLOCKING_IDS, TILE_SIZE, tileAt, tileCenter, tileName, toRows, toTile, type WorldMap } from "./tiles";
+import {
+  BG_DEPTH, ZoneTracker, actorDepth, artSource, clampToBounds, footY, isUrl, overlayDepth,
+  type Rect, type SceneActor, type SceneDef, type SceneZone,
+} from "./scene";
+import { actorPlaceholder, backgroundPlaceholder, overlayPlaceholder } from "./scenePlaceholders";
+import { HERO_COLS, HERO_ROWS, HERO_SIZE, PLACEHOLDER_HERO, ensurePlaceholderTextures } from "./textures";
+
+/** Where a texture came from: a private file, a URL in the def, a texture key in the def, or a generated placeholder. */
+export type Art = "private" | "url" | "key" | "placeholder";
 
 /** Live, read-only view of the scene for dev pages and smoke tests. */
 export interface WorldDebug {
-  /** Feet position, world pixels. */
+  scene: string;
+  /** Centre of the feet box, world pixels (what zones test against). */
   pos: Vec;
+  /** Bottom of the feet: the player's y-sort key. */
+  footY: number;
   vel: Vec;
-  /** Tile under the feet. */
-  tile: { x: number; y: number; id: number; name: string };
+  /** Ids of the zones the feet are in. */
+  zones: string[];
   facing: Facing;
   /** Movement input this frame (unit or zero). */
   input: Vec;
+  bounds: Rect;
+  /** Current depths: the player, each actor by id, the overlay. */
+  depth: { player: number; actors: Record<string, number>; overlay: number };
   /** Which art is in use. */
-  art: { player: "private" | "placeholder"; tiles: "private" | "placeholder" };
+  art: { player: "private" | "placeholder"; background: Art; overlay: Art | "none"; actors: Record<string, Art> };
   frames: number;
 }
 
 export interface WorldSceneConfig {
-  map: WorldMap;
+  scene: SceneDef;
   layout: WorldLayout;
   /** Show the touch stick from the start (it also appears on the first touch). */
   touch: boolean;
-  /** Outline the tile under the player (dev page). */
-  showTile?: boolean;
-  onEnterTile?: (tileId: number, x: number, y: number) => void;
+  /** Top walking speed, px/s. Default WALK.speed. */
+  speed?: number;
+  /** Draw the bounds rect, the zones and the feet box as outlines. */
+  outlines?: boolean;
+  onEnterZone?: (zone: SceneZone, scene: SceneDef) => void;
+  onLeaveZone?: (zone: SceneZone, scene: SceneDef) => void;
   onDebug?: (debug: WorldDebug) => void;
 }
 
 type KeyName = "W" | "A" | "S" | "D" | "UP" | "DOWN" | "LEFT" | "RIGHT";
 
-const KEY = { tiles: "priv-tiles", idle: "priv-player-idle", walk: "priv-player-walk" };
+const KEY = { idle: "priv-player-idle", walk: "priv-player-walk" };
 
 /**
- * Top-down walking around a tile map. The map is one Phaser tilemap layer whose blocking tiles collide with the
- * player's Arcade body (a small box at the feet, so one-tile gaps fit). The main camera is zoomed (integer, crisp)
- * and follows the player inside the map bounds; a second, unzoomed camera draws the touch stick and the help text.
+ * One scene: a background texture (depth 0), actors and the player y-sorted by their feet every frame, then the
+ * overlay texture above them all. The player's Arcade body is a small box at the feet, kept inside `scene.bounds`
+ * by the physics world bounds. The main camera is zoomed (integer, crisp) and follows the player inside the
+ * texture; a second, unzoomed camera draws the touch stick and the help line.
  */
 export class WorldScene extends Phaser.Scene {
   private cfg: WorldSceneConfig;
+  private def: SceneDef;
   private player!: Phaser.Types.Physics.Arcade.SpriteWithDynamicBody;
+  private actors: { def: SceneActor; sprite: Phaser.GameObjects.Image }[] = [];
   private keys!: Record<KeyName, Phaser.Input.Keyboard.Key>;
   private stick: FloatingStick;
   private touchUI: boolean;
   private ui!: Phaser.GameObjects.Graphics;
-  private marker!: Phaser.GameObjects.Graphics;
+  private outlines!: Phaser.GameObjects.Graphics;
   private help!: Phaser.GameObjects.Text;
   private failed = new Set<string>();
   private privatePlayer = false;
+  private zones: ZoneTracker;
+  private walk: typeof WALK;
   private debug: WorldDebug;
 
   constructor(cfg: WorldSceneConfig) {
     super({ key: "world" });
     this.cfg = cfg;
+    this.def = cfg.scene;
     this.touchUI = cfg.touch;
+    this.walk = { ...WALK, speed: cfg.speed ?? WALK.speed };
     this.stick = new FloatingStick(cfg.layout.stick, cfg.layout);
-    const s = cfg.map.spawn;
+    const start = clampToBounds(this.def.spawn, this.def.bounds, { x: FEET.w / 2, y: FEET.h / 2 });
+    this.zones = new ZoneTracker(this.def.zones, start);
     this.debug = {
-      pos: { x: tileCenter(s.x), y: tileCenter(s.y) }, vel: { x: 0, y: 0 },
-      tile: { x: s.x, y: s.y, id: tileAt(cfg.map, s.x, s.y), name: tileName(tileAt(cfg.map, s.x, s.y)) },
-      facing: "down", input: { x: 0, y: 0 }, art: { player: "placeholder", tiles: "placeholder" }, frames: 0,
+      scene: this.def.id, pos: start, footY: start.y + FEET.h / 2, vel: { x: 0, y: 0 }, zones: [...this.zones.current],
+      facing: "down", input: { x: 0, y: 0 }, bounds: { ...this.def.bounds },
+      depth: { player: 0, actors: {}, overlay: overlayDepth(this.def.size.h) },
+      art: { player: "placeholder", background: "placeholder", overlay: this.def.overlay ? "placeholder" : "none", actors: {} },
+      frames: 0,
     };
   }
 
+  // -------------------------------------------------------------------------------------------------------------
+  // Art: private file > the def's URL or key > a generated placeholder
+
+  /** Loader key for a scene part loaded from a file. */
+  private partKey(name: string): string { return `scene:${this.def.id}:${name}`; }
+
   preload(): void {
     // Private art only if the files are there (listed at build time), so a clean checkout makes no requests.
-    const have = new Set(privateFiles());
+    const files = privateFiles();
+    const have = new Set(files);
     this.load.on(Phaser.Loader.Events.FILE_LOAD_ERROR, (file: Phaser.Loader.File) => this.failed.add(file.key));
-    if (have.has(PRIVATE_TILESET.file)) this.load.image(KEY.tiles, privateUrl(PRIVATE_TILESET.file));
     const P = PRIVATE_PLAYER;
     if (have.has(P.idle.file) && have.has(P.walk.file)) {
       this.load.spritesheet(KEY.idle, privateUrl(P.idle.file), { frameWidth: P.frameWidth, frameHeight: P.frameHeight });
       this.load.spritesheet(KEY.walk, privateUrl(P.walk.file), { frameWidth: P.frameWidth, frameHeight: P.frameHeight });
     }
+    for (const [name, value] of this.parts()) {
+      const src = artSource(files, this.def.id, name, value, privateUrl);
+      if (src && src.kind !== "key") this.load.image(this.partKey(name), src.url);
+    }
+  }
+
+  private parts(): [string, string | undefined][] {
+    const out: [string, string | undefined][] = [["background", this.def.background], ["overlay", this.def.overlay]];
+    for (const a of this.def.actors ?? []) out.push([`actors/${a.id}`, a.texture]);
+    return out;
   }
 
   private loaded(key: string): boolean {
     return this.textures.exists(key) && !this.failed.has(key);
   }
 
+  /**
+   * The texture for a scene part and where it came from. Falls back to `draw(key)`, a placeholder made under the
+   * def's own key when it names one (so a key nobody loaded still shows something), else under `fallbackKey`.
+   */
+  private resolve(name: string, value: string | undefined, fallbackKey: string, draw: (key: string) => void): { key: string; art: Art } {
+    const src = artSource(privateFiles(), this.def.id, name, value, privateUrl);
+    if (src && src.kind !== "key" && this.loaded(this.partKey(name))) return { key: this.partKey(name), art: src.kind };
+    if (src?.kind === "key" && this.loaded(src.key)) return { key: src.key, art: "key" };
+    const key = value && !isUrl(value) ? value : fallbackKey;
+    draw(key);
+    return { key, art: "placeholder" };
+  }
+
+  // -------------------------------------------------------------------------------------------------------------
+
   create(): void {
-    const { map, layout: L } = this.cfg;
+    const { layout: L } = this.cfg;
+    const def = this.def;
+    const world: Phaser.GameObjects.GameObject[] = [];
     ensurePlaceholderTextures(this);
     this.privatePlayer = this.loaded(KEY.idle) && this.loaded(KEY.walk);
-    const privateTiles = this.loaded(KEY.tiles);
-    this.debug.art = { player: this.privatePlayer ? "private" : "placeholder", tiles: privateTiles ? "private" : "placeholder" };
+    const art = this.debug.art;
+    art.player = this.privatePlayer ? "private" : "placeholder";
 
-    // Tiles: one layer, ids = tileset frames; blocking ids collide.
-    const tm = this.make.tilemap({ data: toRows(map), tileWidth: TILE_SIZE, tileHeight: TILE_SIZE });
-    const tileset = tm.addTilesetImage("tiles", privateTiles ? KEY.tiles : PLACEHOLDER_TILES, TILE_SIZE, TILE_SIZE, 0, 0)!;
-    const layer = tm.createLayer(0, tileset, 0, 0)!;
-    layer.setCollision(BLOCKING_IDS);
-    const worldW = map.width * TILE_SIZE;
-    const worldH = map.height * TILE_SIZE;
+    // Background, depth 0, stretched to the scene size.
+    const bg = this.resolve("background", def.background, `scene-ph:${def.id}:bg`, (k) => backgroundPlaceholder(this, k, def));
+    art.background = bg.art;
+    world.push(this.add.image(0, 0, bg.key).setOrigin(0, 0).setDisplaySize(def.size.w, def.size.h).setDepth(BG_DEPTH));
 
-    // Player.
+    // Actors: feet at (x, y), origin bottom centre; y-sorted every frame.
+    for (const a of def.actors ?? []) {
+      const r = this.resolve(`actors/${a.id}`, a.texture, `scene-ph:actor:${a.id}`, (k) => actorPlaceholder(this, k, a.id));
+      art.actors[a.id] = r.art;
+      const sprite = this.add.image(a.x, a.y, r.key).setOrigin(0.5, 1);
+      this.actors.push({ def: a, sprite });
+      world.push(sprite);
+    }
+
+    // Player: origin at the bottom of the feet box, so y is the feet whatever the art (the placeholder's feet box
+    // ends at the frame's bottom; the private sheet's is higher up in its frame).
     this.createAnims();
     const spec = this.privatePlayer
       ? { key: KEY.idle, fw: PRIVATE_PLAYER.frameWidth, fh: PRIVATE_PLAYER.frameHeight, feet: PRIVATE_PLAYER.feet, scale: PRIVATE_PLAYER.scale }
       : { key: PLACEHOLDER_HERO, fw: HERO_SIZE, fh: HERO_SIZE, feet: FEET, scale: 1 };
-    // Place the sprite so the centre of its feet box sits on the spawn tile's centre (origin is the frame centre).
+    const half = { x: (spec.scale * spec.feet.w) / 2, y: (spec.scale * spec.feet.h) / 2 };
+    const start = clampToBounds(def.spawn, def.bounds, half);
     const fx = spec.scale * (spec.feet.x + spec.feet.w / 2 - spec.fw / 2);
-    const fy = spec.scale * (spec.feet.y + spec.feet.h / 2 - spec.fh / 2);
-    this.player = this.physics.add.sprite(tileCenter(map.spawn.x) - fx, tileCenter(map.spawn.y) - fy, spec.key, 0);
-    this.player.setScale(spec.scale).setDepth(1);
+    this.player = this.physics.add.sprite(start.x - fx, start.y + half.y, spec.key, 0);
+    this.player.setOrigin(0.5, (spec.feet.y + spec.feet.h) / spec.fh).setScale(spec.scale);
     this.player.body.setSize(spec.feet.w, spec.feet.h, false).setOffset(spec.feet.x, spec.feet.y);
+    // The playable rect, not the texture size: the feet box can't leave it.
+    this.physics.world.setBounds(def.bounds.x, def.bounds.y, def.bounds.w, def.bounds.h);
     this.player.setCollideWorldBounds(true);
-    this.physics.world.setBounds(0, 0, worldW, worldH);
-    this.physics.add.collider(this.player, layer);
     this.setPose(false);
+    world.push(this.player);
 
-    this.marker = this.add.graphics().setDepth(2).setVisible(this.cfg.showTile === true);
+    // Overlay above every actor.
+    if (def.overlay) {
+      const ov = this.resolve("overlay", def.overlay, `scene-ph:${def.id}:overlay`, (k) => overlayPlaceholder(this, k, def));
+      art.overlay = ov.art;
+      world.push(this.add.image(0, 0, ov.key).setOrigin(0, 0).setDisplaySize(def.size.w, def.size.h).setDepth(this.debug.depth.overlay));
+    }
+    this.outlines = this.add.graphics().setDepth(this.debug.depth.overlay + 1).setVisible(this.cfg.outlines === true);
+    world.push(this.outlines);
+    this.sortDepths();
 
-    // Cameras: the zoomed world camera follows; the UI camera is 1:1 over the whole canvas.
+    // Cameras: the zoomed world camera follows, clamped to the texture; the UI camera is 1:1 over the canvas.
     const cam = this.cameras.main;
-    // A map smaller than the view is centred: widen the bounds evenly around it on that axis.
     const viewW = L.width / L.zoom;
     const viewH = L.height / L.zoom;
+    const { w: worldW, h: worldH } = def.size;
+    // A scene smaller than the view is centred: widen the bounds evenly around it on that axis.
     const bx = Math.min(0, (worldW - viewW) / 2);
     const by = Math.min(0, (worldH - viewH) / 2);
     cam.setZoom(L.zoom).setBounds(bx, by, Math.max(worldW, viewW), Math.max(worldH, viewH)).setRoundPixels(true);
@@ -131,7 +207,7 @@ export class WorldScene extends Phaser.Scene {
     this.help = this.add.text(L.width / 2, L.height - 12, "Walk: WASD / arrow keys", font).setOrigin(0.5, 1).setDepth(10);
     const uiCam = this.cameras.add(0, 0, L.width, L.height, false, "ui");
     cam.ignore([this.ui, this.help]);
-    uiCam.ignore([layer, this.player, this.marker]);
+    uiCam.ignore(world);
 
     // Keys: WASD are not captured (typing in a text box still works); arrows are, so they don't scroll the page.
     const kb = this.input.keyboard!;
@@ -145,7 +221,16 @@ export class WorldScene extends Phaser.Scene {
     this.input.on("pointerupoutside", (p: Phaser.Input.Pointer) => { this.stick.release(p); });
 
     this.cfg.onDebug?.(this.debug);
+    if (this.cfg.outlines) this.drawOutlines();
     this.drawUI();
+  }
+
+  /** Show or hide the debug outlines (bounds, zones, feet box). */
+  setOutlines(on: boolean): void {
+    this.cfg.outlines = on;
+    if (!this.outlines) return;
+    this.outlines.setVisible(on);
+    if (on) this.drawOutlines();
   }
 
   private createAnims(): void {
@@ -183,6 +268,19 @@ export class WorldScene extends Phaser.Scene {
     }
   }
 
+  /** Y-sort: the player (by the bottom of its feet box) and every actor (by its sprite's bottom). */
+  private sortDepths(): void {
+    const d = this.debug.depth;
+    const pf = this.player.body.bottom;
+    this.player.setDepth(actorDepth(pf));
+    d.player = this.player.depth;
+    this.debug.footY = pf;
+    for (const { def, sprite } of this.actors) {
+      sprite.setDepth(actorDepth(footY(sprite.y, sprite.displayHeight, sprite.originY)));
+      d.actors[def.id] = sprite.depth;
+    }
+  }
+
   update(_time: number, delta: number): void {
     const dt = Math.min(delta, 50) / 1000;
     const k = this.keys;
@@ -195,28 +293,38 @@ export class WorldScene extends Phaser.Scene {
     if (s.x !== 0 || s.y !== 0) dir = s;
 
     const body = this.player.body;
-    const v = stepVelocity({ x: body.velocity.x, y: body.velocity.y }, dir, dt);
+    const v = stepVelocity({ x: body.velocity.x, y: body.velocity.y }, dir, dt, this.walk);
     body.setVelocity(v.x, v.y);
     const d = this.debug;
     d.facing = facingOf(dir, d.facing);
     d.input = dir;
     d.vel = v;
     this.setPose(Math.hypot(v.x, v.y) > WALK.animMin);
+    this.sortDepths();
 
-    // Tile under the feet: report changes.
-    const cx = body.x + body.width / 2;
-    const cy = body.y + body.height / 2;
-    d.pos = { x: cx, y: cy };
-    const tx = toTile(cx);
-    const ty = toTile(cy);
-    if (tx !== d.tile.x || ty !== d.tile.y) {
-      const id = tileAt(this.cfg.map, tx, ty);
-      d.tile = { x: tx, y: ty, id, name: tileName(id) };
-      this.cfg.onEnterTile?.(id, tx, ty);
-    }
+    // Zones under the feet: each entry and exit is reported once.
+    const feet = { x: body.x + body.width / 2, y: body.y + body.height / 2 };
+    d.pos = feet;
+    const { entered, left } = this.zones.update(feet);
+    d.zones = [...this.zones.current];
+    for (const z of left) this.cfg.onLeaveZone?.(z, this.def);
+    for (const z of entered) this.cfg.onEnterZone?.(z, this.def);
     d.frames++;
-    if (this.cfg.showTile) this.marker.clear().lineStyle(1, 0xffe066, 0.9).strokeRect(tx * TILE_SIZE + 0.5, ty * TILE_SIZE + 0.5, TILE_SIZE - 1, TILE_SIZE - 1);
+    if (this.cfg.outlines) this.drawOutlines();
     this.drawUI();
+  }
+
+  private drawOutlines(): void {
+    const g = this.outlines.clear();
+    const b = this.def.bounds;
+    g.lineStyle(1, 0xffe066, 1).strokeRect(b.x + 0.5, b.y + 0.5, b.w - 1, b.h - 1);
+    for (const z of this.def.zones ?? []) {
+      const inside = this.zones.current.includes(z.id);
+      g.lineStyle(1, z.kind === "exit" ? 0xff6655 : 0x66ccff, inside ? 1 : 0.6).strokeRect(z.x + 0.5, z.y + 0.5, z.w - 1, z.h - 1);
+      if (inside) g.fillStyle(z.kind === "exit" ? 0xff6655 : 0x66ccff, 0.2).fillRect(z.x, z.y, z.w, z.h);
+    }
+    const body = this.player.body;
+    g.lineStyle(1, 0xffffff, 1).strokeRect(body.x, body.y, body.width, body.height);
   }
 
   private drawUI(): void {

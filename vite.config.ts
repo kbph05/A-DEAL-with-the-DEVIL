@@ -1,4 +1,5 @@
 import { existsSync, readdirSync } from "node:fs";
+import { sep } from "node:path";
 import { defineConfig } from "vite";
 
 // The realtime fight (src/fight, with Phaser: about 1.2 MB) is part of the game and loads lazily on the first fight, as
@@ -7,11 +8,14 @@ import { defineConfig } from "vite";
 // world.html; the final build has the single entry index.html, so the labs are not in dist/ (nor are the dev tools:
 // see src/main.ts).
 //
-// Private art hook (docs/world.md): the file names in the gitignored public/assets/private/ are listed at startup
-// and baked in as __PRIVATE_ASSETS__, so the world scene only requests files that exist (no 404s). Restart the dev
-// server after adding files.
+// Private art hook (docs/world.md): the files in the gitignored public/assets/private/ (and its subfolders, e.g.
+// scenes/<id>/background.png) are listed at startup and baked in as __PRIVATE_ASSETS__ (paths relative to that
+// folder, with "/"), so the world scene only requests files that exist (no 404s). Restart the dev server after
+// adding files.
 const privateDir = "public/assets/private";
-const privateAssets = existsSync(privateDir) ? readdirSync(privateDir).filter((f) => /\.(png|json)$/i.test(f)).sort() : [];
+const privateAssets = existsSync(privateDir)
+  ? readdirSync(privateDir, { recursive: true, encoding: "utf8" }).map((f) => f.split(sep).join("/")).filter((f) => /\.(png|jpe?g|webp|json)$/i.test(f)).sort()
+  : [];
 const define = { __PRIVATE_ASSETS__: JSON.stringify(privateAssets) };
 // Test builds have two Phaser pages (fight lab, world lab) sharing Phaser: give that shared chunk a clear name.
 const phaserChunk = { codeSplitting: { groups: [{ name: "phaser", test: /[\\/]node_modules[\\/]phaser[\\/]/ }] } };

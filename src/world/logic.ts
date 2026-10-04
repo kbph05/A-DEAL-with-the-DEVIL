@@ -1,12 +1,12 @@
 /**
  * World scene rules that don't need Phaser: walking speed and smoothing, facing, the screen layout. Tested in node.
- * Distances are world pixels (a tile is TILE_SIZE = 16), times are seconds.
+ * Distances are world pixels, times are seconds. The scene model itself (SceneDef, y-sort, zones) is in scene.ts.
  */
 import { norm, type Vec } from "../input/dir";
 import { TILE_SIZE } from "./tiles";
 
 export const WALK = {
-  /** Top speed: 5 tiles a second. */
+  /** Top speed: 80 px/s (5 placeholder tiles a second). */
   speed: 5 * TILE_SIZE,
   /** Speeding up and slowing down (px/s²): full speed in about 0.1 s, a stop in about 0.07 s. */
   accel: 800,
@@ -67,10 +67,13 @@ export interface WorldLayout {
 
 const SHORT = 540;
 
-/** Logical size with the parent's aspect (within limits) so FIT wastes little room; zoom 3 shows ~11 tiles across the short side. */
-export function worldLayout(parentW: number, parentH: number): WorldLayout {
+/**
+ * Logical size with the parent's aspect (within limits) so FIT wastes little room. The default zoom 2 shows 270
+ * world pixels across the short side (half the height of a 960×540 scene).
+ */
+export function worldLayout(parentW: number, parentH: number, zoom = 2): WorldLayout {
   const aspect = parentW > 0 && parentH > 0 ? parentW / parentH : 16 / 10;
-  const zoom = 3;
+  zoom = Math.max(1, Math.round(zoom));
   if (aspect >= 1) {
     const width = Math.round(Math.min(1280, Math.max(SHORT, SHORT * aspect)));
     return { width, height: SHORT, portrait: false, zoom, stick: { x: 130, y: SHORT - 130, r: 80 } };

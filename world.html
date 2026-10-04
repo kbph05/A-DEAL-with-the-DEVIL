@@ -10,10 +10,10 @@
       body { display: flex; flex-direction: column; height: 100dvh; overflow: hidden; }
       #bar { display: flex; flex-wrap: wrap; gap: 6px 12px; align-items: center; padding: 6px 10px; background: #1d1111; border-bottom: 1px solid #3a2222; }
       #bar label { display: inline-flex; gap: 4px; align-items: center; }
-      #bar input { width: 7em; }
-      #bar input, #bar button { font: inherit; background: #2a1a1a; color: #eee; border: 1px solid #553333; border-radius: 4px; padding: 3px 6px; min-height: 32px; box-sizing: border-box; }
+      #bar input[type="checkbox"] { width: 20px; height: 20px; min-height: 0; }
+      #bar select, #bar input, #bar button { font: inherit; background: #2a1a1a; color: #eee; border: 1px solid #553333; border-radius: 4px; padding: 3px 6px; min-height: 32px; box-sizing: border-box; }
       #bar button { background: #8a2020; border-color: #b33; font-weight: 600; padding: 3px 12px; }
-      #where { font-variant-numeric: tabular-nums; color: #f2d36b; min-width: 13em; }
+      #where { font-variant-numeric: tabular-nums; color: #f2d36b; min-width: 22em; }
       #event { color: #a99; }
       #stage { position: relative; flex: 1; min-height: 0; touch-action: none; user-select: none; -webkit-user-select: none; }
       #err { position: absolute; inset: 0; display: none; place-items: center; color: #f88; padding: 1em; text-align: center; }
@@ -22,9 +22,8 @@
   <body>
     <div id="bar">
       <strong>World lab</strong>
-      <label>Seed <input id="seed" type="text" placeholder="random" /></label>
-      <button id="regen" type="button">Regenerate</button>
-      <button id="random" type="button">New seed</button>
+      <label>Scene <select id="scene"></select></label>
+      <label><input id="outlines" type="checkbox" /> Bounds and zones</label>
       <span id="where"></span>
       <span id="event"></span>
     </div>
