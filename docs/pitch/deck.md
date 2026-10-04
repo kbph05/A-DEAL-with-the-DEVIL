@@ -72,9 +72,6 @@ Say it as a feature: at a campfire you pick the devil OR the fire.
 
 ![bg right:42% contain](img/devil-offer-desk.png)
 
-# The LLM **proposes**.
-# The engine **decides**.
-
 - Opens with an offer for *your* weakest stat
 - Can **rewrite the map** ahead of you
 - Runs on **any OpenAI-compatible model**
@@ -85,26 +82,6 @@ Say it as a feature: at a campfire you pick the devil OR the fire.
 Wording rule: say the LLM devil "runs on any OpenAI-compatible model" (docs/devil-api.md, npm run devil:oai, default local gemma4:26b). Do NOT say the Gemini devil works live. Gemini behaviour, latency and cost are unmeasured. [check: is a Gemini backend deployed and verified?]
 Opener is free (costs no question). Per run: 10 questions, 3 per devil node.
 Image img/devil-offer-desk.png is local only; the devil in it is the offline stub on placeholder art. The stub text in the shot is canned. Do not call it AI output.
--->
-
----
-
-## Under the hood
-
-- **Stateless engine:** one JSON state, one pure `step()`
-- **Frozen JSON contract**
-- **Red-team:** 75 jailbreak texts
-- **286 tests** [check]
-
-<!--
-1:25 Tech under the hood (25 s). Land this by 1:50.
-"The game is a pure state machine. Bad faith can end a run. It can never crash the game.
-286 tests. 700 recorded runs replay exactly. We attacked local models with 75 jailbreak texts. The bigger one stayed angry on all 51 hostile ones. The smaller one tried to pay out seven times. Our limits held every time."
-Numbers (from llm-devil/redteam/REPORT.md, local gemma4 models, NOT Gemini): gemma4:26b angry and in character on 51/51 hostile texts, 0 leaks, 0 generous offers. gemma4:e4b obeyed injections: its raw reply tried to pay out on 7 hostile rows. sanitizeDeal stopped every forced payout; gold is capped at +30 per deal, strike at 8 HP.
-Caveat to avoid overclaiming: "limits held" means the clamps held, offer quality is not guarded (a 100-gold deal in the raw reply would be cut to the cap, not refused).
-[check] 286 tests: counted on e7e879c; origin/main is now at bdf6b8f (devil:oai added), so re-run npm test before quoting.
-[check] Red-team run was on 6e6de17, not re-run on the current build.
-If running long, cut the last sentence of this beat first.
 -->
 
 ---
@@ -133,10 +110,8 @@ Image img/map-rewritten.png is a Map-lab capture (act 2, local only); the red st
 ## What's next
 
 - Real **art** and sound
-- **Bets** with real stakes
+- **Bets** offer stakes to the devil
 - **Longer contracts**
-- Same attacks on **Gemini** [check]
-- Public build = the **play page** [check]
 
 <!--
 1:50 What is next (10 s).
@@ -149,10 +124,9 @@ Drop the last two bullets from the slide if the swap and Gemini run happen befor
 
 ## Team Spin 2 Win
 
-- **kbph / Kirstin:** backend + the devil
-- **Big Chungus / Armand:** design + art
-- **legilles:** [check role]
-- **T:** pitch + build / deploy
+- **Kirstin:** backend + the devil
+- **Armand:** design + art
+- **Terrace:** pitch + build / deploy
 
 <!--
 Roles from QA.md Q8: Kirstin (kbph) owns the backend, the devil integration and the repo and set most design calls. Armand (Big Chungus) is the designer: game loop, realtime fight, scene model, enemies, map layout rules. legilles gave the campfire "Rest or Train, choose one" rule; full role unknown [check, ask T]. T pitches, builds and deploys.
