@@ -30,7 +30,7 @@ One JSON-serializable object with everything the engine needs to continue a run 
 `step(state, command) → { ok, state, events, actions, awaiting? }` is pure and synchronous. It never mutates its input, does no I/O, and reads no clock or `Math.random`.
 
 - **Commands:** the existing `Command` objects (`{"cmd":"go","n":1}`, `fight`, `rest`, `train` (campfire: one or the other with `rest`), `buy` with an `item`, `deal` with optional `text`, `accept`, `refuse`, `look`), plus `{"cmd":"devil_reply","deal":...}`, `{"cmd":"fight","realtime":true}` and `{"cmd":"fight_result",...}` (the realtime fight, below).
-- **Rejection:** a rejected command returns `ok: false`, the input state itself (unchanged), and exactly one `rejected` event. The reasons are the same strings as before.
+- **Rejection:** a rejected command returns `ok: false`, the input state itself (unchanged), and exactly one `rejected` event. The reasons are the same strings as before. Hostile input is rejected too, never thrown on: a `null` or non-object command, a `Symbol`, `BigInt`, circular or throwing value in any field (`src/game/devilRedteam.test.ts`).
 - **`look`:** always accepted, including after the run ends and while the devil is pending. It changes nothing.
 
 ## actions
@@ -74,7 +74,7 @@ It leaves out the dice state, enemy power, past acts and the raw pending request
 
 The devil is outside the engine; it may be a network call.
 
-1. `step(s, {"cmd":"deal","text":"..."})` returns `awaiting: { devil: request }` and records the request in `state.pending`. The request has the exact body shape `HttpDevil` POSTs (docs/devil-api.md): `{ state, context, playerText }`.
+1. `step(s, {"cmd":"deal","text":"..."})` returns `awaiting: { devil: request }` and records the request in `state.pending`. The request has the exact body shape `HttpDevil` POSTs (docs/devil-api.md): `{ state, context, playerText }`. `playerText` is the text cut to `MAX_PLAYER_TEXT` (2000) code units; a non-string `text` becomes `null`.
 2. Send the request to any devil and wait.
 3. `step(s, {"cmd":"devil_reply","deal": answer})` runs `sanitizeDeal` on the answer, puts the offer on the table and emits `deal_offered`. **Forced replies:** if the sanitized deal has `forced: true` the devil strikes instead: nothing is put on the table (a standing offer from an earlier haggle is untouched); the HP loss (only HP, at most `MAX_STRIKE_HP` = 8, no curse, rewrite, gold or soul) is applied at once, `devil_struck { dialogue, effects }` is emitted (`effects` = the deltas that landed), the usual death check runs (revival, or `lost` with cause "the devil's wrath"), and the node is **not** resolved. The ask counted as usual (`asks`, `totalAsks`). So after a strike `accept`/`refuse` stay unavailable unless an older offer stands, and `deal` stays legal while asks and questions remain (docs/devil-api.md, "Forced replies"). Junk, `null` and missing answers become the devil's silence. Any other command (except `look`) is rejected with "the devil is still speaking" until the reply arrives.
 

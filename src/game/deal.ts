@@ -2,6 +2,9 @@ import { isKind } from "../map";
 import type { CurseTrigger, Deal } from "./devil";
 import { sanitizeEffects } from "./state";
 
+/** Cut to `max` code units without leaving half a surrogate pair (a split emoji) at the end. */
+export const cut = (t: string, max: number): string => (t.length <= max ? t : t.slice(0, max).replace(/[\uD800-\uDBFF]$/, ""));
+
 const TRIGGERS: readonly CurseTrigger[] = ["on_hit", "on_enter", "on_fight", "next_node"];
 const MAX_DIALOGUE = 600;
 /** Most HP a single forced strike may take. Sanitizer-enforced: a backend cannot send a bigger one. */
@@ -17,7 +20,7 @@ export function sanitizeDeal(raw: unknown): Deal {
   try {
     if (typeof raw !== "object" || raw === null || Array.isArray(raw)) return { ...SILENCE, effects: {} };
     const r = raw as Record<string, unknown>;
-    const dialogue = typeof r.dialogue === "string" && r.dialogue.trim() ? r.dialogue.trim().slice(0, MAX_DIALOGUE) : "...";
+    const dialogue = typeof r.dialogue === "string" && r.dialogue.trim() ? cut(r.dialogue.trim(), MAX_DIALOGUE) : "...";
     const deal: Deal = { dialogue, effects: sanitizeEffects(r.effects) };
     if (r.forced === true) { // a strike, not an offer: HP loss only (capped), nothing else survives
       const loss = Math.min(MAX_STRIKE_HP, Math.max(0, -(deal.effects.hp ?? 0)));

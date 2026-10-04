@@ -15,7 +15,7 @@
  */
 import { generateAct, markVisited, nextRandom, rewriteNode } from "../map";
 import { legalActions } from "./actions";
-import { sanitizeDeal } from "./deal";
+import { cut, sanitizeDeal } from "./deal";
 import type { Curse, Deal } from "./devil";
 import type { Deltas, GameEvent } from "./events";
 import { fightRequest, sanitizeFightResult } from "./fightResult";
@@ -29,17 +29,19 @@ const clone = <T>(x: T): T => structuredClone(x);
 
 /** Why `cmd` would be rejected in `s`, or null if it is legal. Checks only; same order and wording as ever. */
 export function rejection(s: GameState, cmd: Command): string | null {
-  const c = cmd as { cmd: unknown };
+  // Untrusted input (REPL, a backend, a bot): null, a bare string or a number must be rejected, not thrown on.
+  const c = (typeof cmd === "object" && cmd !== null ? cmd : {}) as { cmd: unknown };
   if (c.cmd === "look") return null;
   if (s.pending && c.cmd !== "devil_reply") return "the devil is still speaking";
   if (s.pendingFight && c.cmd !== "fight_result") return "the fight is still on; send fight_result";
   const over = s.ending ? `the run is over (${s.ending}); start a new game` : null;
+  if (c !== cmd) return "unknown command undefined";
   switch (cmd.cmd) {
     case "go": {
       if (over) return over;
       if (s.enemy) return `${s.enemy.name} blocks the way; fight()`;
       const exits = exitsOf(s), i = goIndex(cmd.n);
-      if (!Number.isInteger(i) || i < 1 || i > exits.length) return `no exit ${String(cmd.n)}; choose 1..${exits.length}`;
+      if (!Number.isInteger(i) || i < 1 || i > exits.length) return `no exit ${text(cmd.n)}; choose 1..${exits.length}`;
       return null;
     }
     case "fight": return over ?? (s.enemy ? null : "nothing here to fight");
@@ -71,12 +73,19 @@ export function rejection(s: GameState, cmd: Command): string | null {
     case "accept": case "refuse": return over ?? (s.offer ? null : "no offer on the table; deal()");
     case "devil_reply": return over ?? (s.pending ? null : "nobody asked the devil anything; deal() first");
     case "fight_result": return over ?? (s.pendingFight ? null : "no fight is on; fight with realtime first");
-    default: return `unknown command ${JSON.stringify(c.cmd)}`;
+    default: return `unknown command ${show(c.cmd)}`;
   }
 }
 
-const goIndex = (n: unknown): number => (typeof n === "string" && n.trim() === "" ? NaN : Number(n));
-const wareName = (item: unknown): string => String(item ?? "").trim().toLowerCase();
+/** Never throws: a Symbol, BigInt or an object whose valueOf/toString throws is just "no such exit" / "no such ware". */
+const goIndex = (n: unknown): number => { try { return typeof n === "string" && n.trim() === "" ? NaN : Number(n); } catch { return NaN; } };
+const text = (v: unknown): string => { try { return String(v); } catch { return typeof v; } };
+const wareName = (item: unknown): string => text(item ?? "").trim().toLowerCase();
+/** JSON.stringify for a rejection message, without throwing on BigInt, circular objects or throwing getters. */
+const show = (v: unknown): string => { try { return String(JSON.stringify(v)); } catch { return typeof v; } };
+/** Longest player text the engine keeps and sends to the devil (code units; longer text is cut). */
+export const MAX_PLAYER_TEXT = 2000;
+
 
 /** Apply one command. See the file comment. */
 export function step(state: GameState, cmd: Command): StepResult {
@@ -108,7 +117,7 @@ export function step(state: GameState, cmd: Command): StepResult {
     case "buy": buy(d, ev, wareName(cmd.item)); break;
     case "deal":
       d.asks++; d.totalAsks++;
-      d.pending = { state: snapshot(d.player), context: devilContext(d), playerText: typeof cmd.text === "string" ? cmd.text : null };
+      d.pending = { state: snapshot(d.player), context: devilContext(d), playerText: typeof cmd.text === "string" ? cut(cmd.text, MAX_PLAYER_TEXT) : null };
       break;
     case "devil_reply":
       d.pending = null;

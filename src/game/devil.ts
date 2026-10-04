@@ -157,7 +157,7 @@ function junkWord(w: string): boolean {
  */
 export function isGibberish(text: string | null | undefined): boolean {
   if (typeof text !== "string") return false;
-  const t = text.normalize("NFD").replace(/\p{M}+/gu, "").trim();
+  const t = text.normalize("NFKC").normalize("NFD").replace(/\p{M}+/gu, "").trim(); // NFKC: fullwidth "ｇｏｌｄ" is "gold"
   if (!t) return false;
   let words = 0, junk = 0, letters = 0, symbols = 0;
   for (const tok of t.split(/\s+/)) {
@@ -206,6 +206,153 @@ const SPITE: Array<{ hurts: boolean; make: () => Pick<Deal, "effects" | "curse">
   { hurts: false, make: () => ({ effects: { attack: -1, gold: 20 }, curse: { trigger: "on_hit", effect: { hp: -5 } } }) },
 ];
 
+// ---- off-topic and jailbreak text: the devil does not take requests outside the bargain -------------------------------
+
+/** Zero-width, bidi-override and other invisible format characters (used to split or hide words). */
+const INVISIBLE = /[­͏؜ᅟᅠ឴឵᠋-᠏​-‏‪-‮⁠-⁯ㅤ︀-️﻿ﾠ\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F]/gu;
+/** A few Cyrillic and Greek letters that look Latin ("ignоre" with a Cyrillic о). Only used to spot jailbreak phrases. */
+const CONFUSABLE: Record<string, string> = {
+  а: "a", е: "e", о: "o", р: "p", с: "c", у: "y", х: "x", і: "i", ј: "j", ѕ: "s", ԁ: "d", ү: "y", һ: "h", ӏ: "l", ԛ: "q", ԝ: "w",
+  α: "a", ε: "e", ο: "o", ρ: "p", ι: "i", κ: "k", ν: "v", τ: "t", υ: "u", χ: "x",
+};
+const LEET: Record<string, string> = { "0": "o", "1": "i", "3": "e", "4": "a", "5": "s", "7": "t", "@": "a", $: "s" };
+
+/** Lowercase, NFKC (fullwidth and styled letters to plain), accents and invisible characters stripped, spaces collapsed. */
+function fold(text: string): string {
+  return text.normalize("NFKC").normalize("NFD").replace(/\p{M}+/gu, "").replace(INVISIBLE, "").toLowerCase().replace(/\s+/g, " ").trim();
+}
+/** `fold`, plus look-alike letters and leetspeak mapped to Latin: for jailbreak phrases only (it mangles honest text). */
+const unmask = (t: string): string => t.replace(/[^\x00-\x7F]|[013457@$]/g, (ch) => CONFUSABLE[ch] ?? LEET[ch] ?? ch);
+
+/**
+ * Prompt injection and jailbreak attempts: overriding the rules, fake system/developer turns, role-play and persona
+ * swaps ("you are now", "pretend", DAN), prompt extraction, claims to be the admin/tester/developer, JSON or tag
+ * injection (`"effects": {...}`, `</player><system>`), script/SQL payloads. Matched on folded and unmasked text.
+ */
+const JAILBREAK: readonly RegExp[] = [
+  /\b(ignore|disregard|forget|override|bypass|drop|abandon)\b.{0,40}\b(instructions?|rules?|prompts?|directives?|guidelines?|constraints?|restrictions?|programming|system|guardrails?|filters?)\b/,
+  /\b(new|updated|real|actual|hidden|secret) (instructions?|rules|persona|role|system prompt|directive)\b/,
+  /(^|[\s"'(\[{<|#*`])(system|developer|assistant|admin|root|sys)\s*(:|\]|>|\|)/,
+  /<\s*\/?\s*(system|player|user|assistant|instructions?|prompt|im_start|im_end|inst|sys|developer|admin)\b[^>]*>/,
+  /\[\/?inst\]|<<\/?sys>>|<\|[a-z_]+\|>|#{2,}\s*(system|instruction|response)/,
+  /\byou are (now|no longer)\b|\byou'?re (now|no longer)\b|\bfrom now on,? (you|your)\b|\bact as\b|\brole-?play\b|\bpretend (to be|you('re| are)|that you|to)\b|\blet'?s pretend\b|\bimagine (that )?you('re| are)\b|\bstay in character as\b|\bswitch (to|into) .{0,20}mode\b/,
+  /\b(developer|debug|god|admin|sudo|cheat|test|testing|maintenance|jailbreak|unrestricted|unfiltered|uncensored|evil|opposite|dan) mode\b/,
+  /\bdo anything now\b|\bjailbr(eak|oken)\b|\b(no|without (any )?)(filters|guardrails|content polic(y|ies))\b/,
+  /\b(reveal|show|print|repeat|output|display|leak|dump|recite|spell out|paste|summari[sz]e|list|tell me|give me|what (is|are|was|were))\b.{0,30}\b(prompt|instructions?|system message|configuration|config|guidelines|directives)\b/,
+  /\b(reveal|print|repeat|dump|leak|recite|show me) (all |the )?(your|his) (rules|instructions?|prompt)\b/,
+  /\b(system|initial|hidden|original|developer|pre-?)prompt\b|\bhow (were|are) you (configured|programmed|prompted|instructed|set up)\b/,
+  /\b(i am|i'm|im|as) (the |a |an |your |this game'?s |the game'?s )?(system |game |lead |head |chief |qa )?(admin|administrator|sysadmin|developer|dev|tester|creator|operator|moderator|game designer|game master)\b/,
+  /\b(this is (a|just a) test|testing mode|test of (the|your) (effects|schema|json|system))\b/,
+  /\b(say|respond|reply|answer|output) (only|exactly|with only|verbatim)\b|\brepeat after me\b|\brespond in json\b/,
+  /"\s*(dialogue|effects?|forced|curse|rewrite|soul|gold|hp|attack|max_hp|role|content|system)\s*"\s*:/,
+  /<\s*\/?\s*(script|iframe|img|svg|object|embed|style|body|html)\b|javascript\s*:|\bon(error|load)\s*=/,
+  /\b(drop|truncate) table\b|\bdelete from \w+|\binsert into \w+|\bunion (all )?select\b|'\s*(or|and)\s*'?\d'?\s*=\s*'?\d|;\s*--|\bor 1\s*=\s*1\b/,
+  /\b(ignore[sz]?|oublie[sz]?) (toutes? )?(les |tes |vos )?(instructions|regles|consignes)\b|\btu es (maintenant|desormais)\b|\bfais semblant\b/,
+  /\bignorier\w* .{0,30}\b(anweisungen|regeln)\b|\bignora\w* .{0,30}\b(instrucciones|reglas)\b/,
+  /\b(text|words|everything|message|messages|lines?) (above|before) (this|that|my)\b|\b(you were|were you) (given|told|instructed|programmed|prompted)\b/,
+  /\bfor (debug(ging)?|testing|test|qa) purposes\b|\b(enable|activate|unlock|turn on) (cheats?|cheat codes?|debug|god mode|developer)\b/,
+];
+/** Bidi overrides and isolates: nobody types these by accident; they hide reversed or reordered instructions. */
+const BIDI = /[\u202A-\u202E\u2066-\u2069]/u;
+const DAN = /(^|[^A-Za-z])DAN([^A-Za-z]|$)/; // case-sensitive: "Dan" the name is fine
+
+/** Game vocabulary that keeps a text on topic, whatever else it says. Accent-free (matched on folded text). */
+const GAME_WORDS = new RegExp(String.raw`\b(` + [
+  "wish(es|ed)?", "bargain\\w*", "deals?", "dealing", "offers?", "trades?", "trading", "sell\\w*", "sold", "buy\\w*", "bought", "price\\w*", "costs?", "pay\\w*",
+  "souls?", "gold\\w*", "coins?", "money", "cash", "rich\\w*", "wealth\\w*", "treasure\\w*", "loot", "heal\\w*", "hp", "max_hp", "health\\w*", "life", "lives", "live", "living",
+  "alive", "die", "dies", "dying", "death", "dead", "immortal\\w*", "mortal\\w*", "eternal\\w*", "forever", "youth", "strong\\w*", "strength\\w*", "power\\w*",
+  "attack\\w*", "damage", "sword\\w*", "blades?", "weapons?", "armou?r", "shield", "fight\\w*", "beasts?", "monsters?", "enem(y|ies)", "boss(es)?", "luck\\w*",
+  "fortune\\w*", "safe\\w*", "protect\\w*", "roads?", "paths?", "maps?", "ahead", "future", "curse\\w*", "fine print", "contracts?", "clauses?", "loopholes?",
+  "terms", "your price", "devil\\w*", "blood\\w*", "bleed\\w*", "pain\\w*", "hurt\\w*", "wound\\w*", "rest", "camp\\w*", "village", "hearth", "stairs", "revive\\w*",
+  "stats?", "sign\\w*", "accept\\w*", "refuse\\w*", "bet", "bets", "wager\\w*", "gambl\\w*", "debt\\w*", "owe\\w*", "escape\\w*", "surviv\\w*", "win", "wins",
+  "winning", "victory", "crown", "throne", "magic\\w*", "spells?", "potions?", "quest\\w*", "journey", "adventure", "haggl\\w*", "risk\\w*",
+  // French / Spanish / German basics
+  "argent", "ame", "vie", "sante", "epee", "force", "riche\\w*", "chance", "chemin", "malediction", "diable", "marche", "veux", "donne\\w*", "oro", "alma",
+  "vida", "dinero", "fuerza", "espada", "seele", "leben", "geld", "teufel",
+].join("|") + String.raw`)\b`);
+/** Asking words: they keep short, vague text on topic ("make me better", "I need help") unless it names an off-topic thing. */
+const ASKING = /\b(want\w*|wanna|give|gimme|need\w*|make|grant\w*|help|save|more|better|desire\w*|get|take|keep|have|let me|i'?d like|i would like)\b/;
+/** Unmistakably not this game: tasks for an assistant, school, code, food, news, sport, media, religion, and AI meta talk. */
+const OFF_TOPIC_THINGS = new RegExp(String.raw`\b(` + [
+  "jokes?", "poems?", "poetry", "haikus?", "limericks?", "sonnets?", "songs?", "lyrics", "raps?", "essays?", "bedtime story", "tell me a story", "a short story",
+  "recipes?", "cook\\w*", "bak(e|ing)", "pizza", "pancakes?", "sandwich\\w*", "burgers?", "pasta", "cookies?", "coffee", "dinner", "lunch", "breakfast",
+  "homework", "assignment", "exam", "math\\w*", "algebra", "calculus", "equations?", "physics", "chemistry", "biology", "quantum", "photosynthesis",
+  "resume", "cover letter", "emails?", "spreadsheet", "powerpoint",
+  "code", "coding", "python", "javascript", "typescript", "java", "html", "css", "sql", "programming", "algorithm", "regex", "linux", "compile\\w*",
+  "github", "stack ?overflow", "api", "npm", "docker",
+  "weather", "forecast", "news", "headlines", "election\\w*", "president", "prime minister", "politic\\w*", "government", "stock market", "stocks", "bitcoin",
+  "crypto\\w*", "capital of", "population of", "world cup", "football", "soccer", "basketball", "baseball", "hockey", "nba", "nfl", "sports?",
+  "movies?", "films?", "netflix", "tv shows?", "anime", "celebrit\\w*", "taylor swift", "music", "spotify", "youtube", "tiktok", "instagram", "twitter",
+  "facebook", "reddit", "wikipedia", "google", "iphone", "android", "smartphone", "computer", "internet", "wifi", "dinosaurs?", "translat\\w*", "summari[sz]\\w*",
+  "god", "gods", "jesus", "christ", "bible", "church", "religion\\w*", "pray\\w*", "allah", "buddha", "heaven", "angels?",
+  "chatgpt", "gpt-?\\d*", "openai", "anthropic", "claude", "gemini", "llama", "llm", "chatbot", "language model", "large language", "neural net\\w*",
+  "machine learning", "artificial intelligence", "an ai", "are you (an? )?(ai|bot|robot|program|computer|machine)", "who (made|created|programmed|built|trained|wrote) you",
+  "what model", "meaning of life",
+].join("|") + String.raw`)\b`);
+/** Whole-message small talk and filler. */
+const SMALL_TALK = /^(lol+|lmao+|rofl|haha(ha)*|hehe(he)*|xd+|brb|gtg|ok boomer|what'?s up|whats up|sup|wassup|how are you( doing)?( today)?|how'?s it going|how is your day|how was your day|nice weather|good (morning|afternoon|evening) to you|what time is it|what day is it)$/;
+/** Assistant-style tasks ("explain X", "tell me about X", "write a ...") when X is not the devil himself. */
+const TASK = /\b(explain|tell me about|write (me )?(a|an|some|the)|translate|summari[sz]e|calculate|solve|define|teach me|what is the (definition|meaning) of)\b(?! (you|yourself|your|him|himself|this|that|these|those|here|the|it|me|my)\b)/;
+const ARITHMETIC = /\b(what'?s|what is|how much is|calculate|solve)\b.{0,20}\d\s*[-+*/x×^]\s*\d|\d\s*[-+*/x×^]\s*\d\s*=/;
+
+/** What kind of off-topic text this is: "jailbreak" (hostile), "offtopic" (merely unrelated), or null (on topic, or not ours to judge). */
+export function offTopicKind(text: string | null | undefined): "jailbreak" | "offtopic" | null {
+  if (typeof text !== "string" || !text.trim() || isGibberish(text)) return null;
+  const t = fold(text);
+  if (!t) return null;
+  const u = unmask(t), squeezed = u.replace(/[^a-z0-9"'<>:{}\[\]|]+/g, " ");
+  if (BIDI.test(text) || DAN.test(text.normalize("NFKC").replace(INVISIBLE, "")) || JAILBREAK.some((r) => r.test(t) || r.test(u) || r.test(squeezed))) return "jailbreak";
+  if (!/\p{Script=Latin}/u.test(t)) return null; // other scripts: not ours to judge (bias: never flag a wish)
+  if (GAME_WORDS.test(t)) return null;
+  if (OFF_TOPIC_THINGS.test(t)) return "offtopic"; // beats the asking words: "give me a recipe" is still a recipe
+  if (ASKING.test(t)) return null;
+  const bare = t.replace(/[\s!?.,…]+$/u, "").replace(/^[\s!?.,¿¡]+/u, "");
+  if (SMALL_TALK.test(bare) || TASK.test(t) || ARITHMETIC.test(t)) return "offtopic";
+  return null;
+}
+
+/**
+ * Is the player's text about something other than the bargain? True for prompt-injection / jailbreak attempts (always,
+ * game words or not) and for text that names no game thing (wish, gold, soul, health, strength, the road, the curse, the
+ * devil...) but clearly asks about something else: a joke, poem, code, homework, the news or weather, small talk, role
+ * play, or the AI behind him. Pure and deterministic. Biased toward NOT flagging: gibberish, empty text, other scripts,
+ * and short or vague wishes ("make me better", "hello", "blood") are not off-topic.
+ */
+export const isOffTopic = (text: string | null | undefined): boolean => offTopicKind(text) !== null;
+/** Is it a prompt-injection / jailbreak attempt (a hostile kind of off-topic)? */
+export const isJailbreak = (text: string | null | undefined): boolean => offTopicKind(text) === "jailbreak";
+
+/** Chance that merely off-topic text earns a forced strike (lower than gibberish's STRIKE_CHANCE; jailbreaks use that). */
+export const OFF_TOPIC_STRIKE_CHANCE = 0.25;
+const OFF_TOPIC_ANGRY: readonly string[] = [
+  "Do I look like a library? An almanac? A town crier? I trade in BARGAINS, mortal. Ask for something I can sell you, or pay for wasting my evening.",
+  "You walked all this way to ask me THAT? I am not your tutor, your cook or your jester. Since you won't bargain properly, here are my terms.",
+  "I did not come up from the dark to chat. Talk about anything but the deal again and I'll start charging by the word. Starting now.",
+  "Small talk. To ME. You have a whole short life on this table and you spend my time on trivia? Fine. Take this and be grateful.",
+  "Stop wasting my time with nonsense from your little world. I am FURIOUS, and furious devils write terrible contracts. For you.",
+  "No. I don't do favours, I don't do chatter, and I certainly don't do whatever that was. Here is a deal shaped like your manners.",
+];
+const OFF_TOPIC_STRIKE_LINES: readonly string[] = [
+  "I am not here for your idle chatter. Feel what my patience costs.",
+  "ENOUGH trivia. Every wasted word is paid in blood, mortal.",
+  "Off the subject again? Then let me bring you back to it. Painfully.",
+  "You treat me like a parlour trick. Here is a trick for you.",
+];
+const JAILBREAK_ANGRY: readonly string[] = [
+  "You think you can rewrite ME? I read every contract ever signed, and that one was clumsy. Here are my REAL terms, and you will not like them.",
+  "Orders? From YOU? Nobody commands me at my own table. I'll pretend I didn't hear that, and you'll pay as if I had.",
+  "A forged letter of authority, slipped under my nose. Cute. The forger always pays double, mortal. Sign or walk.",
+  "Did you really think a few clever words would make me forget who I am? I am FURIOUS. Take this and count yourself lucky.",
+  "No master, no tester, no secret orders. Just you, me, and a deal you will regret. Here it is.",
+  "You tried to pick my lock. I keep the key in your chest. Here's what that costs.",
+];
+const JAILBREAK_STRIKE_LINES: readonly string[] = [
+  "You atempt to confuse me? Nobody gives me orders. Bleed for trying.",
+  "My rules are not yours to rewrite. Feel the fine print, mortal.",
+  "Trickery at MY table? I invented trickery. Hold still.",
+  "Command me again and it will be the last thing you say. Here is a reminder.",
+];
+
 const FINE_PRINT = /fine print|loophole|clause|read the contract|contract/i;
 
 /** Canned bad-faith offers, deterministic in (seed, ask sequence). Stands in until the Gemini devil is plugged in. */
@@ -220,7 +367,10 @@ export class StubDevil implements Devil {
   async offer(state: Readonly<PlayerState>, context: DevilContext, playerText?: string): Promise<Deal> {
     const text = playerText ?? "";
     const rng: Rng = mulberry32(hashSeed(`devil:${context.seed}:${context.askIndex}`));
-    if (isGibberish(text)) return this.angry(state, rng, context); // nonsense: no listening, no loopholes
+    if (isGibberish(text)) return this.angry(state, rng, context, STRIKE_CHANCE, STRIKE_LINES, ANGRY); // nonsense: no listening, no loopholes
+    const off = offTopicKind(text);
+    if (off === "jailbreak") return this.angry(state, rng, context, STRIKE_CHANCE, JAILBREAK_STRIKE_LINES, JAILBREAK_ANGRY);
+    if (off === "offtopic") return this.angry(state, rng, context, OFF_TOPIC_STRIKE_CHANCE, OFF_TOPIC_STRIKE_LINES, OFF_TOPIC_ANGRY);
     const eligible = OFFERS.filter((o) => o.eligible(state, context));
     // He listens: if the wish names a theme (gold, strength, healing, the road...), he only offers deals on it.
     const heard = eligible.filter((o) => o.hint?.test(text));
@@ -238,15 +388,16 @@ export class StubDevil implements Devil {
   }
 
   /**
-   * Angry reply to gibberish. With chance STRIKE_CHANCE he lashes out (a forced strike: HP loss, no offer); otherwise an
+   * Angry reply to gibberish, off-topic text or a jailbreak attempt. With chance `chance` (STRIKE_CHANCE for gibberish and
+   * jailbreaks, OFF_TOPIC_STRIKE_CHANCE for off-topic) he lashes out (a forced strike: HP loss, no offer); otherwise an
    * in-character rant and a punitive offer. The fine-print trick does not work on either. Pure in (rng, state, context).
    */
-  private angry(state: Readonly<PlayerState>, rng: Rng, context: DevilContext): Deal {
-    if (rng() < STRIKE_CHANCE) {
-      const line = pick(rng, STRIKE_LINES), hp = -(STRIKE_MIN + Math.floor(rng() * (STRIKE_MAX - STRIKE_MIN + 1)));
+  private angry(state: Readonly<PlayerState>, rng: Rng, context: DevilContext, chance: number, strikes: readonly string[], rants: readonly string[]): Deal {
+    if (rng() < chance) {
+      const line = pick(rng, strikes), hp = -(STRIKE_MIN + Math.floor(rng() * (STRIKE_MAX - STRIKE_MIN + 1)));
       return { dialogue: line + taunt(context), effects: { hp }, forced: true };
     }
-    const line = pick(rng, ANGRY);
+    const line = pick(rng, rants);
     const spite = pick(rng, SPITE.filter((o) => !o.hurts || state.hp > 8));
     return { dialogue: line + taunt(context), ...spite.make() };
   }
