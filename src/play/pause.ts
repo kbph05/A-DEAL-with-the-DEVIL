@@ -43,18 +43,22 @@ export interface KeyContext {
   typing: boolean;
   /** The ending card is up: it has its own Play again, and there is nothing to pause. */
   ending: boolean;
+  /** The credits screen is open (over the title, the pause menu or the ending): Escape closes it before anything else. */
+  credits?: boolean;
 }
 
 /** Can the pause menu open now? On a run, not already paused, not on the ending card. */
 export const canPause = (s: PauseState, ending: boolean): boolean => s.screen === "run" && !s.paused && !ending;
 
 /**
- * What a key does: Escape closes an open map first, then backs out of the quit question, then resumes, else pauses;
+ * What a key does, the topmost open layer first: Escape closes the credits, then an open map, then backs out of the quit question, then resumes, else pauses;
  * P pauses or resumes (not while the quit question is asked). Nothing on the title screen or while typing.
  */
-export function pauseKey(s: PauseState, key: string, ctx: KeyContext): PauseAction | "closeMap" | null {
-  if (ctx.typing || s.screen === "title") return null;
+export function pauseKey(s: PauseState, key: string, ctx: KeyContext): PauseAction | "closeMap" | "closeCredits" | null {
+  if (ctx.typing) return null;
   const esc = key === "Escape", p = key === "p" || key === "P";
+  if (ctx.credits) return esc ? "closeCredits" : null; // nothing else under the credits answers a key
+  if (s.screen === "title") return null;
   if (!esc && !p) return null;
   if (s.paused) return s.confirmQuit ? (esc ? "cancelQuit" : null) : "resume";
   if (esc && ctx.map === "open") return "closeMap";

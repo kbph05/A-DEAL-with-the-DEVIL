@@ -167,12 +167,15 @@ Big Chungus's enemies, in `ENEMIES` (`enemies.ts`). Every one is data plus a beh
 
 | Id | Label | HP share | Damage (× engine power) | Speed | Size (radius) | Behaviour |
 | --- | --- | --- | --- | --- | --- | --- |
+| `orc` | Orc | 1 | 0.75 | 105 | 18 | The slime's numbers and behaviour under the Orc sprite. **The only regular enemy in the encounter tables** since 4 Oct. |
 | `slime` | Slime | 1 | 0.75 | 105 | 18 | The original fight enemy: chases, telegraphs (swells and turns yellow, a lane on the floor), lunges, recovers. Walking into it hurts. |
 | `demon` | Demon | 1.5 | 1 | 125 | 18 | Stalks from further out (200), then a clear 0.56 s telegraph and a fast, long lunge (880/s), then a long recovery window (0.95 s): your opening. Only the lunge hurts. |
 | `skeleton_archer` | Skeleton archer | 0.8 | 0.8 | 110 | 16 | Keeps its distance: it backs off inside 170 and won't draw that close, closes in beyond its range (340). It draws (0.62 s; an aim line follows you, then locks and goes solid), then looses an arrow (380/s, `max(1, power)` damage). Arrows are sim projectiles: they fly straight, so stepping aside after the lock dodges them, and they stop at the path's edge. |
 | `miniboss1` | Miniboss 1 | 1 | 1 | 95 | 34 | The original boss logic (lunges plus the radial bullet burst) at the act-1 boss numbers. |
 | `miniboss2` | Miniboss 2 | 1 | 1 | 95 | 34 | The same, at the act-2 numbers. |
 | `final_boss` | Final boss | 1 | 1 | 95 | 34 | The same, at the act-3 numbers. |
+
+**Out of the tables (4 Oct).** Big Chungus: "disable any enemies we don't have sprites for". The slime, demon and skeleton archer stay in the roster and the lab (**Enemy**) can still force them, but encounters only produce orcs (see below). Putting one back is a data change in `ENCOUNTER_BANDS`.
 
 TODO (Big Chungus): the bosses' own designs. Speeds and sizes are fight units (the player has radius 16 and walks 230/s). The art is generated pixel art in the world's style (`enemyArt.ts`): a green slime, a red horned demon, a skeleton with a bow, an iron knight with a shield, a hooded cartographer with a map, a horned lord.
 
@@ -183,6 +186,8 @@ TODO (Big Chungus): the bosses' own designs. Speeds and sizes are fight units (t
 **Progress** is how far up the run the fight is: `(act + layer / layers) / acts`, from the request's `where` (`FightRequest.where`, `{ act, acts, layer, layers, kind }`; act and layer are 0-based, as the engine sends them). Layer 0 is the bottom of the act's map, `layers - 1` its boss. Later acts start harder because they start higher: the bottom of act 2 is 0.33. Without `where` (an older engine) the act comes from the enemy's power, at the middle of the act (a boss: at the top).
 
 **Count and mix** come from the band the progress falls in (`ENCOUNTER_BANDS`, tunable):
+
+**Since 4 Oct every band is orcs only** (`lead: "orc", mix: { orc: 1 }`): the counts below still rise, and each orc's feel scales with the curve. The mix as it was:
 
 | Progress | Enemies | Always | Mixed in (weights) |
 | --- | --- | --- | --- |
@@ -211,7 +216,27 @@ These replace the arena's per-act tiers in forest mode (no double scaling); boss
 - Each enemy's power is the engine enemy's `power` times its damage factor, rounded, at least 1. Lunge, contact, arrow and bullet damage use the arena's formulas on it.
 - So the `FightResult` maps back as it is: `enemyHpLeft` is the HP left across the group, `damageDealt` the HP removed, and `won` means every enemy dropped. `sanitizeFightResult` accepts it unchanged (tested).
 
-**Bosses:** a boss request (`enemy.boss`) is one boss with the engine's HP and name: `miniboss1` in act 1, `miniboss2` in act 2, `final_boss` in the last act.
+**Bosses:** a boss request (`enemy.boss`) is one boss with the engine's HP and name: `miniboss1` in act 1, `miniboss2` in act 2, `final_boss` in the last act. Bosses always fight on the forest path (`fightModeFor` in `mode.ts`): the play page plays every fight there, and the DOM UI (`src/ui`) sends boss requests to `runForestFight` and keeps the arena for regular fights.
+
+### Sprites (the licensed art)
+
+Big Chungus (4 Oct): "use soldier as the player, warrior as the final boss, and strong enemies for minibosses", with the orc as the normal enemy. The sheets are the encrypted packs in `assets/encrypted/` (docs/assets.md); the registry is `src/render/sprites.ts` (pure, tested in `sprites.test.ts`), the Phaser side `src/render/spriteArt.ts`.
+
+| Role | Sheet | Size on screen |
+| --- | --- | --- |
+| Player | Soldier (Tiny RPG pack 01): idle, walk, Attack01 to 03 in turn (one per swing, toward the swing), hurt, death | the visible figure fitted to the world hero's 16 px |
+| `orc` | Orc (pack 01): idle, walk, Attack01/02, hurt, death | the Soldier's scale (as the artist drew them) |
+| `miniboss1`, `miniboss2` | Demon_A (pack 02), same set | the Soldier's scale × 1.25; miniboss 2 is tougher by its numbers, not its size |
+| `final_boss` | WarriorCh: idle, walk (HRun when it moves fast), Attack/Attack2/Attack3, and Heavy for the burst's charge (the telegraphed big hit) | its figure fitted to 36 px |
+| `demon` (lab only) | Demon_A | the Soldier's scale |
+| `slime`, `skeleton_archer` | none: generated art | |
+
+- **Only with the key.** A sheet is requested only when the build lists it (`__PRIVATE_ASSETS__`, which has the decrypted paths when `ASSET_KEY` is set). Without the key, or if a role's idle sheet fails to load, that role keeps the generated art (`enemyArt.ts`, the generated hero), so CI and anyone without the key play exactly as before. Another sheet that fails just loses that animation (a missing walk shows idle). The orc's generated fallback is the slime's drawing.
+- **Frames are measured, not hard-coded.** Each image is cut from its real size: a strip of square frames when the width divides by the height (the Tiny RPG sheets); otherwise the frame width that divides every non-square sheet of that character (64, 69, 80, 96, 100 or 128, nearest the height; else their common divisor). `FRAME_OVERRIDES` in `sprites.ts` fixes a sheet that comes out wrong. Each guessed layout is logged once in the console (`sprites: <file> is W×H: ...`).
+- **The figure, not the frame.** The pack's characters stand small in big frames. The opaque pixels of the idle sheet give the figure's box: its feet are the sprite's origin (on the sim body's feet), it mirrors around its own centre, it is scaled by its own height, and the HP bar, name and dizzy ring sit on top of it. The sim's hitboxes are unchanged.
+- **Animation by state** (`enemyAnim`, `playerAnim`): death (it plays, holds, then fades) over a hit's flinch over attacking (the telegraph and the lunge are one attack, timed to last as long as they do) over walking over idle. The telegraph's tint, swell and flash still apply on top.
+- `window.__fight.view.sprites` says which character draws each actor and the animation it plays.
+- **Unverified against the real sheets.** This was built without the key: the frame sizes, fps and scale were checked only with stand-in sheets at the same paths.
 
 **Names:** the engine's enemy is the encounter. Its name heads the fight's HUD (`title`: "Cave rat", or "Cave rat and its pack" for a group) and labels the group's lead (the band's `lead`); the rest of the pack keep their roster labels (Slime, Demon, Skeleton archer), which say how they fight. The end banner's line is `encounterSummary`: "Cave rat falls." on a win, as the engine's `enemy_slain` toast says it, or "Cave rat still stands."
 

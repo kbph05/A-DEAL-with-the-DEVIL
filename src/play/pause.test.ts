@@ -64,3 +64,14 @@ test("pause: the controls list covers moving, fighting, the map, buying and paus
   const touch = CONTROLS.touch.map(([k, v]) => `${k} ${v}`).join(" | ");
   for (const k of ["stick", "Attack", "Dash", "Map", "Buy", "Pause"]) assert.ok(touch.includes(k), k);
 });
+
+test("Escape: the topmost open layer first: credits, then the map, then the pause menu, else pause", () => {
+  const up = ctx({ credits: true, map: "open" });
+  for (const s of [RUNNING, PAUSED, ASKING, TITLE]) assert.equal(pauseKey(s, "Escape", up), "closeCredits", "credits over everything");
+  assert.equal(pauseKey(RUNNING, "Escape", ctx({ credits: true, ending: true })), "closeCredits", "credits over the ending card");
+  assert.equal(pauseKey(PAUSED, "p", up), null, "under the credits, P does nothing");
+  assert.equal(pauseKey(RUNNING, "Escape", ctx({ map: "open" })), "closeMap");
+  assert.equal(pauseKey(PAUSED, "Escape", ctx()), "resume");
+  assert.equal(pauseKey(RUNNING, "Escape", ctx()), "pause");
+  assert.equal(pauseKey(RUNNING, "Escape", ctx({ credits: true, typing: true })), null, "typing still wins");
+});

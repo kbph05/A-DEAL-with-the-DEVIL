@@ -22,6 +22,7 @@ import { CLOSE_DEVIL, LOCAL, OPEN_DEVIL, arrived, flow, setLocal, wantsOpener, w
 import { mountDevilArt } from "./devilArt";
 import { POSE_MS, devilPose } from "./devilPose";
 import { CONTROLS, pauseKey, pauseStep, startState, type PauseAction, type PauseState } from "./pause";
+import { creditsBody, loadCredits } from "../render/credits";
 
 const params = new URLSearchParams(location.search);
 const TEST = import.meta.env.MODE === "test";
@@ -112,7 +113,14 @@ const titleLayer = h("div", "play-layer play-title");
 titleLayer.setAttribute("role", "region");
 titleLayer.setAttribute("aria-label", "Title screen");
 titleLayer.hidden = true;
-root.append(mapBtn, mapClose, mapTitle, prompt, panel, devil, ending, toast, pauseBtn, pauseLayer, titleLayer);
+// The credits (the sprite packs' attribution files): from the title screen, the pause menu and the ending card. Above
+// all of them; Escape closes it first (pauseKey).
+const credits = h("div", "play-layer play-credits");
+credits.setAttribute("role", "dialog");
+credits.setAttribute("aria-modal", "true");
+credits.setAttribute("aria-label", "Credits");
+credits.hidden = true;
+root.append(mapBtn, mapClose, mapTitle, prompt, panel, devil, ending, toast, pauseBtn, pauseLayer, titleLayer, credits);
 
 // ---- state -------------------------------------------------------------------------------------------------------
 let local: Local = LOCAL;
@@ -441,6 +449,27 @@ function renderDevil(v: View, f: Flow): void {
   focus(devil.querySelector<HTMLElement>(coarse ? "button:not(:disabled)" : "input:not(:disabled)") ?? devil.querySelector<HTMLElement>("button:not(:disabled)"));
 }
 
+let creditsBack: HTMLElement | null = null;
+async function showCredits(): Promise<void> {
+  creditsBack = document.activeElement as HTMLElement | null;
+  const card = h("div", "play-card");
+  const close = button("Close", hideCredits, "quiet");
+  card.append(h("h2", "", "Credits"), h("p", "lead", "Loading..."), close);
+  credits.replaceChildren(card);
+  credits.hidden = false;
+  close.focus();
+  const entries = await loadCredits();
+  if (credits.hidden) return;
+  card.querySelector(".lead")?.replaceWith(creditsBody(entries));
+}
+function hideCredits(): void {
+  credits.hidden = true;
+  credits.replaceChildren();
+  if (creditsBack?.isConnected) creditsBack.focus();
+  creditsBack = null;
+}
+const creditsButton = (): HTMLButtonElement => button("Credits", () => void showCredits(), "quiet");
+
 function renderEnding(f: Flow): void {
   ending.hidden = f.screen !== "ending";
   ending.className = `play-layer play-ending ${f.ending ?? ""}`;
@@ -448,7 +477,9 @@ function renderEnding(f: Flow): void {
   const [head, body] = END[f.ending ?? "lose"];
   const again = button("Play again", () => { ending.replaceChildren(); session.newGame(); });
   ending.append(h("div", "", undefined));
-  ending.firstElementChild!.append(h("h2", "", head), h("p", "", body), again);
+  const row = h("div", "play-ending-row");
+  row.append(again, creditsButton());
+  ending.firstElementChild!.append(h("h2", "", head), h("p", "", body), row);
   focus(again);
 }
 
@@ -572,7 +603,7 @@ function renderPause(): void {
   const resume = button("Resume", () => doPause("resume"));
   resume.setAttribute("aria-keyshortcuts", "Escape P");
   const quit = button("Quit game", () => doPause("quit"), "quiet");
-  row.append(resume, quit);
+  row.append(resume, creditsButton(), quit);
   card.append(row);
   pauseLayer.replaceChildren(card);
   resume.focus();
@@ -599,7 +630,9 @@ function renderTitle(): void {
   const head = h("h1", "");
   head.append("A ", h("b", "", "DEAL"), " with the ", h("b", "", "DEVIL"));
   const start = button("New game", () => { titleLayer.replaceChildren(); doPause("newGame"); });
-  box.append(head, start);
+  const row = h("div", "play-title-row");
+  row.append(start, creditsButton());
+  box.append(head, row);
   titleLayer.append(box);
   start.focus();
 }
@@ -608,7 +641,9 @@ function renderTitle(): void {
 window.addEventListener("keydown", (e) => {
   const t = e.target as HTMLElement | null;
   if (t && (t.tagName === "INPUT" || t.tagName === "TEXTAREA" || t.isContentEditable)) return;
-  const a = e.repeat ? null : pauseKey(ps, e.key, { map: current.map, typing: false, ending: current.screen === "ending" });
+  const a = e.repeat ? null : pauseKey(ps, e.key, { map: current.map, typing: false, ending: current.screen === "ending", credits: !credits.hidden });
+  if (a === "closeCredits") { hideCredits(); e.preventDefault(); return; }
+  if (!credits.hidden) return; // the credits are on top: other keys wait
   if (a === "closeMap") { toggleMap(false); e.preventDefault(); return; }
   if (a) { doPause(a); e.preventDefault(); return; }
   if (ps.paused || ps.screen === "title") return;

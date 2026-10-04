@@ -65,6 +65,8 @@ Each node kind has a screen:
 
 **Ask** runs the engine's devil round trip through `Game.deal(text)`: ask, await the devil, `devil_reply`. Nothing else can be pressed while he considers.
 
+**Credits.** The title screen (next to **New game**), the pause menu (so it is reachable from the village and anywhere else in a run) and the ending card (next to **Play again**) each have a **Credits** button. The screen shows each sprite pack's own `attribution.txt`, read at runtime (`src/render/credits.ts`) when the build has the art; without `ASSET_KEY` it says the credits need the art. Escape or **Close** closes it. Escape always closes the topmost layer first: the credits, then an open map, then the pause menu; otherwise it pauses (`pauseKey` in `pause.ts`, one ordered check). The written copy is docs/CREDITS.md.
+
 **Results** of every command (a buy, a fight, a deal) show for a few seconds as a toast near the top, in the engine's own words (`describe`). The devil's offers and strikes show in his overlay instead.
 
 **Layers**, bottom to top:
