@@ -8,7 +8,7 @@ The act map as a game screen, in the style of Slay the Spire's map: a vertical p
 - **The next nodes** pulse (a gentle scale) and are clickable.
 - **Everything else** is dimmed.
 - **Rewritten nodes** carry a red star on a red halo: the devil rewrote that node.
-- **The legend** sits beside the parchment on wide screens, and on the parchment below the entry on narrow ones.
+- **The legend** is drawn on a fixed UI camera, not on the parchment. A small **Legend** button (bottom-left, `aria-expanded`) shows or hides it. Where there is room beside the parchment (`legendBeside`: 190 px free on each side, so laptops and desktops) it starts open there; on narrow screens (phones, portrait tablets) it starts collapsed and, when opened, is a card over the map's bottom-left corner (taps on the card do not reach the nodes under it). Once the player uses the button, their choice wins over the screen shape.
 
 Files:
 
@@ -32,13 +32,14 @@ const map = mountMap(parent, {
   map: view.map,                        // the current act (game.map())
   view,                                 // game.view(): where you stand, the lock, the legal actions
   busy: false,                          // optional: lock the map while your UI waits on something (e.g. a network devil)
+  overlays: () => [hudEl.querySelector(".hud-stats")], // optional: things drawn over the map that must not hide its top nodes
 });
 map.update(view.map, view, busy);       // after every engine step
 map.destroy();
-map.debug();                            // test hook: { dag, layout, screenOf(id), zoom, centerY, legendOnMap, privateArt }
+map.debug();                            // test hook: { dag, layout, screenOf(id), zoom, centerY, legendOnMap, legendOpen, inset, privateArt }
 ```
 
-`parent` must be positioned, because the scene fills it (`position: absolute; inset: 0`). The HUD can share the parent: call `mountHud(parent)` after `mountMap`. The HUD is a DOM overlay with `pointer-events: none` except on its buttons, so taps reach the map. The layout leaves 150 world units above the stairs, so the top of the act can be scrolled clear of the HUD's stats strip.
+`parent` must be positioned, because the scene fills it (`position: absolute; inset: 0`). The HUD can share the parent: call `mountHud(parent)` after `mountMap`. The HUD is a DOM overlay with `pointer-events: none` except on its buttons, so taps reach the map. The layout leaves 150 world units above the stairs. On a phone the HUD's stats strip (and the play page's "Choose where to go next" title) covers the top of the parchment, so pass them as `overlays`: the camera may then scroll that many px past the top edge (`clampCenter` in `layout.ts`), the auto-scroll centres on the part of the screen below them, and `debug().inset` says how far. Only overlays that overlap the parchment horizontally and sit in the map's top half count, so on a laptop, where the stats strip sits beside the parchment, nothing changes.
 
 **Nothing is re-derived here.** Which node is current, visited, next or far, each node's exit number `n`, its accessible label, and whether it is clickable all come from `dagModel(view, map, busy, view.actions)` in `src/ui/logic.ts`, the same model the DOM DAG uses. Each layer's left-to-right order comes from `planarOrder`. So a node is clickable exactly when its `go` is in the engine's legal `actions` and the UI's `moveLock` allows it. While the devil is speaking, a fight is pending, an offer is on the table or the run is over, nothing pulses or moves. The reason ("Finish the fight first.", "The devil considers…") is shown in a hint at the bottom, and tapping a locked node shows it again.
 

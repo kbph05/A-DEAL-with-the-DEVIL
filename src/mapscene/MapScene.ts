@@ -4,13 +4,15 @@
  * in src/ui/logic.ts, and the DOM around it (the accessible button list, tooltips, the lock hint) from index.ts.
  *
  * Two cameras: the main one shows the world (parchment, edges, icons; zoomed to fit the width, scrolled up and down);
- * a fixed UI camera shows the legend beside the parchment when the screen is wide enough. On narrow screens the legend
- * is drawn on the parchment itself, below the act's entry.
+ * a fixed UI camera shows the legend, which is not part of the parchment. Beside the parchment when the screen is wide
+ * enough (open by default); on narrow screens it is a card over the bottom-left corner, collapsed until the player opens it
+ * with the "Legend" button (index.ts). The HUD's stats strip covers the top of the screen on phones, so the camera may scroll
+ * the top of the parchment down clear of it (`covers`).
  */
 import Phaser from "phaser";
 import { hashSeed, mulberry32 } from "../map/rng";
 import { ensureIcons, iconKey, loadPrivateIcons, type IconKey } from "./icons";
-import { focusY, MAP_WIDTH, type LaidNode, type MapLayout } from "./layout";
+import { bandCenter, clampCenter, coveredTop, focusY, legendBeside, legendShown, mapZoom, MAP_WIDTH, type Cover, type LaidNode, type MapLayout } from "./layout";
 
 export interface MapSceneModel {
   layout: MapLayout;
@@ -25,14 +27,16 @@ export interface MapSceneHooks {
   onTap(node: LaidNode): void;
   /** The pointer is over a node (or left it: null), at canvas coordinates. */
   onHover(node: LaidNode | null, x: number, y: number): void;
+  /** The legend was opened or closed (by the toggle, or because the screen changed shape). */
+  onLegend?(open: boolean): void;
+  /** Overlays drawn over the map right now (canvas px), e.g. the HUD's stats strip: the camera keeps the top nodes clear of them. */
+  covers?(): Cover[];
 }
 
 const INK = 0x24150e, INK_SOFT = 0x5a4632, GOLD = 0xffd34a, DEVIL_RED = 0xe02a1c;
 const PARCH = { base: "#dcc79c", shades: ["#d3bd90", "#e4d1a8", "#cdb687", "#d8c296"], stain: "#c4a978", burn: ["#4a2c16", "#7a5230", "#a8844f", "#c4a674"] };
 /** Icon display size (world units) by role. */
 const SIZE = { node: 44, boss: 84, top: 50, legend: 24, star: 20, here: 30 };
-/** Where the legend goes: beside the parchment (fixed) when this much screen is free to its right, else on the parchment. */
-const LEGEND_SIDE_W = 190;
 const LEGEND: Array<{ key: IconKey; word: string }> = [
   { key: "village", word: "Village" }, { key: "fight", word: "Fight" }, { key: "campfire", word: "Campfire" },
   { key: "well", word: "Well" }, { key: "deal", word: "Devil's deal" }, { key: "boss", word: "Boss" },
@@ -40,8 +44,8 @@ const LEGEND: Array<{ key: IconKey; word: string }> = [
 ];
 const FONT = "ui-monospace, Menlo, Consolas, monospace";
 const ROMAN = ["I", "II", "III", "IV", "V"];
-/** World height of the legend when it sits on the parchment. */
-const LEGEND_WORLD_H = 150;
+/** Height (px) of the "Legend" toggle button (a DOM button, index.ts) that the narrow-screen legend card sits above. */
+const LEGEND_BTN_H = 44;
 /** Pointer travel (px) after which a press is a drag, not a tap. */
 const DRAG_PX = 7;
 
@@ -54,7 +58,14 @@ export class MapScene extends Phaser.Scene {
   private parchKey = "";
   private centerY = 0;
   private zoomLevel = 1;
+  /** True when there is no room beside the parchment: the legend is a card over the map's corner instead. */
   private legendOnMap = true;
+  /** The player's own toggle; null follows the screen (legendShown). */
+  private legendChoice: boolean | null = null;
+  private legendWas: boolean | null = null;
+  private legendRect: { x: number; y: number; w: number; h: number } | null = null;
+  /** px at the top of the screen covered by overlays over the parchment (the HUD): the camera may go that far past the top. */
+  private inset = 0;
   private worldH = 0;
   private press: { x: number; y: number; center: number; drag: boolean } | null = null;
   private scrollTween: Phaser.Tweens.Tween | null = null;
@@ -86,7 +97,7 @@ export class MapScene extends Phaser.Scene {
     const n = id ? this.model?.layout.byId.get(id) : null;
     if (n) {
       const half = this.cameras.main.height / (2 * this.zoomLevel);
-      if (n.y < this.centerY - half + 60 || n.y > this.centerY + half - 60) this.scrollTo(n.y, true);
+      if (n.y < this.centerY - half + 60 + this.inset / this.zoomLevel || n.y > this.centerY + half - 60) this.scrollTo(bandCenter(n.y, this.zoomLevel, this.inset), true);
     }
   }
 
@@ -98,8 +109,26 @@ export class MapScene extends Phaser.Scene {
     return { x: cam.width / 2 + (n.x - MAP_WIDTH / 2) * this.zoomLevel, y: cam.height / 2 + (n.y - this.centerY) * this.zoomLevel };
   }
 
-  get view(): { zoom: number; centerY: number; worldH: number; legendOnMap: boolean } {
-    return { zoom: this.zoomLevel, centerY: this.centerY, worldH: this.worldH, legendOnMap: this.legendOnMap };
+  get view(): { zoom: number; centerY: number; worldH: number; legendOnMap: boolean; legendOpen: boolean; inset: number } {
+    return { zoom: this.zoomLevel, centerY: this.centerY, worldH: this.worldH, legendOnMap: this.legendOnMap, legendOpen: this.legendOpen, inset: this.inset };
+  }
+
+  /** Is the legend showing (the player's choice, else open beside the parchment and collapsed over it). */
+  get legendOpen(): boolean {
+    const { width, height } = this.scale;
+    return legendShown(width, height, this.legendChoice);
+  }
+
+  /** The "Legend" button: open it if it is collapsed, collapse it if it is open. From then on the screen's shape no longer decides. */
+  toggleLegend(): void {
+    this.legendChoice = !this.legendOpen;
+    this.syncLegend();
+  }
+
+  private syncLegend(): void {
+    if (this.ready) this.drawLegendUi();
+    const open = this.legendOpen;
+    if (open !== this.legendWas) { this.legendWas = open; this.hooks.onLegend?.(open); }
   }
 
   preload(): void {
@@ -148,17 +177,17 @@ export class MapScene extends Phaser.Scene {
   /** Fit the parchment's width to the screen (with a little table showing), up to a zoom where icons stay sensible. */
   private fit(): void {
     const { width, height } = this.scale;
-    this.zoomLevel = Math.max(0.5, Math.min((width - 12) / MAP_WIDTH, height / 520, 2.4));
-    const free = (width - MAP_WIDTH * this.zoomLevel) / 2;
-    this.legendOnMap = free < LEGEND_SIDE_W;
+    this.zoomLevel = mapZoom(width, height);
+    this.legendOnMap = !legendBeside(width, height);
+    const half = (MAP_WIDTH * this.zoomLevel) / 2;
+    this.inset = coveredTop(this.hooks.covers?.() ?? [], { left: width / 2 - half, right: width / 2 + half }, height);
     const cam = this.cameras.main;
     cam.setSize(width, height).setZoom(this.zoomLevel);
     this.uiCam.setSize(width, height);
   }
 
   private setCenter(y: number): void {
-    const half = this.cameras.main.height / (2 * this.zoomLevel);
-    this.centerY = this.worldH <= 2 * half ? this.worldH / 2 : Phaser.Math.Clamp(y, half, this.worldH - half);
+    this.centerY = clampCenter(y, this.worldH, this.cameras.main.height, this.zoomLevel, this.inset);
     this.cameras.main.centerOn(MAP_WIDTH / 2, this.centerY);
   }
 
@@ -174,10 +203,8 @@ export class MapScene extends Phaser.Scene {
 
   private onResize(): void {
     if (!this.model) return;
-    const wasOnMap = this.legendOnMap;
     this.fit();
-    if (wasOnMap !== this.legendOnMap) { this.rebuild(false, false); return; }
-    this.drawLegendSide();
+    this.syncLegend();
     this.setCenter(this.centerY);
   }
 
@@ -185,6 +212,8 @@ export class MapScene extends Phaser.Scene {
 
   private hit(p: Phaser.Input.Pointer): LaidNode | null {
     if (!this.model) return null;
+    const lr = this.legendOpen ? this.legendRect : null;
+    if (lr && p.x >= lr.x && p.x <= lr.x + lr.w && p.y >= lr.y && p.y <= lr.y + lr.h) return null; // the legend card is on top of the map
     const w = this.cameras.main.getWorldPoint(p.x, p.y);
     let best: LaidNode | null = null, bestD = Infinity;
     for (const n of this.model.layout.nodes) {
@@ -215,16 +244,14 @@ export class MapScene extends Phaser.Scene {
     this.worldObjs = [];
     this.cursor = null;
     const L = m.layout;
-    this.worldH = L.height + (this.legendOnMap ? LEGEND_WORLD_H : 0);
+    this.worldH = L.height;
     this.drawParchment(m);
     this.drawEdges(m);
     for (const n of L.nodes) this.drawNode(n, m);
-    // On the parchment the legend hugs the left edge, so the HUD's item column (right edge, portrait) does not cover it.
-    if (this.legendOnMap) this.drawLegend(16, L.height - 50, false);
-    this.drawLegendSide();
+    this.syncLegend();
     this.drawCursor();
     this.cameras.main.setBackgroundColor("#1d1210");
-    if (refocus) this.scrollTo(focusY(L), !jump && !this.press?.drag);
+    if (refocus) this.scrollTo(bandCenter(focusY(L), this.zoomLevel, this.inset), !jump && !this.press?.drag);
     else this.setCenter(this.centerY);
   }
 
@@ -329,32 +356,44 @@ export class MapScene extends Phaser.Scene {
     }
   }
 
-  /** The legend as a parchment card: centred on `x` beside the map (pixels), or with its left edge at `x` on it (world units). */
-  private drawLegend(x0: number, top: number, side: boolean): void {
-    const add = <T extends Phaser.GameObjects.GameObject>(o: T): T => (side ? this.inUi(o) : this.inWorld(o));
-    const cols = side ? 1 : 2, rowH = side ? 30 : 28, colW = side ? 160 : 128, icon = side ? 26 : SIZE.legend;
-    const rows = Math.ceil(LEGEND.length / cols), w = cols * colW + 16, h = 40 + rows * rowH;
-    const left = side ? x0 - w / 2 : x0, cx = left + w / 2;
-    const g = add(this.add.graphics().setDepth(9));
+  /**
+   * The legend as a parchment card on the UI camera, `cols` columns, with its top-left corner at (left, top) in screen px.
+   * Returns its size, so the caller can place it and keep taps on it from reaching the nodes underneath.
+   */
+  private drawLegend(left: number, top: number, cols: number): { w: number; h: number } {
+    const rowH = cols === 1 ? 30 : 28, colW = cols === 1 ? 160 : 128, icon = cols === 1 ? 26 : SIZE.legend;
+    const rows = Math.ceil(LEGEND.length / cols), w = cols * colW + 16, h = 40 + rows * rowH, cx = left + w / 2;
+    const g = this.inUi(this.add.graphics().setDepth(9));
     g.fillStyle(0xe4d1a8, 1).fillRect(left, top, w, h);
     g.lineStyle(3, 0x5a3a1e, 1).strokeRect(left, top, w, h);
     g.lineStyle(1, 0x5a3a1e, 0.6).strokeRect(left + 4, top + 4, w - 8, h - 8);
-    add(this.add.text(cx, top + 18, "LEGEND", { fontFamily: FONT, fontSize: "15px", fontStyle: "bold", color: "#3a2414", resolution: 3 }).setOrigin(0.5).setDepth(10));
+    this.inUi(this.add.text(cx, top + 18, "LEGEND", { fontFamily: FONT, fontSize: "15px", fontStyle: "bold", color: "#3a2414", resolution: 3 }).setOrigin(0.5).setDepth(10));
     LEGEND.forEach((e, i) => {
       const col = i % cols, row = Math.floor(i / cols);
       const x = left + 12 + col * colW, y = top + 40 + row * rowH + rowH / 2 - 2;
-      add(this.icon(e.key, x + icon / 2, y, icon).setDepth(10));
-      add(this.add.text(x + icon + 8, y, e.word, { fontFamily: FONT, fontSize: "13px", color: "#24150e", resolution: 3 }).setOrigin(0, 0.5).setDepth(10));
+      this.inUi(this.icon(e.key, x + icon / 2, y, icon).setDepth(10));
+      this.inUi(this.add.text(x + icon + 8, y, e.word, { fontFamily: FONT, fontSize: "13px", color: "#24150e", resolution: 3 }).setOrigin(0, 0.5).setDepth(10));
     });
+    return { w, h };
   }
 
-  private drawLegendSide(): void {
+  /** The legend, if it is open: beside the parchment on wide screens, else a card over the bottom-left corner above the toggle. */
+  private drawLegendUi(): void {
     for (const o of this.uiObjs) o.destroy();
     this.uiObjs = [];
-    if (this.legendOnMap) return;
-    const { width, height } = this.scale, right = width / 2 + (MAP_WIDTH * this.zoomLevel) / 2;
-    const h = 40 + LEGEND.length * 30;
-    this.drawLegend(right + (width - right) / 2, Math.max(12, (height - h) / 2), true);
+    this.legendRect = null;
+    if (!this.legendOpen) return;
+    const { width, height } = this.scale;
+    if (!this.legendOnMap) {
+      const right = width / 2 + (MAP_WIDTH * this.zoomLevel) / 2, h = 40 + LEGEND.length * 30, w = 176;
+      const left = right + (width - right) / 2 - w / 2, top = Math.max(12, (height - h) / 2);
+      const size = this.drawLegend(left, top, 1);
+      this.legendRect = { x: left, y: top, ...size };
+      return;
+    }
+    const h = 40 + Math.ceil(LEGEND.length / 2) * 28, left = 8, top = Math.max(8, height - 8 - LEGEND_BTN_H - 8 - h);
+    const size = this.drawLegend(left, top, 2);
+    this.legendRect = { x: left, y: top, ...size };
   }
 }
 

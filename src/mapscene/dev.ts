@@ -18,7 +18,7 @@ let game: Game = createGame(new URLSearchParams(location.search).get("seed") || 
 let steps = 0, busy = false;
 const log: string[] = [];
 
-const map = mountMap(stage, { onGo: (n) => void act({ cmd: "go", n }), map: game.map(), view: game.view() });
+const map = mountMap(stage, { onGo: (n) => void act({ cmd: "go", n }), map: game.map(), view: game.view(), overlays: () => [hud.el.querySelector(".hud-stats")] });
 const hud = mountHud(stage, { onUseItem: (item) => { if (item.command) void act(item.command); } });
 
 const ware = (item?: string) => (item === "heal" ? "Heal" : item === "blade" ? "Blade" : item === "blessing" ? "Blessing" : item ?? "?");

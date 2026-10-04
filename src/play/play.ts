@@ -172,7 +172,7 @@ function renderMap(v: View, f: Flow): void {
   mapLayer.hidden = !show;
   if (!show) { map?.destroy(); map = null; return; }
   if (map) map.update(v.map, v, local.busy !== null);
-  else map = mountMap(mapLayer, { onGo: go, map: v.map, view: v, busy: local.busy !== null });
+  else map = mountMap(mapLayer, { onGo: go, map: v.map, view: v, busy: local.busy !== null, overlays: () => [hud.el.querySelector(".hud-stats"), mapTitle] });
 }
 
 // ---- the scene under it all --------------------------------------------------------------------------------------
@@ -324,6 +324,7 @@ function render(): void {
   const v = session.game().view();
   const f = flow(v, local);
   current = f;
+  mapTitle.hidden = f.map !== "forced"; // before renderMap: the map keeps its top nodes clear of the title as well as the HUD
   renderScene(v, f);
   renderMap(v, f);
   hud.el.hidden = f.screen === "fight" && local.busy === "fight";
