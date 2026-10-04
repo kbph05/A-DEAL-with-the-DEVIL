@@ -4,12 +4,16 @@ Fights are a short realtime 2D brawl in a top-down room, not menu choices (Big C
 
 | File | What it is |
 | --- | --- |
-| `index.ts` | Public API: `runFight(parent, input, options?) → Promise<FightResult>`. |
-| `logic.ts` | Pure rules: damage, timers, the enemy state machine, geometry, input sanitising, screen layout. No Phaser. |
-| `sim.ts` | `FightSim`: the world, stepped at a fixed 60 Hz. It is pure too: the same seed and the same controls give the same fight. |
-| `FightScene.ts` | Phaser scene. It reads keyboard, mouse and touch, steps the sim, and draws everything with plain shapes (no textures). |
-| `dev.ts` + `/fight.html` | The fight lab. |
-| `logic.test.ts` | Node tests (in `npm test`), including whole fights played by a bot. |
+| `index.ts` | Public API: `runFight(parent, input, options?)` (the arena) and `runForestFight(parent, request, options?)` (forest mode), both `→ Promise<FightResult>`. |
+| `logic.ts` | Pure rules: damage, timers, geometry, input sanitising, screen layout. No Phaser. It re-exports the enemy state machine from `enemies.ts`. |
+| `enemies.ts` | The enemy roster (slime, demon, skeleton archer, the three bosses) and the one state machine they all run on. Pure. |
+| `encounters.ts` | `encounterFor(request)`: who you meet on a forest path, scaled by how far up the run you are. Pure, seeded. |
+| `forest.ts` | Forest mode, the pure part: scene pixels to sim units, placing the encounter on the path, the screen layout. |
+| `sim.ts` | `FightSim`: the world, stepped at a fixed 60 Hz: the arena, or a forest path with several enemies. It is pure too: the same seed and the same controls give the same fight. |
+| `FightScene.ts` | Phaser scene for the arena. It reads keyboard, mouse and touch, steps the sim, and draws everything with plain shapes (no textures). |
+| `ForestScene.ts`, `enemyArt.ts`, `draw.ts` | Phaser scene for forest mode: the scene texture, y-sorted pixel-art actors, the canopy, the same HUD and controls. |
+| `dev.ts` + `/fight.html` | The fight lab (arena and forest path). |
+| `logic.test.ts`, `enemies.test.ts`, `encounters.test.ts`, `forest.test.ts` | Node tests (in `npm test`), including whole fights played by bots. |
 
 ## Running it
 
@@ -36,7 +40,7 @@ Fights are a short realtime 2D brawl in a top-down room, not menu choices (Big C
 
 ## Enemy AI
 
-A small state machine (`nextEnemyMode` / `tickBrain` in `logic.ts`):
+A small state machine (`nextEnemyMode` / `tickBrain` in `enemies.ts`; `logic.ts` re-exports them). The arena's enemy is the **slime** of the roster (see "Forest mode" for the others):
 
 - **idle:** stands at spawn until you come within range, or 1.2 s pass (0.9 s for a boss).
 - **chase:** walks at you and steers around pillars. Touching it while it walks hurts a little (contact damage).
@@ -151,6 +155,102 @@ interface FightResult {
   - `--json` takes `{"cmd":"fight","realtime":true}` and `{"cmd":"fight_result",...}`. While a fight is pending, each line carries `awaiting.fight`.
   - Text mode: `fight realtime` and `result {json}`.
 
+## Forest mode
+
+kbph (4 Oct): "fights will be forest paths where you encounter enemies". You walk a forest path scene, run into enemies, and the fight plays right there, with no cut to an arena. The rules are the arena's: `FightSim` with a `SimWorld` (the path's bounds and the enemies) instead of the 720×720 room, the same controls, damage, i-frames and HP. The arena mode is unchanged (a step-by-step comparison of 720 recorded arena fights against the old sim matched exactly).
+
+### The roster
+
+Big Chungus's enemies, in `ENEMIES` (`enemies.ts`). Every one is data plus a behaviour on the same state machine; all of them run in the pure sim, so `npm test` covers them.
+
+| Id | Label | HP share | Damage (× engine power) | Speed | Size (radius) | Behaviour |
+| --- | --- | --- | --- | --- | --- | --- |
+| `slime` | Slime | 1 | 0.75 | 105 | 18 | The original fight enemy: chases, telegraphs (swells and turns yellow, a lane on the floor), lunges, recovers. Walking into it hurts. |
+| `demon` | Demon | 1.5 | 1 | 125 | 18 | Stalks from further out (200), then a clear 0.56 s telegraph and a fast, long lunge (880/s), then a long recovery window (0.95 s): your opening. Only the lunge hurts. |
+| `skeleton_archer` | Skeleton archer | 0.8 | 0.8 | 110 | 16 | Keeps its distance: it backs off inside 170 and won't draw that close, closes in beyond its range (340). It draws (0.62 s; an aim line follows you, then locks and goes solid), then looses an arrow (380/s, `max(1, power)` damage). Arrows are sim projectiles: they fly straight, so stepping aside after the lock dodges them, and they stop at the path's edge. |
+| `miniboss1` | Miniboss 1 | 1 | 1 | 95 | 34 | The original boss logic (lunges plus the radial bullet burst) at the act-1 boss numbers. |
+| `miniboss2` | Miniboss 2 | 1 | 1 | 95 | 34 | The same, at the act-2 numbers. |
+| `final_boss` | Final boss | 1 | 1 | 95 | 34 | The same, at the act-3 numbers. |
+
+TODO (Big Chungus): the bosses' own designs. Speeds and sizes are fight units (the player has radius 16 and walks 230/s). The art is generated pixel art in the world's style (`enemyArt.ts`): a green slime, a red horned demon, a skeleton with a bow, an iron knight with a shield, a hooded cartographer with a map, a horned lord.
+
+### Encounters and scaling
+
+`encounterFor(request)` (`encounters.ts`) is pure and seeded by `request.seed` (its own hash namespace, so it doesn't shift the fight's dice).
+
+**Progress** is how far up the run the fight is: `(act - 1 + layer / layers) / acts`, from the request's optional `where` (`{ act, acts, layer, layers, kind }`, act 1-based, layer 0-based; the engine is adding it to `FightRequest`). Layer 0 is the bottom of the act's map. Later acts start harder because they start higher: the bottom of act 2 is 0.33. Without `where` (an older engine) the act comes from the enemy's power, at the middle of the act (a boss: at the top).
+
+**Count and mix** come from the band the progress falls in (`ENCOUNTER_BANDS`, tunable):
+
+| Progress | Enemies | Always | Mixed in (weights) |
+| --- | --- | --- | --- |
+| below 0.15 (bottom of act 1) | 1 to 2 | slime | slime |
+| 0.15 to 0.35 | 2 to 3 | slime | slime 3, demon 1 |
+| 0.35 to 0.55 | 2 to 4 | demon | slime 2, demon 2 |
+| 0.55 to 0.75 | 3 to 4 | demon | slime 1, demon 2, archer 1 |
+| 0.75 and up (near the top of act 3) | 3 to 5 | skeleton archer | slime 1, demon 2, archer 2 |
+
+The seed picks the count and the mix within the band. Slimes stand nearest, archers at the back.
+
+**Per-enemy feel** (Big Chungus: "don't just scale damage and defense, change attack cooldowns and stuns and maybe movement speed"). Each enemy's base value (in `ENEMIES`) times a curve that is linear in progress (`SCALING`, tunable):
+
+| Stat | At progress 0 | At progress 1 | Meaning |
+| --- | --- | --- | --- |
+| Walking speed | ×0.85 | ×1.25 | faster higher up |
+| Attack cooldown | ×1.3 | ×0.7 | they attack more often |
+| Hitstun dealt | ×0.6 | ×1.5 | after their hit you can't move, swing or dash for this long (base 140 to 240 ms; capped at half the i-frames, so a crowd can't stun-lock you) |
+| Stun taken | ×1.5 | ×0.45 | a sword hit freezes them for this long (base 200 to 300 ms; bosses 0): tougher enemies shrug it off faster |
+
+These replace the arena's per-act tiers in forest mode (no double scaling); bosses keep their act's burst pattern. Neither stun exists in the arena (both are 0 there), so arena fights are unchanged.
+
+**The engine's numbers stay authoritative.**
+
+- The group's HP is the engine enemy's current `hp` split by HP share: every enemy gets 1 first, the rest by weight, rounded so the sum is exact. There are never more enemies than HP. After a revival (hp below max), what is left is split.
+- Each enemy's power is the engine enemy's `power` times its damage factor, rounded, at least 1. Lunge, contact, arrow and bullet damage use the arena's formulas on it.
+- So the `FightResult` maps back as it is: `enemyHpLeft` is the HP left across the group, `damageDealt` the HP removed, and `won` means every enemy dropped. `sanitizeFightResult` accepts it unchanged (tested).
+
+**Bosses:** a boss request (`enemy.boss`) is one boss with the engine's HP and name: `miniboss1` in act 1, `miniboss2` in act 2, `final_boss` in the last act.
+
+Measured with a bot that walks at the nearest enemy swinging and never dodges (20 seeds, the same 40 HP player each time), the HP it loses goes from about 2 at the bottom of act 1 to about 7 in the middle of act 2 and about 10 at the top of act 3. A bot that dashes out of every telegraph loses almost nothing. These are **first guesses**, like the arena's.
+
+### On the path
+
+- **The scene** is `src/world/scenes/forest.json` (1280×560): a dirt path through grass, bounds that keep you on or near it (112 px tall), canopy rows over both edges, an exit zone at the far end, and six `spawns` along the path (docs/world.md).
+- **Units:** the scene is in world pixels, the sim in fight units, at 3 units per pixel (`UNITS_PER_PX`). That makes the sim's player about the size and pace of the world's hero.
+- **Placement** (`forestWorld`): one or two enemies stand apart, met one at a time. Three or more come as two packs, the first one bigger, each on a spawn point with the members around it, the first pack on the nearest spawn.
+- **Aggro (the choice):** an enemy wakes when the gap between you and it drops below its aggro range: slime 230, demon 260, archer 380, bosses 300 units (about 75 to 125 px). There is no timeout: an enemy you haven't reached waits. When one wakes, the idle ones within 240 units of it wake too (`PACK_RANGE`), so a pack fights together. Hitting an enemy wakes it. Stepping into the exit zone wakes everyone left, so you can't slip past.
+- **It ends** when every enemy is down (banner PATH CLEAR) or you are at 0 HP (DEFEATED). The result comes about 1.1 s later, as in the arena.
+- **Drawing:** the scene texture, then the enemies and the player sorted by their feet, then the canopy; HP bars and names sit above the canopy, so the trees never hide them. The telegraphs are the arena's: the yellow swell and lane (the lunge), an aim line (the archer), the pink ring (the boss burst), the white flash once the aim locks, a dizzy ring while an enemy recovers or is stunned. A stunned player turns blue.
+- **Controls** are the arena's (keyboard, mouse aim, the floating stick, Attack and Dash buttons) and the HUD is the same (your HP and dash bars; foes left, their HP, the clock).
+- **Screen fit and rotation:** forest mode uses Phaser's RESIZE scale mode. The canvas is the container's size, and every resize (a window, a phone rotating mid-fight) re-lays out the camera zoom and bounds, the HUD and the touch controls (`forestLayout`): about 220 world pixels across the short side in landscape, 300 in portrait, where the short side runs along the path. The arena's rotation fix is a separate patch.
+
+### The API, and how kbph wires it
+
+```ts
+const result = await runForestFight(stage, awaiting.fight); // the FightRequest, with or without `where`
+game.fightResult(result);                                    // exactly as with runFight
+```
+
+`runForestFight(parent, request, options?)` has the same shape and result as `runFight`. The options are `touch`, `onDebug(sim, view)` and `scene` (default: the forest path), plus two for the lab: `force` (every enemy one kind) and `onEncounter(encounter)`. It is not wired into `src/ui` yet. To wire it, change the two lines in `src/ui/ui.ts` that load and play the fight:
+
+```ts
+const { runForestFight } = await import("../fight");
+report = await runForestFight(stage, req, opts.onFightDebug ? { onDebug: opts.onFightDebug } : {});
+```
+
+Everything after that (`g.fightResult(report)`, the events, revival) stays as it is.
+
+The forest stage wants more height than the arena's square. RESIZE fills whatever box it gets, so give the stage a landscape or portrait box (say 60vh) rather than the arena's width-fitted one.
+
+### In the fight lab
+
+- **Mode** picks Arena or Forest path. The arena is as before.
+- **Layer** (0 to 6 of 7 per act, with **Act**) sets `where`; the bar shows the progress.
+- **Enemy** overrides the encounter: every enemy becomes that kind (a boss gives one boss).
+- The readout under the bar lists the encounter: progress, band, each enemy's HP and power, its scaled speed, attack cooldown, hitstun dealt and stun taken, and the curve's multipliers. The result panel repeats it.
+- Query: `?mode=forest&act=3&layer=6&enemy=demon&seed=abc&auto=1`.
+- `window.__fight` also has `encounter` and `view` (zoom, canvas size, camera, depths) in forest mode.
+
 ## Open questions for the designer
 
 1. **Fight length and difficulty.** At engine HP and damage, a regular fight lasts 2 to 4 s and a careless player loses little. Options:
@@ -163,7 +263,7 @@ interface FightResult {
 2. **Revival mid-fight.** Implemented: the same enemy stays at the HP it was left on, and you start another bout yourself. Should it instead resume at once, or end the fight?
 3. **Curses in realtime.** `on_hit` fires once if you were hit at all. Curses are spent when they fire, so once per hit would be the same. Should there be lasting curses that fire on every hit? Any curse ideas that only make sense in realtime (slower dash, a shorter swing, reversed controls for 3 s)?
 4. **Fleeing and timeouts.** Should there be a time limit or an escape? The engine still forbids leaving a live enemy. It already accepts an "unfinished" result: partial damage sticks and the enemy stays. A flee button or a timeout could report that.
-5. **Enemy variety.** Today all enemies of an act share one behaviour. Should the roster names get distinct patterns (rat: fast and weak; hollow knight: slow lunges and a shield)? And should each boss get its own second pattern instead of the shared radial burst?
+5. **Enemy variety.** Partly answered: forest mode has the roster (slime, demon, skeleton archer) and per-enemy scaling. The arena still has one behaviour per act. Should the roster names get distinct patterns (rat: fast and weak; hollow knight: slow lunges and a shield)? And should each boss get its own second pattern instead of the shared radial burst?
 6. **Arena.** It is a 720×720 room with one of four pillar layouts picked from the seed (bosses get open or four pillars). Tiled maps or OpenGameArt art later?
 7. **Joystick.** It is hand-written (`FloatingStick` in `src/input/stick.ts`, shared with the world scene; keyboard and stick directions are in `src/input/dir.ts`) instead of rexrainbow's VirtualJoystick, to avoid a dependency. Fine to keep?
 8. **Quick fight in the final game.** Auto-resolve (the old round-based fight) is offered in test builds only, and as a fallback when the fight fails to load. Should players get it too, for example as an accessibility option?

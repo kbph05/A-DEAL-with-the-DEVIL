@@ -48,6 +48,7 @@ A scene is plain JSON data (`SceneDef` in `src/world/scene.ts`). Coordinates are
 | `spawn` | Where the feet start. It must lie inside `bounds`. |
 | `zones` | Optional. `id`, a rectangle, `kind` (`"exit"`, `"trigger"` or `"shop"`, default trigger), an optional `label`, `node`, a free-form link to an act-map node for later, and `item`, the engine item id a shop sells (`"heal"`, `"blade"`, `"blessing"`; required when `kind` is `"shop"`). |
 | `actors` | Optional. `id`, the feet position, an optional `texture` (key or URL) and `label`. With placeholder art the label is drawn as a small sign above the actor. |
+| `spawns` | Optional, for fight scenes. Feet positions `{ x, y }` inside `bounds` where enemies may stand. The forest fight places its encounter on them, nearest the spawn first (docs/fight.md, "Forest mode"). Other scenes ignore them; the lab's outlines draw them as pink rings. |
 
 **Validation.** `sceneErrors(raw)` returns every problem as a readable message. `parseSceneDef(raw)` returns the scene or throws one `Error` listing them all. It checks:
 
@@ -56,9 +57,10 @@ A scene is plain JSON data (`SceneDef` in `src/world/scene.ts`). Coordinates are
 - zone and actor ids are unique;
 - a shop zone has an `item`;
 - a zone touches `bounds` (otherwise it can never be entered);
-- actors stand inside `size` (they may be outside `bounds`: shopfronts on the edge).
+- actors stand inside `size` (they may be outside `bounds`: shopfronts on the edge);
+- enemy `spawns` lie inside `bounds`.
 
-**The samples** are in `src/world/scenes/`: `village.json` (960×540, the default: the first entry of `SCENES`; see "The village and shop zones" below), `crossroads.json` (960×540: the devil, a signpost, two exits and a shrine) and `chapel.json` (1600×900, bigger than the view, so the camera scrolls and clamps). To add one, drop a JSON file there and list it in `scenes/index.ts`. The lab can also load any SceneDef JSON by URL (see below).
+**The samples** are in `src/world/scenes/`: `village.json` (960×540, the default: the first entry of `SCENES`; see "The village and shop zones" below), `crossroads.json` (960×540: the devil, a signpost, two exits and a shrine) `chapel.json` (1600×900, bigger than the view, so the camera scrolls and clamps) and `forest.json` (1280×560: the forest path the fights play on, with six enemy `spawns` and an exit at the far end; the world lab can walk it too). To add one, drop a JSON file there and list it in `scenes/index.ts`. The lab can also load any SceneDef JSON by URL (see below).
 
 ## The village and shop zones
 
@@ -214,8 +216,9 @@ There are no image files in the repo, and nothing comes from generative models. 
 - **Background.** The seeded tile generator (`gen.ts`, seeded by the scene id) is rendered with the placeholder tileset (`textures.ts`) into one texture of the scene's size.
   - Inside `bounds` it is ground: grass, dirt paths and stone floor.
   - Outside it is forest, walls and water.
+  - A fight scene (one with `spawns`, the forest path) is all forest and water outside `bounds` and grass inside, with a dirt path from the spawn to the exit.
   - Exit zones are dirt; triggers are stone floor.
-- **Overlay.** It is transparent except for tree canopies: a row along the bottom edge of the playable rectangle, with gaps over exits, and one big tree inside it whose trunk is on the background. Walk under them and the player is hidden.
+- **Overlay.** It is transparent except for tree canopies: a row along the bottom edge of the playable rectangle, with gaps over exits, and one big tree inside it whose trunk is on the background. Walk under them and the player is hidden. A fight scene gets a second row along the top edge instead of the big tree, so the path runs under the trees and nothing stands in the fight.
 - **Actors.** A 16×24 robed pixel figure, coloured by actor id. Ids starting `stall-` get a 40×36 market stall (striped awning, seller, counter) and ids starting `house-` a 64×56 cottage.
 - **Paths.** In a scene with shop zones, dirt paths run from the spawn along its row, then up or down to each shop and exit.
 - **Player.** The 16×16 hero sheet from `textures.ts`.
@@ -261,7 +264,7 @@ The tile model is no longer the art model. The tilemap layer, tile collision, `o
 
 ## Next steps (not done yet)
 
-1. **Hook it into the run.** Each act-map node gets a scene. An exit zone's `node` (or its order) picks the successor, and `onEnterZone` with `kind: "exit"` calls the engine's `go`. Fight and boss nodes start `runFight` when you meet the enemy.
+1. **Hook it into the run.** Each act-map node gets a scene. An exit zone's `node` (or its order) picks the successor, and `onEnterZone` with `kind: "exit"` calls the engine's `go`. Fight and boss nodes play `runForestFight` on the forest path (docs/fight.md, "Forest mode"): it mounts its own game on the forest scene, so the world scene can hand over to it at a fight node.
 2. **Solid actors and obstacles:** feet boxes for actors, and extra blocking rectangles inside `bounds` (a fountain, a table), if the designer wants them.
 3. **Interactables:** trigger zones plus an "interact" button (Space on desktop, a touch button) for the campfire, well and the devil's table. The village stalls already do this (E or Enter, or the prompt's Buy button).
 4. **Real art:** the designer's scene textures and overlays in `scenes/<id>/`, and the actual Tiny RPG sheets (verify the spec).
