@@ -21,7 +21,7 @@ import type { Deltas, GameEvent } from "./events";
 import { fightRequest, sanitizeFightResult } from "./fightResult";
 import {
   BOSSES, FOES, MAX_ASKS, MAX_CURSES, MAX_DEVIL_QUERIES, TRAIN_ATTACK, WARES, currentAct, currentNode, devilAtWell, devilContext, devilDone,
-  devilPresent, enemyView, exitsOf, ONE_CHOICE, oneChoice,
+  devilPresent, enemyView, exitsOf, isOpener, ONE_CHOICE, oneChoice,
   type Command, type Enemy, type GameState, type StepResult,
 } from "./gameState";
 import { STAT_RANGE, addGold, applyEffects, heal, hurt, note, settle, snapshot, spend } from "./state";
@@ -50,7 +50,7 @@ export function rejection(s: GameState, cmd: Command): string | null {
       if (over) return over;
       if (currentNode(s).kind !== "campfire") return "there is no fire here";
       if (s.resolved) return "the embers are spent";
-      if (s.asks > 0) return ONE_CHOICE.campfire.devil; // the first ask spends the fire's choice
+      if (s.asks > 0 || s.opened) return ONE_CHOICE.campfire.devil; // the first ask (or his opener, asked for by choosing Deal) spends the fire's choice
       return cmd.cmd === "train" && s.player.attack >= STAT_RANGE.attack[1] ? `your attack is already at its peak (${STAT_RANGE.attack[1]})` : null;
     }
     case "buy": {
@@ -60,8 +60,9 @@ export function rejection(s: GameState, cmd: Command): string | null {
       const name = wareName(cmd.item);
       const menu = kind === "village" ? ["heal", "blade"] : ["blessing"];
       if (!menu.includes(name)) return `for sale: ${menu.map((m) => `${m} (${WARES[m as keyof typeof WARES].cost}g)`).join(", ")}`;
+      if (kind === "well" && (s.asks > 0 || (s.devilGone && s.resolved))) return ONE_CHOICE.well.devil; // the first ask, or an accepted opener
       if (kind === "well" && s.resolved) return "the well has given what it will give";
-      if (kind === "well" && s.asks > 0) return ONE_CHOICE.well.devil; // the first ask spends the well's choice
+      if (kind === "well" && s.offer) return "the devil is waiting for your answer: accept() or refuse()";
       const cost = WARES[name as keyof typeof WARES].cost;
       return s.player.gold < cost ? `${name} costs ${cost}g; you have ${s.player.gold}g` : null;
     }
@@ -71,6 +72,7 @@ export function rejection(s: GameState, cmd: Command): string | null {
       { const oc = oneChoice(s); if (oc && s.resolved && s.asks === 0) return oc.spent; } // rested, trained or blessed
       if (devilDone(s)) return "the devil has already gone";
       if (s.enemy) return "not while something is trying to kill you";
+      if (isOpener(s, cmd.text)) return null; // his opening pitch is free: no ask, no question
       if (s.totalAsks >= MAX_DEVIL_QUERIES) return "The devil has heard enough from you this run.";
       return s.asks >= MAX_ASKS ? "he is done haggling: accept() or refuse()" : null;
     }
@@ -120,6 +122,11 @@ export function step(state: GameState, cmd: Command): StepResult {
     }
     case "buy": buy(d, ev, wareName(cmd.item)); break;
     case "deal":
+      if (isOpener(d, cmd.text)) { // the opening offer: free, once per node, no text (the devil pitches to the state)
+        d.opened = true;
+        d.pending = { state: snapshot(d.player), context: { ...devilContext(d), opening: true }, playerText: null };
+        break;
+      }
       d.asks++; d.totalAsks++;
       d.pending = { state: snapshot(d.player), context: devilContext(d), playerText: typeof cmd.text === "string" ? cut(cmd.text, MAX_PLAYER_TEXT) : null };
       break;
@@ -131,7 +138,7 @@ export function step(state: GameState, cmd: Command): StepResult {
       break;
     case "accept": accept(d, ev); break;
     case "refuse":
-      decided(d);
+      decided(d, false);
       ev.push({ type: "deal_refused" });
       break;
   }
@@ -187,7 +194,7 @@ function enter(d: GameState, ev: GameEvent[], id: string, from: string, fromDeal
   const a = currentAct(d);
   d.player.nodeId = id;
   d.resolved = false; d.offer = null; d.asks = 0; d.enemy = null;
-  delete d.devilGone;
+  delete d.devilGone; delete d.opened;
   if (fromDeal) ev.push({ type: "devil_stage_left", nodeId: from });
   if (id === "final" && a.final) {
     ev.push({ type: "moved", from, to: id, kind: "final", act: a.index });
@@ -302,16 +309,20 @@ function strike(d: GameState, ev: GameEvent[], deal: Deal): void {
   settleHp(d, ev, "the devil's wrath");
 }
 
-/** A deal accepted or refused: it spends a deal node or a campfire (`resolved`); at a well the devil leaves (`devilGone`; the blessing was locked by the first ask). */
-function decided(d: GameState): void {
+/**
+ * A deal accepted or refused: it spends a deal node or a campfire (`resolved`). At a well the devil leaves (`devilGone`);
+ * accepting there also spends the well's one choice (`resolved` with `devilGone`), while refusing his opener leaves the
+ * blessing open (a typed ask had locked it already).
+ */
+function decided(d: GameState, accepted: boolean): void {
   d.offer = null; d.dealsDecided++;
-  if (currentNode(d).kind === "well") d.devilGone = true;
+  if (currentNode(d).kind === "well") { d.devilGone = true; if (accepted) d.resolved = true; }
   else d.resolved = true;
 }
 
 function accept(d: GameState, ev: GameEvent[]): void {
   const deal = d.offer!;
-  decided(d);
+  decided(d, true);
   const changes = applyEffects(d.player, deal.effects);
   ev.push({ type: "deal_applied", deal, changes });
   note(d.player, `deal accepted: ${deal.dialogue.slice(0, 60)}`);

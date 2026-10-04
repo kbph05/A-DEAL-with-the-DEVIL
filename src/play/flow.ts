@@ -16,7 +16,7 @@
 import { MAX_ASKS, type Command, type Ending, type View } from "../game";
 
 /** The parts of the engine's `View` the flow reads (a real `view(state)` fits). */
-export type FlowView = Pick<View, "nodeId" | "kind" | "enemy" | "offer" | "pending" | "resolved" | "ending" | "devilPresent" | "asksLeft" | "actions">;
+export type FlowView = Pick<View, "nodeId" | "kind" | "enemy" | "offer" | "pending" | "resolved" | "ending" | "devilPresent" | "asksLeft" | "actions"> & Partial<Pick<View, "opening">>;
 
 /** UI state the engine doesn't know about. Flags set at another node than `at` are ignored, so a move resets them. */
 export interface Local {
@@ -102,6 +102,16 @@ export function flow(v: FlowView, local: Local = LOCAL): Flow {
     case "final":
       return { ...base, screen: "ending" };
   }
+}
+
+/**
+ * Should the page ask for the devil's opening offer now (kbph, 4 Oct: "the devil should be making an initial offer")?
+ * When the engine says it is due (`opening`) and the devil appears: his overlay is up (a deal node; Deal pressed at a
+ * campfire), or the player stands at a well where he sits (he pitches against the blessing before it is bought). Never
+ * while the page is busy or the map is up. The opener is free; a typed wish after it counts as a question as usual.
+ */
+export function wantsOpener(v: FlowView, f: Pick<Flow, "devil" | "map" | "screen">, local: Pick<Local, "busy">): boolean {
+  return v.opening === true && local.busy === null && !v.pending && f.map === "closed" && (f.devil || (f.screen === "well" && v.devilPresent));
 }
 
 /** The player opened the devil's overlay (Deal at a campfire or well). */

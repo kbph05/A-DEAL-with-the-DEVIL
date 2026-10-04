@@ -47,8 +47,12 @@ test("run-wide cap: the 11th deal is not legal and is rejected with the reason; 
 
 test("run-wide cap carries over to later deal nodes", () => {
   const s = { ...onDeal("cap2"), totalAsks: MAX_DEVIL_QUERIES };
-  assert.ok(!legalActions(s).some((c) => c.cmd === "deal"));
-  assert.equal(step(s, { cmd: "deal" }).ok, false);
+  assert.equal(step(s, { cmd: "deal", text: "gold" }).ok, false);
+  // his opening offer is free, so it still comes; after it, nothing more
+  assert.ok(legalActions(s).some((c) => c.cmd === "deal"));
+  const opened = step(step(s, { cmd: "deal" }).state, { cmd: "devil_reply", deal: { dialogue: "Sign.", effects: { gold: 5 } } }).state;
+  assert.equal(opened.totalAsks, MAX_DEVIL_QUERIES);
+  assert.ok(!legalActions(opened).some((c) => c.cmd === "deal"));
   assert.ok(createGame("fresh").view().questionsLeft === MAX_DEVIL_QUERIES, "a new run starts with all of them");
 });
 

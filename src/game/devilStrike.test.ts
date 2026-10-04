@@ -82,7 +82,7 @@ test("engine: a strike carries no soul change, gold, curse or rewrite even when 
 
 test("engine: a strike leaves a standing offer from an earlier haggle on the table", () => {
   const s0 = onDeal("strike-3");
-  const offered = step(step(s0, { cmd: "deal" }).state, { cmd: "devil_reply", deal: { dialogue: "Sign.", effects: { gold: 5 } } }).state;
+  const offered = step(step(s0, { cmd: "deal", text: "gold" }).state, { cmd: "devil_reply", deal: { dialogue: "Sign.", effects: { gold: 5 } } }).state;
   assert.ok(offered.offer);
   const r = step(step(offered, { cmd: "deal", text: "asdf" }).state, { cmd: "devil_reply", deal: STRIKE });
   assert.deepEqual(r.state.offer, offered.offer);

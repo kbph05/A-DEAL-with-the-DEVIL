@@ -31,16 +31,19 @@ export async function execute(g: Game, c: Command): Promise<Result> {
 /**
  * Default bot: fights; at a fire trains when HP is at least 70% of max (and attack is below its cap), else rests, but takes
  * the devil's deal instead when neither would do anything (attack at its cap and HP at least 90%); spends gold on healing
- * (when hurt) or blades, at a well hears out the devil if he is sitting there and will listen, else drinks the blessing (one or the other); alternates refusing and
+ * (when hurt) or blades, at a well hears out the devil if he is sitting there and will listen, else drinks the blessing (one or the other); takes his free opening offer wherever he sits and haggles once past it (questions allowing); alternates refusing and
  * accepting deals (refuse first) wherever they are; and otherwise takes the first exit. It never sends text, so the
  * StubDevil stays deterministic, and it only asks while the engine would listen (`asksLeft`, `questionsLeft`).
  */
 export const botPolicy: Policy = (o) => {
   if (o.enemy) return { cmd: "fight" };
   const { hp, maxHp, gold } = o.state;
-  const canAsk = o.asksLeft > 0 && o.questionsLeft > 0;
-  // An offer on the table (deal node, campfire or well): decide it.
-  if (o.offer) return { cmd: o.dealsDecided % 2 === 0 ? "refuse" : "accept" };
+  const canAsk = o.opening || (o.asksLeft > 0 && o.questionsLeft > 0);
+  // An offer on the table (deal node, campfire or well): haggle once past his opener (if a question is left), then decide.
+  if (o.offer) {
+    if (o.asksLeft === MAX_ASKS && o.questionsLeft > 0) return { cmd: "deal" };
+    return { cmd: o.dealsDecided % 2 === 0 ? "refuse" : "accept" };
+  }
   switch (o.kind) {
     case "campfire":
       if (o.resolved) break;

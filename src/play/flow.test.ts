@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { initialState, legalActions, step, view, type Command, type GameState } from "../game";
 import { mulberry32 } from "../map/rng";
-import { CLOSE_DEVIL, LOCAL, OPEN_DEVIL, arrived, flow, setLocal, type FlowView, type Local } from "./flow";
+import { CLOSE_DEVIL, LOCAL, OPEN_DEVIL, arrived, flow, setLocal, wantsOpener, type FlowView, type Local } from "./flow";
 
 const go: Command = { cmd: "go", n: 1 };
 /** A hand-made view: by default a quiet node with one exit and nothing else going on. */
@@ -141,4 +141,36 @@ test("property: random legal play never strands the player", () => {
   }
   assert.ok(forcedSeen > 100, `forced maps seen: ${forcedSeen}`);
   for (const k of ["fight", "campfire", "well", "deal"]) assert.ok(kindsForced.has(k), `a forced map at a ${k}`);
+});
+
+test("wantsOpener: the overlay asks for the devil's opening offer as he appears (deal node, well, Deal at a fire), once", () => {
+  /** Stand on a0n6 of seed ws-3 (a well where the devil sits), turned into `kind`. */
+  const standAt = (kind: "deal" | "well" | "campfire"): GameState => {
+    const s = initialState("ws-3");
+    s.acts[0].nodes.find((n) => n.id === "a0n6")!.kind = kind;
+    s.player.nodeId = "a0n6"; s.player.gold = 30;
+    return s;
+  };
+  const idle = { busy: null } as const;
+  for (const kind of ["deal", "well", "campfire"] as const) {
+    const s = standAt(kind), v = view(s);
+    assert.equal(v.opening, true, `${kind}: due`);
+    const l = kind === "campfire" ? at(OPEN_DEVIL, "a0n6") : arrived("a0n6");
+    if (kind === "campfire") assert.equal(wantsOpener(v, flow(v, arrived("a0n6")), idle), false, "a fire waits for Deal");
+    assert.equal(wantsOpener(v, flow(v, l), idle), true, `${kind}: asked for as he appears`);
+    assert.equal(wantsOpener(v, flow(v, l), { busy: "devil" }), false, `${kind}: not while busy`);
+    // the opener is free: no question used, no ask; then it is not due again
+    const r = step(s, { cmd: "deal" });
+    assert.ok(r.ok && r.awaiting?.devil?.context.opening === true && r.awaiting.devil.playerText === null);
+    assert.equal(r.state.totalAsks, 0);
+    const answered = step(r.state, { cmd: "devil_reply", deal: offer }).state, after = view(answered);
+    assert.equal(after.questionsLeft, view(s).questionsLeft);
+    assert.equal(after.opening, false);
+    assert.equal(wantsOpener(after, flow(after, l), idle), false, `${kind}: once per node`);
+    // a typed wish after it counts as a question as usual
+    assert.equal(step(answered, { cmd: "deal", text: "gold" }).state.totalAsks, 1);
+  }
+  // a devil-free well, or a village: nothing to ask for
+  const plain = view(initialState("ws-3"));
+  assert.equal(plain.opening, false);
 });

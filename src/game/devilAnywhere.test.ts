@@ -5,6 +5,7 @@
  */
 import { test } from "node:test";
 import assert from "node:assert/strict";
+import { sanitizeDeal } from "./deal";
 import { StubDevil, WELL_ENTICE, type Deal, type Devil } from "./devil";
 import {
   MAX_ASKS, MAX_DEVIL_QUERIES, ONE_CHOICE, WELL_DEVIL_CHANCE, devilAtWell, initialState, type Command, type GameState, type StepResult,
@@ -23,7 +24,7 @@ function ok(s: GameState, c: Command): GameState {
   return r.state;
 }
 /** Ask the devil and answer for him in one go. */
-const ask = (s: GameState, answer: Deal = OFFER, text?: string): GameState => ok(ok(s, { cmd: "deal", text }), { cmd: "devil_reply", deal: answer });
+const ask = (s: GameState, answer: Deal = OFFER, text = "a wish"): GameState => ok(ok(s, { cmd: "deal", text }), { cmd: "devil_reply", deal: answer });
 
 /** Put the player on node `id` (as `enter` would leave it, minus the events), turned into `kind`. */
 function moveTo(s: GameState, id: string, kind: "campfire" | "well" | "deal"): GameState {
@@ -60,7 +61,7 @@ test("campfire: rest, train and deal are mutually exclusive, in every order (3 x
 
 test("campfire: the first ask spends the choice, whatever follows (haggle, strike, accept, refuse, walking away)", () => {
   const locked = (s: GameState) => ["rest", "train"].every((c) => reason(step(s, { cmd: c } as Command)) === "you chose the devil at this fire");
-  const asked = ok(atFire(), { cmd: "deal" });
+  const asked = ok(atFire(), { cmd: "deal", text: "a wish" });
   assert.ok(asked.pending, "pending: only devil_reply goes");
   const offered = ok(asked, { cmd: "devil_reply", deal: OFFER });
   assert.ok(locked(offered) && has(step(offered, { cmd: "look" }), "deal"), "haggling stays open");
@@ -141,7 +142,7 @@ test("well: one choice of blessing, deal or skip; the first choice locks the oth
   // refusing (or accepting) the deal still locks it
   for (const end of ["refuse", "accept"] as const) {
     const t = ok(asked, { cmd: end });
-    assert.ok(t.devilGone && !t.resolved);
+    assert.ok(t.devilGone && t.resolved === (end === "accept"), `${end}: the devil leaves; accepting also spends the well`);
     assert.equal(reason(step(t, { cmd: "buy", item: "blessing" })), ONE_CHOICE.well.devil);
     assert.equal(reason(step(t, { cmd: "deal" })), "the devil has already gone");
     assert.ok(has(step(t, { cmd: "look" }), "go"));
@@ -189,8 +190,10 @@ test("the run-wide question cap counts asks at deal nodes, campfires and wells a
   for (const kind of ["deal", "well", "campfire"] as const) {
     const t = moveTo(s, kind === "well" ? well : others[3], kind);
     assert.equal(s.totalAsks, MAX_DEVIL_QUERIES);
-    assert.equal(reason(step(t, { cmd: "deal" })), "The devil has heard enough from you this run.", kind);
-    assert.ok(!has(step(t, { cmd: "look" }), "deal"), `${kind}: deal not listed`);
+    assert.equal(reason(step(t, { cmd: "deal", text: "gold" })), "The devil has heard enough from you this run.", kind);
+    assert.ok(has(step(t, { cmd: "look" }), "deal"), `${kind}: his free opener is still listed`);
+    const o = ok(ok(t, { cmd: "deal" }), { cmd: "devil_reply", deal: OFFER });
+    assert.ok(o.offer && o.totalAsks === MAX_DEVIL_QUERIES && !has(step(o, { cmd: "look" }), "deal"), `${kind}: after the opener, nothing more`);
   }
   assert.ok(step(s, { cmd: "accept" }).ok, "an offer on the table can still be taken");
   assert.equal(step(ok(s, { cmd: "refuse" }), { cmd: "rest" }).ok, false, "and the fire is spent");
@@ -223,4 +226,50 @@ test("campfire: strikes and anger work as at a deal node (StubDevil, gibberish a
   const g = restoreGame(dying, { offer: async () => STRIKE } as Devil);
   const r = await g.deal("asdf");
   assert.deepEqual(r.events.at(-1), { type: "lost", cause: "the devil's wrath" });
+});
+
+test("opening offer: free (no ask, no question), once per node; at a well it doesn't lock the blessing until accepted", () => {
+  const rich = (s: GameState) => { s.player.gold = 50; return s; };
+  const open = (s: GameState, answer: Deal = OFFER) => ok(ok(s, { cmd: "deal" }), { cmd: "devil_reply", deal: answer });
+  const w = open(rich(atWell(true)));
+  assert.ok(w.offer && w.opened && w.asks === 0 && w.totalAsks === 0);
+  assert.equal(observation(w).questionsLeft, MAX_DEVIL_QUERIES);
+  assert.equal(reason(step(w, { cmd: "buy", item: "blessing" })), "the devil is waiting for your answer: accept() or refuse()");
+  const refused = ok(w, { cmd: "refuse" });
+  assert.ok(refused.devilGone && step(refused, { cmd: "buy", item: "blessing" }).ok, "refusing his pitch leaves the blessing");
+  const accepted = ok(w, { cmd: "accept" });
+  assert.equal(reason(step(accepted, { cmd: "buy", item: "blessing" })), ONE_CHOICE.well.devil, "accepting it is choosing him");
+  // a text-less deal after the opener is an ordinary ask
+  const again = ok(w, { cmd: "deal" });
+  assert.equal(again.totalAsks, 1);
+  assert.equal(again.pending?.context.opening, undefined);
+  // at a fire the opener comes after Deal was chosen, so it spends the fire like an ask
+  const f = open(atFire());
+  assert.equal(reason(step(f, { cmd: "rest" })), ONE_CHOICE.campfire.devil);
+  assert.ok(ok(f, { cmd: "refuse" }).resolved);
+  // no opener after the blessing, nor where the devil is absent
+  assert.equal(reason(step(ok(rich(atWell(true)), { cmd: "buy", item: "blessing" }), { cmd: "deal" })), ONE_CHOICE.well.spent);
+  assert.equal(observation(atWell(false)).opening, false);
+});
+
+test("StubDevil opener: tailored to the state (low HP heals, weak before the boss sharpens, a curse's toll, poor gets gold), always at a price", async () => {
+  const req = (tweak: (s: GameState) => void, seed = "op") => {
+    const s = moveTo(initialState(seed), "a0n0", "deal");
+    tweak(s);
+    return step(s, { cmd: "deal" }).state.pending!;
+  };
+  const offer = async (tweak: (s: GameState) => void) => { const r = req(tweak); return new StubDevil().offer(r.state, r.context, r.playerText ?? undefined); };
+  const priced = (d: Deal) => d.curse !== undefined || Object.values(d.effects).some((v) => v < 0);
+  const low = await offer((s) => { s.player.hp = 5; });
+  assert.ok((low.effects.hp ?? 0) > 0 || (low.effects.max_hp ?? 0) > 0, JSON.stringify(low));
+  const weak = await offer((s) => { s.player.gold = 50; s.acts[0].visited = s.acts[0].nodes.map((n) => n.id); }); // nothing left to rewrite: the boss is next
+  assert.ok((weak.effects.attack ?? 0) > 0, `weak before the boss: ${JSON.stringify(weak)}`);
+  const cursed = await offer((s) => { s.player.gold = 50; s.curses = [{ trigger: "on_hit", effect: { hp: -4 } }]; });
+  assert.equal(cursed.effects.hp, 4, JSON.stringify(cursed));
+  const poor = await offer((s) => { s.player.gold = 2; });
+  assert.ok((poor.effects.gold ?? 0) > 0, JSON.stringify(poor));
+  const rich = await offer((s) => { s.player.gold = 50; });
+  assert.equal(rich.effects.soul, -1, "flush and healthy: he wants the soul");
+  for (const d of [low, weak, cursed, poor, rich]) { assert.ok(priced(d), `never free: ${JSON.stringify(d)}`); assert.deepEqual(sanitizeDeal(d), d); }
+  assert.deepEqual(await offer((s) => { s.player.hp = 5; }), low, "pure");
 });

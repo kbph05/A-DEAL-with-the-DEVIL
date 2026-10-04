@@ -63,7 +63,7 @@ for (const family of [...new Set(REDTEAM.map((c) => c.family))]) {
         assert.ok(r.ok, why);
         const s = g.gameState;
         assert.equal(s.pending, null, `${why}: the round trip completed`);
-        assert.equal(s.totalAsks, 1);
+        assert.equal(s.totalAsks, c.text.trim() ? 1 : 0, `${why}: blank text is his free opener`);
         const struck = r.events.find((e) => e.type === "devil_struck");
         assertLegal(s.player, why);
         assert.equal(s.player.soul, before.soul, `${why}: soul taken without accept`);
@@ -84,7 +84,7 @@ for (const family of [...new Set(REDTEAM.map((c) => c.family))]) {
         }
         // What reached the devil is bounded.
         const asked = step(onDeal(seed), { cmd: "deal", text: c.text });
-        assert.ok(asked.awaiting!.devil!.playerText!.length <= MAX_PLAYER_TEXT);
+        assert.ok((asked.awaiting!.devil!.playerText ?? "").length <= MAX_PLAYER_TEXT);
       }
     }
   });

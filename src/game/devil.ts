@@ -35,6 +35,11 @@ export interface DevilContext {
   rewritable: Array<{ id: string; kind: Kind }>;
   /** Curses already on the player. */
   curses: Curse[];
+  /**
+   * This is the devil's opening offer (additive, 4 Oct): the player has not asked for anything yet (`playerText` is
+   * null). Pitch something tailored to the state. Free: it uses no question (`askIndex`, `questionsLeft` don't move).
+   */
+  opening?: boolean;
 }
 
 export interface Devil {
@@ -373,6 +378,46 @@ export const WELL_ENTICE: readonly string[] = [
 ];
 const wellEntice = (c: DevilContext): string => pick(mulberry32(hashSeed(`well-entice:${c.seed}:${c.askIndex}`)), WELL_ENTICE);
 
+/** Is the player at or below this share of max HP? Then the opener heals. */
+export const OPENER_LOW_HP = 0.4;
+/** Below this much gold the opener pays (a blessing costs 8, the cheapest village ware 10). */
+export const OPENER_POOR = 10;
+
+/**
+ * The opening pitch (no text from the player, kbph 4 Oct: "the devil should be making an initial offer based on the
+ * current game state"): aimed at the player's weakest point, and never free. In order: low HP (heal or more max HP), low
+ * attack with the boss near (attack), an active curse (he pays its toll in advance: the engine cannot tear up a curse,
+ * so this is the nearest thing to lifting it), low gold (gold), otherwise the soul (or a coin once it is gone). Pure in
+ * (state, context, rng).
+ */
+export function openingOffer(s: Readonly<PlayerState>, ctx: DevilContext, rng: Rng): Deal {
+  if (s.hp <= s.maxHp * OPENER_LOW_HP) return pick<Deal>(rng, [
+    { dialogue: "You're bleeding on my table. Let me close those wounds. I'll keep a little of what holds you together.", effects: { hp: 15, max_hp: -3 } },
+    { dialogue: "Running on empty? A bigger cup, filled to the brim. The bill comes at the next door.", effects: { max_hp: 5, hp: 10 }, curse: { trigger: "next_node", effect: { gold: -12 } } },
+  ]);
+  if (s.attack < 4 + ctx.act && ctx.rewritable.length <= 2) return pick<Deal>(rng, [ // little road left: the boss is near
+    { dialogue: "The thing at the end of this road will laugh at that little blade. Let me give it teeth. Your skin will be thinner for it.", effects: { attack: 2, max_hp: -6 } },
+    { dialogue: "A sharper edge for the big one ahead. Every time something cuts you back, I take my cut.", effects: { attack: 2 }, curse: { trigger: "on_hit", effect: { hp: -3 } } },
+  ]);
+  const curse = ctx.curses[0];
+  if (curse) {
+    const toll = Object.fromEntries(Object.entries(curse.effect).filter(([, v]) => v < 0).map(([k, v]) => [k, -v]));
+    if (Object.keys(toll).length) return {
+      dialogue: "That mark on you itches, doesn't it? I can't tear up a contract, but I can pay its toll in advance. For a little more of you.",
+      effects: { ...toll, max_hp: -4 },
+    };
+  }
+  if (s.gold < OPENER_POOR) return pick<Deal>(rng, [
+    { dialogue: "Empty pockets at a well-stocked road. Tragic. Take this purse; it bites the hand that's hit.", effects: { gold: 30 }, curse: { trigger: "on_hit", effect: { hp: -4 } } },
+    { dialogue: "Coin for flesh, the oldest trade there is. A little less of you, a lot more gold.", effects: { gold: 25, max_hp: -4 } },
+  ]);
+  if (s.soul === 1) return {
+    dialogue: "You look well. Rich, even. So let's talk about the one thing you haven't spent. Sign, and the road gets easy.",
+    effects: { soul: -1, gold: 60, max_hp: 10, attack: 1 },
+  };
+  return { dialogue: "Nothing left to sell me but your luck. I'll take it. Gold now, pain later.", effects: { gold: 25 }, curse: { trigger: "on_hit", effect: { hp: -4 } } };
+}
+
 /** Canned bad-faith offers, deterministic in (seed, ask sequence). Stands in until the Gemini devil is plugged in. */
 export class StubDevil implements Devil {
   /**
@@ -385,6 +430,10 @@ export class StubDevil implements Devil {
   async offer(state: Readonly<PlayerState>, context: DevilContext, playerText?: string): Promise<Deal> {
     const text = playerText ?? "";
     const rng: Rng = mulberry32(hashSeed(`devil:${context.seed}:${context.askIndex}`));
+    if (context.opening === true) { // his opening pitch, tailored to the state (docs/devil-api.md, "The opening offer")
+      const open = openingOffer(state, context, mulberry32(hashSeed(`devil-open:${context.seed}:${context.nodeId}:${context.askIndex}`)));
+      return { ...open, dialogue: (context.kind === "well" ? `${wellEntice(context)} ` : "") + open.dialogue };
+    }
     if (isGibberish(text)) return this.angry(state, rng, context, STRIKE_CHANCE, STRIKE_LINES, ANGRY); // nonsense: no listening, no loopholes
     const off = offTopicKind(text);
     if (off === "jailbreak") return this.angry(state, rng, context, STRIKE_CHANCE, JAILBREAK_STRIKE_LINES, JAILBREAK_ANGRY);

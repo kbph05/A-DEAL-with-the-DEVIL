@@ -37,6 +37,8 @@ Each node kind has a screen:
 
 **The map is never forced or open** while the devil is speaking, an offer is on the table (accept or refuse it first), an enemy blocks the way, or a fight is on.
 
+**The devil's opening offer:** when the devil appears (a deal node, a well where he sits, or Deal at a campfire) the page asks for his opener at once (`wantsOpener` in `flow.ts`, from the engine's `opening`), so his overlay opens with an offer tailored to your state. It is free; accept it, refuse it, or type a wish to counter (that counts as a question). At a well, refusing it sends him away and the blessing is still yours to buy.
+
 **The devil's overlay** is the same at deal nodes, campfires and wells. It is a dark full-screen panel with:
 
 - the devil's line: his offer's dialogue, his strike if he lashed out, "Well? Name your wish.", or "I have heard enough from you this run.";

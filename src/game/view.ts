@@ -6,7 +6,7 @@ import type { Kind, MapNode, RewriteChange } from "../map";
 import { legalActions } from "./actions";
 import type { Curse, Deal } from "./devil";
 import type { EnemyView, Ending, Exit } from "./events";
-import { MAX_ASKS, currentAct, currentNode, devilDone, devilPresent, enemyView, exitsOf, questionsLeft, type Command, type GameState } from "./gameState";
+import { MAX_ASKS, currentAct, currentNode, devilDone, devilPresent, enemyView, exitsOf, openerDue, questionsLeft, type Command, type GameState } from "./gameState";
 import { snapshot, type PlayerState } from "./state";
 
 export interface MapViewNode { id: string; kind: Kind; visited: boolean; current: boolean; rewritten: boolean; next: string[] }
@@ -26,6 +26,11 @@ export interface Observation {
    * node; whether you may still ask him is `asksLeft` (and `actions`).
    */
   devilPresent: boolean;
+  /**
+   * The devil's opening offer is still to come here (additive, 4 Oct): send `deal` with no text to get it. It is free (no
+   * ask, no question) and tailored to the player's state. Clients request it as soon as the devil appears.
+   */
+  opening: boolean;
   /** How many more questions (asks and haggles) the devil will hear this run, at any deal node (MAX_DEVIL_QUERIES minus asks so far). */
   questionsLeft: number;
 }
@@ -42,6 +47,7 @@ export function observation(s: GameState): Observation {
     curses: s.curses.map((c) => ({ ...c, effect: { ...c.effect } })),
     asksLeft: here && !devilDone(s) && !s.ending ? Math.max(0, MAX_ASKS - s.asks) : 0,
     devilPresent: here,
+    opening: openerDue(s),
     questionsLeft: questionsLeft(s),
   };
 }

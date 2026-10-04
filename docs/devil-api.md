@@ -57,6 +57,18 @@ Example (real state from an earlier build, in which `createGame("demo")` opened 
 }
 ```
 
+## The opening offer (4 Oct)
+
+kbph: "the devil should be making an initial offer based on the current game state." When the devil appears (arriving at a deal node or at a well where he sits, or choosing Deal at a campfire) the client asks for his opening offer before the player types anything. It is the same request body, with **`playerText: null`** and **`context.opening: true`** (additive; absent on every other request). An empty `playerText` on an opening request means: **make an opening offer tailored to `state`**, aimed at the player's weakest point and always at a price (soul, max HP, gold or a curse). Suggested reading of the state:
+
+- low HP (40% of max or less): healing or more max HP;
+- low attack with the boss near (few or no `rewritable` nodes left): attack;
+- an active curse (`context.curses`): relief from it (the engine cannot remove a curse; offer to pay its toll in advance);
+- low gold: gold;
+- otherwise: his favourite, the soul.
+
+At a well (`context.kind: "well"`) the opener should also try to talk the player out of the blessing (see above). The opener is **free**: it does not count toward the run's 10 questions (`askIndex` and `questionsLeft` are not advanced; they read as for the previous question) nor the node's 3 asks, comes once per node, and is not judged as gibberish or off-topic. The reply is handled like any other (an offer, or a forced strike). A typed wish afterwards is an ordinary, counted question. The StubDevil's version is `openingOffer` in `src/game/devil.ts`.
+
 ## Response
 
 `200` with a JSON body that is a **Deal**:

@@ -122,6 +122,8 @@ export function mountUI(root: HTMLElement, session: Session, opts: UIOptions = {
 
   function render() {
     const g = session.game(), v = g.view(), o = v, A = availableActions(o, busy, v.actions);
+    // The devil opens with an offer of his own where he simply appears (his table, a well); at a fire he waits for Deal.
+    if (v.opening && !busy && (v.kind === "deal" || v.kind === "well")) queueMicrotask(() => void run({ cmd: "deal" }));
     const looked = g.look().events[0] as Extract<GameEvent, { type: "looked" }>;
     banner.replaceChildren();
     banner.className = o.ending ? `banner show ${o.ending}` : "banner";

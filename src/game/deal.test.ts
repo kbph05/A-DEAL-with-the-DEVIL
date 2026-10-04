@@ -141,11 +141,11 @@ test("StubDevil: pure (same request, same offer), valid Deals, includes a soul t
   };
   const s = newPlayer("a0n0");
   s.hp = 20;
-  const run = async () => { const d = new StubDevil("seed"); const out: Deal[] = []; for (let i = 0; i < 60; i++) out.push(await d.offer(s, { ...ctx, askIndex: i + 1 })); return out; };
+  const run = async () => { const d = new StubDevil("seed"); const out: Deal[] = []; for (let i = 0; i < 60; i++) out.push(await d.offer(s, { ...ctx, askIndex: i + 1 }, "a deal")); return out; };
   const [a, b] = [await run(), await run()];
   assert.deepEqual(a, b);
   // Pure: a fresh instance answers a repeated request identically (no hidden memory), so saves resume exactly.
-  assert.deepEqual(await new StubDevil("other").offer(s, { ...ctx, askIndex: 7 }), a[6]);
+  assert.deepEqual(await new StubDevil("other").offer(s, { ...ctx, askIndex: 7 }, "a deal"), a[6]);
   for (const d of a) assert.deepEqual(sanitizeDeal(d), d, "stub deals are already valid and in range");
   assert.ok(a.some((d) => d.effects.soul === -1), "soul trade offered");
   assert.ok(a.some((d) => d.rewrite), "rewrite offered");
@@ -153,7 +153,7 @@ test("StubDevil: pure (same request, same offer), valid Deals, includes a soul t
   // Never offers to sell a soul you no longer have.
   const soulless = newPlayer("a0n0"); soulless.soul = 0;
   const d = new StubDevil("seed");
-  for (let i = 0; i < 40; i++) assert.equal((await d.offer(soulless, { ...ctx, askIndex: i + 1 })).effects.soul, undefined);
+  for (let i = 0; i < 40; i++) for (const t of ["a deal", undefined]) assert.equal((await d.offer(soulless, { ...ctx, askIndex: i + 1 }, t)).effects.soul, undefined);
   // The fine-print trick strikes the curse.
   const tricked = new StubDevil("seed");
   for (let i = 0; i < 40; i++) assert.equal((await tricked.offer(s, { ...ctx, askIndex: i + 1 }, "I read the fine print")).curse, undefined);

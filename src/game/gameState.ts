@@ -54,6 +54,16 @@ export const oneChoice = (s: GameState): (typeof ONE_CHOICE)[keyof typeof ONE_CH
  * spent on something else: rest, train, the blessing)?
  */
 export const devilDone = (s: GameState): boolean => (currentNode(s).kind === "well" ? s.devilGone === true || s.resolved : s.resolved);
+/**
+ * Is `deal` with this text the devil's opening offer (kbph, 4 Oct: "the devil should be making an initial offer based on
+ * the current game state")? Yes when the text is absent or blank, nothing was asked or opened at this node yet, and no
+ * offer stands. The opener costs no ask and no question (MAX_ASKS, MAX_DEVIL_QUERIES); the request goes out with
+ * `playerText: null`, which tells the devil to pitch something tailored to the player's state.
+ */
+export const isOpener = (s: GameState, text: unknown): boolean =>
+  (typeof text !== "string" || text.trim() === "") && s.asks === 0 && !s.opened && !s.offer;
+/** The opening offer is still to come here: the devil sits at this node, will deal, and has not pitched yet. */
+export const openerDue = (s: GameState): boolean => devilPresent(s) && !devilDone(s) && !s.ending && !s.enemy && !s.pending && isOpener(s, undefined);
 /** Attack gained by training at a campfire (the alternative to resting there). */
 export const TRAIN_ATTACK = 1;
 export const WARES = { heal: { cost: 10 }, blade: { cost: 15 }, blessing: { cost: 8 } } as const;
@@ -103,6 +113,11 @@ export interface GameState {
    * the first ask locks: see ONE_CHOICE). Reset on every move; absent elsewhere and in older saves.
    */
   devilGone?: boolean;
+  /**
+   * The devil's opening offer was asked for at this node (a `deal` with no text, before any ask: see `isOpener`). It
+   * is free (no ask, no question) and comes once per node. Reset on every move; absent elsewhere and in older saves.
+   */
+  opened?: boolean;
   offer: Deal | null;
   /** Asks at the current node: a deal node, a campfire or a well with the devil (max MAX_ASKS). */
   asks: number;

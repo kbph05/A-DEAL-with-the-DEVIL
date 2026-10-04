@@ -123,6 +123,7 @@ What happens on **entering any node**, in order: the `moved` event, then **`on_e
 - `accept()`: applies the effects, adds the curse if any (max 5), applies the rewrite if any, then checks death/revival (see 6.6 for the order). Marks the node resolved.
 - `refuse()`: nothing happens (`deal_refused`). Marks resolved.
 - Once decided, the node is resolved: no more asks.
+- **His opening offer** (kbph, 4 Oct): when he appears (a deal node, a well where he sits, Deal at a campfire) the client asks for it at once (a `deal` with no text). It is free (no ask, no question), once per node, and tailored to your state by the StubDevil (`openingOffer` in `src/game/devil.ts`): at 40% HP or less a heal or max HP, low attack with the boss near attack, a curse's toll paid in advance, under 10 gold gold, else the soul; always at a price. At a well he opens by talking you out of the blessing; refusing his opener there leaves the blessing, accepting it locks it.
 - The same rules hold wherever else he sits (a campfire, 4.3; a well where he turned up, 4.4): 3 asks per node, the run-wide cap, anger and strikes, accept and refuse. `Observation.devilPresent` says whether he is at your node; `asksLeft` how many asks you have left there.
 - You cannot ask while an enemy is present, while a previous ask is still pending, or where the devil is not ("the devil does not sit here"). Movement is blocked while the devil is "still speaking" (pending).
 - Cost: free. Rewards and penalties are whatever the deal says.

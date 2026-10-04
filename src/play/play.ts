@@ -15,7 +15,7 @@ import { paintIcon, type IconKey } from "../mapscene/icons";
 import { effectChips, curseText, lastStrike, outcomeEvents, questionsText } from "../ui/logic";
 import { mountScene, sceneById, type SceneHandle, type SceneZone } from "../world";
 import { shopPrompt } from "../world/shopZone";
-import { CLOSE_DEVIL, LOCAL, OPEN_DEVIL, arrived, flow, setLocal, type Flow, type Local } from "./flow";
+import { CLOSE_DEVIL, LOCAL, OPEN_DEVIL, arrived, flow, setLocal, wantsOpener, type Flow, type Local } from "./flow";
 
 const params = new URLSearchParams(location.search);
 const TEST = import.meta.env.MODE === "test";
@@ -335,6 +335,8 @@ function render(): void {
   renderDevil(v, f);
   if (f.screen !== "ending") ending.replaceChildren();
   renderEnding(f);
+  // The devil appears: he opens with an offer of his own, unasked (free; see wantsOpener).
+  if (wantsOpener(v, f, local)) queueMicrotask(() => void send({ cmd: "deal" }));
   // A fight node: start the fight on arrival (a revival asks first, with "Fight on").
   if (f.screen === "fight" && f.prompts.includes("fight") && autoFought !== v.nodeId && !local.busy) {
     autoFought = v.nodeId;
