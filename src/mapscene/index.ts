@@ -150,6 +150,18 @@ export function mountMap(parent: HTMLElement, options: MountMapOptions): MapHand
     scale: { mode: Phaser.Scale.RESIZE, width: host.clientWidth || 360, height: host.clientHeight || 640 },
     scene: [scene],
   });
+  // RESIZE mode alone can miss a phone turning: Phaser refreshes on the orientation event before it has read the parent's
+  // new size, then its resize poll sees no change, and the map stays laid out for the old shape (half off screen, the
+  // next nodes out of reach). Refresh again once the container has its new size, as runForestFight does.
+  let pending = 0;
+  const watch = new ResizeObserver(() => {
+    cancelAnimationFrame(pending);
+    pending = requestAnimationFrame(() => {
+      const b = host.getBoundingClientRect();
+      if (b.width > 0 && b.height > 0 && (Math.round(b.width) !== game.scale.width || Math.round(b.height) !== game.scale.height)) { game.scale.getParentBounds(); game.scale.refresh(); }
+    });
+  });
+  watch.observe(host);
 
   /** The accessible list: one button per next node (disabled ones stay focusable and say why), roving tabindex. */
   function renderList() {
@@ -209,6 +221,8 @@ export function mountMap(parent: HTMLElement, options: MountMapOptions): MapHand
       if (destroyed) return;
       destroyed = true;
       clearTimeout(toastTimer);
+      cancelAnimationFrame(pending);
+      watch.disconnect();
       game.destroy(true);
       el.remove();
     },
