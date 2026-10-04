@@ -34,6 +34,8 @@ The build needs the dev dependencies, including **`@types/node`** (`vite.config.
 
 To share a build, upload the contents of `dist/` to itch.io (HTML game) or GitHub Pages.
 
+**Vercel** (game plus the LLM devil as `/api/deal` on the same origin): `vercel.json`, `api/deal.ts`, env vars `OAI_BASE_URL`, `OAI_MODEL`, `OAI_API_KEY`, `ASSET_KEY`; steps in [docs/deploy-vercel.md](docs/deploy-vercel.md). After changing the devil, run `npm run build:api` and commit `api/_lib/devil.mjs`.
+
 **Test UI.** `src/ui/` is a plain DOM front end over the headless engine: a **Game** column (situation, your choices (action buttons plus the act's map as a clickable DAG: click a bright node to move), the devil's offer card, the outcome of the last move, collapsed history) and, in test builds, a separate **Run & dev tools** column (seed, raw state, autoplay, Devil lab). It calls exactly the same engine functions as the console (`go`, `fight`, `deal`, ...) through one shared `Session`, so it doubles as a check that the engine API is enough for the real UI. In test builds the **Devil lab** sends the current game's real state and context to the backend URL and shows request, raw response, latency and the sanitized deal side by side.
 
 **Changing game rules or balance?** The equivalence test replays 700 recorded runs and fails on any behaviour change. After an *intentional* change, run `npm run fixtures` and commit the updated `src/game/__fixtures__/engine-runs.json` (and `contract-current.json`). Never regenerate `contract.json`: it is the frozen JSON contract and must keep passing.
