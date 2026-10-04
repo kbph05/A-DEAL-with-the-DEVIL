@@ -19,7 +19,7 @@ function world(foes: [EnemyId, Vec][], progress = 0.5, extra: Partial<SimWorld> 
 const awake = (s: FightSim) => { for (const e of s.enemies) e.brain = { ...e.brain, mode: "chase", modeMs: 0 }; return s; };
 
 test("roster: six enemies, each with id, label, HP share, damage, speed, size and a behaviour", () => {
-  assert.deepEqual([...ENEMY_IDS], ["slime", "demon", "skeleton_archer", "miniboss1", "miniboss2", "final_boss"]);
+  assert.deepEqual([...ENEMY_IDS], ["orc", "slime", "demon", "skeleton_archer", "miniboss1", "miniboss2", "final_boss"]);
   for (const id of ENEMY_IDS) {
     const d = ENEMIES[id];
     assert.equal(d.id, id);

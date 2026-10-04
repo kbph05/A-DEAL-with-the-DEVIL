@@ -5,8 +5,8 @@
  * - **Progress** is how far up the run the fight is: `(act + layer / layers) / acts` from the request's `where` (the
  *   engine's act is 0-based), 0 at the bottom of act 1,
  *   near 1 at the top of the last act. Later acts start harder because they start higher.
- * - **Count and composition** come from the band the progress falls in (`ENCOUNTER_BANDS`): 1 to 2 slimes at the
- *   bottom, demons mixed in through the middle, 3 to 5 with archers near the top. The seed picks within the band.
+ * - **Count and composition** come from the band the progress falls in (`ENCOUNTER_BANDS`): 1 to 2 orcs at the
+ *   bottom, up to 3 to 5 near the top (orcs only since 4 Oct: the enemies we have sprites for). The seed picks the count.
  * - **Per-enemy feel** scales with progress too (Big Chungus: "don't just scale damage and defense"): walking speed
  *   up, attack cooldown down, the hitstun it inflicts up, and the stun it takes when hit down (tougher enemies shrug
  *   it off faster). Each is the enemy's base value (ENEMIES) times a progress curve (`SCALING`).
@@ -44,13 +44,19 @@ export interface EncounterBand {
   mix: Partial<Record<EnemyId, number>>;
 }
 
-/** Tunable: count and composition by progress. */
+/**
+ * Tunable: count and composition by progress. Since 4 Oct (Big Chungus: "disable any enemies we don't have sprites
+ * for") every band is orcs only: the count still rises with progress, and each orc's feel scales with `SCALING`. The
+ * slime, demon and skeleton archer are out of the tables but still in the roster (ENEMIES), so putting one back is a
+ * data change here. The bands as they were: slime; slime 3 + demon 1; slime 2 + demon 2 (demon lead); slime 1 +
+ * demon 2 + archer 1 (demon lead); slime 1 + demon 2 + archer 2 (archer lead).
+ */
 export const ENCOUNTER_BANDS: readonly EncounterBand[] = [
-  { upTo: 0.15, count: [1, 2], lead: "slime", mix: { slime: 1 } },
-  { upTo: 0.35, count: [2, 3], lead: "slime", mix: { slime: 3, demon: 1 } },
-  { upTo: 0.55, count: [2, 4], lead: "demon", mix: { slime: 2, demon: 2 } },
-  { upTo: 0.75, count: [3, 4], lead: "demon", mix: { slime: 1, demon: 2, skeleton_archer: 1 } },
-  { upTo: Number.POSITIVE_INFINITY, count: [3, 5], lead: "skeleton_archer", mix: { slime: 1, demon: 2, skeleton_archer: 2 } },
+  { upTo: 0.15, count: [1, 2], lead: "orc", mix: { orc: 1 } },
+  { upTo: 0.35, count: [2, 3], lead: "orc", mix: { orc: 1 } },
+  { upTo: 0.55, count: [2, 4], lead: "orc", mix: { orc: 1 } },
+  { upTo: 0.75, count: [3, 4], lead: "orc", mix: { orc: 1 } },
+  { upTo: Number.POSITIVE_INFINITY, count: [3, 5], lead: "orc", mix: { orc: 1 } },
 ];
 
 export type ScaledStat = "speed" | "attackCd" | "hitstun" | "stunTaken";
@@ -63,7 +69,7 @@ export const SCALING: Readonly<Record<ScaledStat, readonly [number, number]>> = 
 };
 
 /** Where along the path enemies stand, nearest first: slimes, then demons, then archers behind them. */
-const RANK: Record<EnemyId, number> = { slime: 0, demon: 1, skeleton_archer: 2, miniboss1: 3, miniboss2: 3, final_boss: 3 };
+const RANK: Record<EnemyId, number> = { orc: 0, slime: 0, demon: 1, skeleton_archer: 2, miniboss1: 3, miniboss2: 3, final_boss: 3 };
 
 /** Without `where` (an older engine): the act from the enemy's power, a mid-act layer (the top for a boss), 3 acts. */
 export const FALLBACK = { acts: 3, regularLayer: 0.5, bossLayer: 6 / 7 } as const;

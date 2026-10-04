@@ -25,7 +25,7 @@ function at(p: number, seed: string, hp = 40): ForestRequest {
   const layers = 1000;
   return req(act, Math.round((p * 3 - (act - 1)) * layers), { seed, hp, layers });
 }
-const nonSlime = (ids: EnemyId[]) => ids.filter((id) => id !== "slime").length / ids.length;
+const nonOrc = (ids: EnemyId[]) => ids.filter((id) => id !== "orc").length / ids.length;
 
 test("progress is (act + layer / layers) / acts (0-based act, as the engine sends it), clamped; without `where` it comes from the enemy's power", () => {
   assert.equal(progressOf(req(1, 0)), 0);
@@ -65,8 +65,9 @@ test("deterministic per seed", () => {
   for (const p of [0, 0.3, 0.6, 0.95]) {
     assert.deepEqual(encounterFor(at(p, "same")), encounterFor(at(p, "same")));
   }
-  const mixes = new Set(SEEDS.map((s) => encounterFor(at(0.9, s)).enemies.map((m) => m.id).join(",")));
-  assert.ok(mixes.size > 3, "different seeds, different groups");
+  // Orcs only (4 Oct): the groups differ by size, 3 to 5 near the top.
+  const sizes = new Set(SEEDS.map((s) => encounterFor(at(0.9, s)).enemies.length));
+  assert.equal(sizes.size, 3, "different seeds, different groups");
 });
 
 test("difficulty rises with progress: count, composition and every per-enemy stat (Big Chungus)", () => {
@@ -77,22 +78,22 @@ test("difficulty rises with progress: count, composition and every per-enemy sta
     for (let i = 1; i < counts.length; i++) assert.ok(counts[i] >= counts[i - 1], `count at seed ${seed}: ${counts}`);
   }
   const mean = (f: (p: number, s: string) => number) => grid.map((p) => SEEDS.reduce((a, s) => a + f(p, s), 0) / SEEDS.length);
-  const tough = mean((p, s) => nonSlime(encounterFor(at(p, s)).enemies.map((m) => m.id)));
+  const tough = mean((p, s) => nonOrc(encounterFor(at(p, s)).enemies.map((m) => m.id)));
   for (let i = 1; i < tough.length; i++) assert.ok(tough[i] >= tough[i - 1] - 1e-9, `composition: ${tough.map((v) => v.toFixed(2))}`);
   const count = mean((p, s) => encounterFor(at(p, s)).enemies.length);
   assert.ok(count[grid.length - 1] > count[0] + 2, "many more enemies at the top");
 
-  // The kbph table: the bottom of act 1 is 1 to 2 slimes; the middle mixes in demons; near the top, 3 to 5 with archers.
+  // The table (Big Chungus, 4 Oct: only the enemies we have sprites for): orcs everywhere, 1 to 2 at the bottom of
+  // act 1, 3 to 5 near the top of act 3.
   for (const s of SEEDS) {
     const bottom = encounterFor(req(1, 0, { seed: s })).enemies.map((m) => m.id);
-    assert.ok(bottom.length >= 1 && bottom.length <= 2 && bottom.every((id) => id === "slime"), `bottom: ${bottom}`);
+    assert.ok(bottom.length >= 1 && bottom.length <= 2 && bottom.every((id) => id === "orc"), `bottom: ${bottom}`);
     const top = encounterFor(req(3, 6, { seed: s, hp: 18 })).enemies.map((m) => m.id);
-    assert.ok(top.length >= 3 && top.length <= 5 && top.includes("skeleton_archer"), `top: ${top}`);
-    assert.ok(encounterFor(at(0.5, s)).enemies.some((m) => m.id === "demon"), "demons in the middle");
+    assert.ok(top.length >= 3 && top.length <= 5 && top.every((id) => id === "orc"), `top: ${top}`);
   }
 
   // Per enemy: faster, shorter cooldowns, more hitstun dealt, less stun taken, as progress rises.
-  for (const id of ["slime", "demon", "skeleton_archer"] as const) {
+  for (const id of ["orc", "slime", "demon", "skeleton_archer"] as const) {
     const ps = grid.map((p) => scaledParams(id, p));
     for (let i = 1; i < ps.length; i++) {
       assert.ok(ps[i].speed >= ps[i - 1].speed, `${id} speed`);
@@ -153,4 +154,16 @@ test("names: the engine's enemy is the encounter (title, the lead's label, the e
   const boss = encounterFor(req(2, 6, { boss: true }));
   assert.equal(boss.title, "The Gatekeeper");
   assert.equal(encounterSummary(boss, false), "The Gatekeeper still stands.");
+});
+
+test("the encounter tables hold only the enemies with sprites: orcs (Big Chungus, 4 Oct); slime and archer are out", () => {
+  for (const b of ENCOUNTER_BANDS) {
+    assert.equal(b.lead, "orc");
+    assert.deepEqual(Object.keys(b.mix), ["orc"]);
+  }
+  const seen = new Set<EnemyId>();
+  for (const seed of SEEDS) for (let p = 0; p <= 1.0001; p += 0.05) for (const m of encounterFor(at(p, seed)).enemies) seen.add(m.id);
+  assert.deepEqual([...seen], ["orc"]);
+  // Bosses are unchanged: one boss, its own id (drawn as Demon_A or the warrior, src/render/sprites.ts).
+  for (const act of [1, 2, 3]) assert.equal(encounterFor(req(act, 6, { boss: true })).enemies.length, 1);
 });
