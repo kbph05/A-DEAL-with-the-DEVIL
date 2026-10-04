@@ -226,7 +226,7 @@ npm run devil:oai
 VITE_DEVIL_URL=http://<demo machine's LAN IP>:8788/deal npm run game -- --host
 ```
 
-Then open the game at `http://<LAN IP>:5173/play.html`. For a static build, set `VITE_DEVIL_URL` at build time. Each log line shows latency, path (opening / offer / strike / spite), source (model or stub), the raw value, `reasked` and `priced`.
+Then open the game at `http://<LAN IP>:5173/`. For a static build, set `VITE_DEVIL_URL` at build time. Each log line shows latency, path (opening / offer / strike / spite), source (model or stub), the raw value, `reasked` and `priced`.
 
 ## Errors and timeouts
 
