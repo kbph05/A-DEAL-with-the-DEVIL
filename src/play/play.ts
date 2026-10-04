@@ -461,7 +461,7 @@ function renderDevil(v: View, f: Flow): void {
     card.append(form);
   }
   const row = h("div", "row");
-  if (v.offer && !busy && v.dying) row.append(button("Accept", () => void send({ cmd: "accept" }), "", "Sell your soul, live"), button("Refuse", () => void send({ cmd: "refuse" }), "quiet", "Die"));
+  if (v.offer && !busy && v.dying) row.append(button("Accept: sell your soul, live", () => void send({ cmd: "accept" })), button("Refuse: die", () => void send({ cmd: "refuse" }), "quiet"));
   else if (v.offer && !busy) row.append(button("Accept", () => void send({ cmd: "accept" })), button("Refuse", () => void send({ cmd: "refuse" }), "quiet"));
   if (!v.offer && !busy && !v.dying) row.append(button("Walk away", () => patch(CLOSE_DEVIL), "quiet"));
   card.append(row);
